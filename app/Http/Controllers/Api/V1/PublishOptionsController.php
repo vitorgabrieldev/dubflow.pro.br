@@ -15,7 +15,8 @@ class PublishOptionsController extends Controller
         $organizations = Organization::query()
             ->whereHas('members', fn ($builder) => $builder
                 ->where('user_id', $user->id)
-                ->where('status', 'active'))
+                ->where('status', 'active')
+                ->whereIn('role', ['owner', 'admin', 'editor']))
             ->with([
                 'playlists' => fn ($query) => $query
                     ->where('visibility', 'public')

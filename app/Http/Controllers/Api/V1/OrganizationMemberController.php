@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\OrganizationMember;
 use App\Models\User;
+use App\Notifications\OrganizationMemberInvited;
+use App\Notifications\OrganizationMemberInviteResponded;
+use App\Notifications\OrganizationMemberJoined;
 use App\Support\OrganizationAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,6 +18,12 @@ class OrganizationMemberController extends Controller
 {
     public function index(Organization $organization): JsonResponse
     {
+        $user = auth('api')->user();
+
+        if (! OrganizationAccess::isActiveMember($user, $organization)) {
+            abort(403, 'Sem permissao para visualizar membros desta comunidade.');
+        }
+
         $members = OrganizationMember::query()
             ->where('organization_id', $organization->id)
             ->with('user:id,name,username,avatar_path,email')
@@ -33,21 +42,45 @@ class OrganizationMemberController extends Controller
         }
 
         $validated = $request->validate([
-            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'user_id' => ['required', 'integer', 'exists:users,id', Rule::notIn([$user->id])],
             'role' => ['required', Rule::in(['admin', 'editor', 'member'])],
         ]);
 
-        $member = OrganizationMember::query()->updateOrCreate(
-            [
+        $invitedUser = User::query()->findOrFail($validated['user_id']);
+        $member = OrganizationMember::query()
+            ->where('organization_id', $organization->id)
+            ->where('user_id', $validated['user_id'])
+            ->first();
+
+        if ($member?->status === 'active') {
+            abort(422, 'Esse usuário já é membro ativo da comunidade.');
+        }
+
+        if ($member?->status === 'banned') {
+            abort(422, 'Esse usuário está banido da comunidade.');
+        }
+
+        if ($member?->role === 'owner') {
+            abort(422, 'Não é possível convidar o dono da comunidade.');
+        }
+
+        if ($member) {
+            $member->role = $validated['role'];
+            $member->status = 'pending';
+            $member->invited_by_user_id = $user->id;
+            $member->joined_at = null;
+            $member->save();
+        } else {
+            $member = OrganizationMember::create([
                 'organization_id' => $organization->id,
                 'user_id' => $validated['user_id'],
-            ],
-            [
                 'role' => $validated['role'],
                 'status' => 'pending',
                 'invited_by_user_id' => $user->id,
-            ]
-        );
+            ]);
+        }
+
+        $invitedUser->notify(new OrganizationMemberInvited($organization, $user, $validated['role']));
 
         return response()->json([
             'message' => 'Convite enviado.',
@@ -70,6 +103,15 @@ class OrganizationMemberController extends Controller
             'joined_at' => now(),
         ]);
 
+        $member->loadMissing([
+            'organization:id,name,slug,avatar_path',
+            'user:id,name,avatar_path',
+            'inviter:id,name,avatar_path',
+        ]);
+
+        $this->notifyInviterAboutResponse($member, 'accepted');
+        $this->notifyCommunityAboutNewMember($organization, $user, $member->role);
+
         return response()->json([
             'message' => 'Convite aceito.',
             'member' => $member,
@@ -89,6 +131,14 @@ class OrganizationMemberController extends Controller
         $member->update([
             'status' => 'rejected',
         ]);
+
+        $member->loadMissing([
+            'organization:id,name,slug,avatar_path',
+            'user:id,name,avatar_path',
+            'inviter:id,name,avatar_path',
+        ]);
+
+        $this->notifyInviterAboutResponse($member, 'rejected');
 
         return response()->json([
             'message' => 'Convite recusado.',
@@ -158,7 +208,7 @@ class OrganizationMemberController extends Controller
             ->whereDoesntHave('organizationMemberships', function ($builder) use ($organization) {
                 $builder
                     ->where('organization_id', $organization->id)
-                    ->whereIn('status', ['active', 'pending']);
+                    ->whereIn('status', ['active', 'pending', 'banned']);
             })
             ->orderBy('name')
             ->limit(8)
@@ -174,17 +224,141 @@ class OrganizationMemberController extends Controller
         $user = auth('api')->user();
 
         if (! OrganizationAccess::canManageOrganization($user, $organization)) {
-            abort(403, 'Sem permissao para gerenciar membros.');
+            abort(403, 'Sem permissao para expulsar membros.');
         }
 
-        OrganizationMember::query()
+        if ($memberUser->id === $user->id) {
+            abort(422, 'Você não pode expulsar a própria conta.');
+        }
+
+        $member = OrganizationMember::query()
             ->where('organization_id', $organization->id)
             ->where('user_id', $memberUser->id)
-            ->where('role', '!=', 'owner')
-            ->delete();
+            ->firstOrFail();
+
+        if ($member->role === 'owner') {
+            abort(422, 'Não é possível expulsar o dono da comunidade.');
+        }
+
+        if ($member->status === 'banned') {
+            abort(422, 'Banimento permanente: não é possível remover este banimento.');
+        }
+
+        $requesterRole = OrganizationMember::query()
+            ->where('organization_id', $organization->id)
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->value('role');
+
+        if ($requesterRole === 'admin' && $member->role === 'admin') {
+            abort(403, 'Colaborador não pode expulsar outro colaborador.');
+        }
+
+        $member->delete();
 
         return response()->json([
-            'message' => 'Membro removido.',
+            'message' => 'Membro expulso com sucesso.',
         ]);
+    }
+
+    public function cancelInvite(Organization $organization, User $memberUser): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (! OrganizationAccess::canManageOrganization($user, $organization)) {
+            abort(403, 'Sem permissao para anular convites.');
+        }
+
+        $member = OrganizationMember::query()
+            ->where('organization_id', $organization->id)
+            ->where('user_id', $memberUser->id)
+            ->where('status', 'pending')
+            ->where('role', '!=', 'owner')
+            ->first();
+
+        if (! $member) {
+            abort(422, 'Não há convite pendente para este usuário.');
+        }
+
+        $member->delete();
+
+        return response()->json([
+            'message' => 'Convite anulado.',
+        ]);
+    }
+
+    public function ban(Organization $organization, User $memberUser): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (! OrganizationAccess::canManageOrganization($user, $organization)) {
+            abort(403, 'Sem permissao para banir membros.');
+        }
+
+        if ($memberUser->id === $user->id) {
+            abort(422, 'Você não pode banir a própria conta.');
+        }
+
+        $member = OrganizationMember::query()
+            ->where('organization_id', $organization->id)
+            ->where('user_id', $memberUser->id)
+            ->firstOrFail();
+
+        if ($member->role === 'owner') {
+            abort(422, 'Não é possível banir o dono da comunidade.');
+        }
+
+        $requesterRole = OrganizationMember::query()
+            ->where('organization_id', $organization->id)
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->value('role');
+
+        if ($requesterRole === 'admin' && $member->role === 'admin') {
+            abort(403, 'Colaborador não pode banir outro colaborador.');
+        }
+
+        $member->status = 'banned';
+        $member->joined_at = null;
+        $member->save();
+
+        return response()->json([
+            'message' => 'Membro banido com sucesso.',
+            'member' => $member->load('user:id,name,username,avatar_path,email'),
+        ]);
+    }
+
+    private function notifyInviterAboutResponse(OrganizationMember $member, string $status): void
+    {
+        if (! in_array($status, ['accepted', 'rejected'], true)) {
+            return;
+        }
+
+        $inviter = $member->inviter;
+        $acceptedUser = $member->user;
+        $organization = $member->organization;
+
+        if (! $inviter || ! $acceptedUser || ! $organization) {
+            return;
+        }
+
+        if ($inviter->id === $acceptedUser->id) {
+            return;
+        }
+
+        $inviter->notify(new OrganizationMemberInviteResponded($organization, $acceptedUser, $status));
+    }
+
+    private function notifyCommunityAboutNewMember(Organization $organization, User $newMember, string $role): void
+    {
+        $recipients = $organization->users()
+            ->wherePivot('status', 'active')
+            ->where('users.id', '!=', $newMember->id)
+            ->distinct('users.id')
+            ->get();
+
+        foreach ($recipients as $recipient) {
+            $recipient->notify(new OrganizationMemberJoined($organization, $newMember, $role));
+        }
     }
 }

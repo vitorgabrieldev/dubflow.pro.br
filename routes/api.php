@@ -60,6 +60,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/organizations/{organization}/members', [OrganizationMemberController::class, 'store']);
         Route::post('/organizations/{organization}/members/accept', [OrganizationMemberController::class, 'accept']);
         Route::post('/organizations/{organization}/members/reject', [OrganizationMemberController::class, 'reject']);
+        Route::delete('/organizations/{organization}/members/{memberUser}/invite', [OrganizationMemberController::class, 'cancelInvite']);
+        Route::post('/organizations/{organization}/members/{memberUser}/ban', [OrganizationMemberController::class, 'ban']);
         Route::patch('/organizations/{organization}/members/{memberUser}', [OrganizationMemberController::class, 'update']);
         Route::delete('/organizations/{organization}/members/{memberUser}', [OrganizationMemberController::class, 'destroy']);
 
@@ -85,8 +87,10 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+        Route::post('/notifications/{notificationId}/invite-accepted', [NotificationController::class, 'markInviteAccepted']);
         Route::post('/notifications/{notificationId}/read', [NotificationController::class, 'markRead']);
         Route::delete('/notifications/clear', [NotificationController::class, 'clearAll']);
+        Route::delete('/notifications/{notificationId}', [NotificationController::class, 'destroy']);
 
         Route::get('/dashboard/overview', [DashboardController::class, 'overview']);
     });

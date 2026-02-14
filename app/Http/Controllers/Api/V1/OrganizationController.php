@@ -238,7 +238,13 @@ class OrganizationController extends Controller
                 }
             }
 
-            $viewer['can_request_join'] = ! $organization->is_public && ! $viewer['membership_status'];
+            $isBanned = OrganizationMember::query()
+                ->where('organization_id', $organization->id)
+                ->where('user_id', $user->id)
+                ->where('status', 'banned')
+                ->exists();
+
+            $viewer['can_request_join'] = ! $organization->is_public && ! $viewer['membership_status'] && ! $isBanned;
         }
 
         return response()->json([
@@ -367,6 +373,10 @@ class OrganizationController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
+        if ($existing?->status === 'banned') {
+            abort(403, 'Você foi banido desta comunidade.');
+        }
+
         if ($organization->is_public) {
             if ($existing?->status === 'active') {
                 return response()->json(['message' => 'Voce ja faz parte desta organizacao.']);
@@ -463,21 +473,29 @@ class OrganizationController extends Controller
             ->pluck('organization_id')
             ->flip();
 
+        $bannedOrganizations = OrganizationMember::query()
+            ->whereIn('organization_id', $organizationIds)
+            ->where('user_id', $userId)
+            ->where('status', 'banned')
+            ->pluck('organization_id')
+            ->flip();
+
         $followed = OrganizationFollow::query()
             ->whereIn('organization_id', $organizationIds)
             ->where('user_id', $userId)
             ->pluck('organization_id')
             ->flip();
 
-        $organizations->each(function (Organization $organization) use ($activeRoles, $pendingRequests, $followed) {
+        $organizations->each(function (Organization $organization) use ($activeRoles, $pendingRequests, $followed, $bannedOrganizations) {
             $role = $activeRoles->get($organization->id);
             $isPending = $pendingRequests->has($organization->id);
+            $isBanned = $bannedOrganizations->has($organization->id);
 
             $organization->setAttribute('viewer', [
                 'is_following' => $followed->has($organization->id),
                 'membership_status' => $role ? 'active' : ($isPending ? 'pending' : null),
                 'role' => $role,
-                'can_request_join' => ! $organization->is_public && ! $role && ! $isPending,
+                'can_request_join' => ! $organization->is_public && ! $role && ! $isPending && ! $isBanned,
             ]);
         });
     }
