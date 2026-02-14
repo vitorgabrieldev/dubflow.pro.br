@@ -142,13 +142,13 @@ class PostController extends Controller
             'media' => [
                 'nullable',
                 'file',
-                'max:819200',
+                'max:1048576',
                 'mimetypes:video/mp4,video/quicktime,video/x-matroska,video/webm,audio/mpeg,audio/wav,audio/x-wav,audio/flac,audio/mp4,audio/aac,audio/ogg',
             ],
             'media_assets' => ['nullable', 'array', 'min:1', 'max:20'],
             'media_assets.*' => [
                 'file',
-                'max:819200',
+                'max:1048576',
                 'mimetypes:video/mp4,video/quicktime,video/x-matroska,video/webm,audio/mpeg,audio/wav,audio/x-wav,audio/flac,audio/mp4,audio/aac,audio/ogg,image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif',
             ],
             'thumbnail' => ['nullable', 'image', 'max:5120'],
