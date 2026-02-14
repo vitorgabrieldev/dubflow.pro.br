@@ -291,8 +291,18 @@ class OrganizationController extends Controller
             'website_url' => ['nullable', 'url', 'max:255'],
             'avatar_path' => ['nullable', 'string', 'max:255'],
             'cover_path' => ['nullable', 'string', 'max:255'],
+            'avatar' => ['nullable', 'image', 'max:5120'],
+            'cover' => ['nullable', 'image', 'max:10240'],
             'is_public' => ['sometimes', 'boolean'],
         ]);
+
+        if ($request->hasFile('avatar')) {
+            $validated['avatar_path'] = $request->file('avatar')?->store('organization-avatars', 'public');
+        }
+
+        if ($request->hasFile('cover')) {
+            $validated['cover_path'] = $request->file('cover')?->store('organization-covers', 'public');
+        }
 
         $organization->fill($validated)->save();
         $organization->recalculateVerification();

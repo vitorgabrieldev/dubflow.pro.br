@@ -7,6 +7,8 @@ use App\Models\OrganizationInvite;
 use App\Models\OrganizationMember;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class OrganizationApiTest extends TestCase
@@ -97,5 +99,56 @@ class OrganizationApiTest extends TestCase
 
         $invite = OrganizationInvite::query()->where('token', $token)->firstOrFail();
         $this->assertSame(1, $invite->uses_count);
+    }
+
+    public function test_owner_can_update_organization_with_images(): void
+    {
+        Storage::fake('public');
+
+        $owner = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Org Original',
+            'slug' => 'org-original',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $ownerToken = auth('api')->login($owner);
+
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->post("/api/v1/organizations/{$organization->slug}", [
+            '_method' => 'PATCH',
+            'name' => 'Org Atualizada',
+            'description' => 'Descrição atualizada.',
+            'website_url' => 'https://dubflow.dev/org',
+            'is_public' => '0',
+            'avatar' => UploadedFile::fake()->image('avatar.png'),
+            'cover' => UploadedFile::fake()->image('cover.jpg'),
+        ]);
+
+        $response->assertOk()->assertJsonPath('organization.name', 'Org Atualizada');
+
+        $avatarPath = (string) $response->json('organization.avatar_path');
+        $coverPath = (string) $response->json('organization.cover_path');
+
+        Storage::disk('public')->assertExists($avatarPath);
+        Storage::disk('public')->assertExists($coverPath);
+
+        $this->assertDatabaseHas('organizations', [
+            'id' => $organization->id,
+            'name' => 'Org Atualizada',
+            'is_public' => false,
+        ]);
     }
 }
