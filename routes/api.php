@@ -56,6 +56,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/organizations/invites/{token}/accept', [OrganizationInviteController::class, 'accept']);
 
         Route::get('/organizations/{organization}/members', [OrganizationMemberController::class, 'index']);
+        Route::get('/organizations/{organization}/member-candidates', [OrganizationMemberController::class, 'candidates']);
         Route::post('/organizations/{organization}/members', [OrganizationMemberController::class, 'store']);
         Route::post('/organizations/{organization}/members/accept', [OrganizationMemberController::class, 'accept']);
         Route::post('/organizations/{organization}/members/reject', [OrganizationMemberController::class, 'reject']);

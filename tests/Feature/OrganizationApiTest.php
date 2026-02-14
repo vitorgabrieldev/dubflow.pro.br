@@ -151,4 +151,113 @@ class OrganizationApiTest extends TestCase
             'is_public' => false,
         ]);
     }
+
+    public function test_only_owner_can_change_member_roles(): void
+    {
+        $owner = User::factory()->create();
+        $admin = User::factory()->create();
+        $member = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Roles Org',
+            'slug' => 'roles-org',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $admin->id,
+            'role' => 'admin',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $member->id,
+            'role' => 'member',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $adminToken = auth('api')->login($admin);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$adminToken,
+            'Accept' => 'application/json',
+        ])->patchJson("/api/v1/organizations/{$organization->slug}/members/{$member->id}", [
+            'role' => 'editor',
+        ])->assertStatus(403);
+
+        $ownerToken = auth('api')->login($owner);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->patchJson("/api/v1/organizations/{$organization->slug}/members/{$member->id}", [
+            'role' => 'editor',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('organization_members', [
+            'organization_id' => $organization->id,
+            'user_id' => $member->id,
+            'role' => 'editor',
+        ]);
+    }
+
+    public function test_owner_can_search_member_candidates_by_email(): void
+    {
+        $owner = User::factory()->create([
+            'email' => 'owner-candidates@test.dev',
+        ]);
+        $existingMember = User::factory()->create([
+            'email' => 'ja-membro@test.dev',
+        ]);
+        $candidate = User::factory()->create([
+            'email' => 'convite-especial@test.dev',
+            'name' => 'Pessoa Convite',
+        ]);
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Candidates Org',
+            'slug' => 'candidates-org',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $existingMember->id,
+            'role' => 'member',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $ownerToken = auth('api')->login($owner);
+
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->getJson("/api/v1/organizations/{$organization->slug}/member-candidates?q=convite-especial");
+
+        $response->assertOk()
+            ->assertJsonPath('users.0.id', $candidate->id)
+            ->assertJsonMissing([
+                'id' => $existingMember->id,
+            ]);
+    }
 }

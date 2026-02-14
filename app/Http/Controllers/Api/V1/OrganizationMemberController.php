@@ -51,7 +51,7 @@ class OrganizationMemberController extends Controller
 
         return response()->json([
             'message' => 'Convite enviado.',
-            'member' => $member,
+            'member' => $member->load('user:id,name,username,avatar_path,email'),
         ], 201);
     }
 
@@ -100,8 +100,8 @@ class OrganizationMemberController extends Controller
     {
         $user = auth('api')->user();
 
-        if (! OrganizationAccess::canManageOrganization($user, $organization)) {
-            abort(403, 'Sem permissao para gerenciar membros.');
+        if (! OrganizationAccess::hasRole($user, $organization, ['owner'])) {
+            abort(403, 'Apenas o dono pode alterar cargos.');
         }
 
         $validated = $request->validate([
@@ -114,6 +114,10 @@ class OrganizationMemberController extends Controller
             ->where('user_id', $memberUser->id)
             ->firstOrFail();
 
+        if ($member->role === 'owner') {
+            abort(422, 'O dono da comunidade nao pode ter o cargo alterado.');
+        }
+
         $member->role = $validated['role'];
 
         if (isset($validated['status'])) {
@@ -124,7 +128,44 @@ class OrganizationMemberController extends Controller
 
         return response()->json([
             'message' => 'Membro atualizado.',
-            'member' => $member,
+            'member' => $member->load('user:id,name,username,avatar_path,email'),
+        ]);
+    }
+
+    public function candidates(Request $request, Organization $organization): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (! OrganizationAccess::canManageOrganization($user, $organization)) {
+            abort(403, 'Sem permissao para convidar membros.');
+        }
+
+        $term = trim($request->string('q')->toString());
+
+        if (mb_strlen($term) < 1) {
+            return response()->json([
+                'users' => [],
+            ]);
+        }
+
+        $users = User::query()
+            ->where(function ($builder) use ($term) {
+                $builder->where('name', 'like', '%'.$term.'%')
+                    ->orWhere('email', 'like', '%'.$term.'%')
+                    ->orWhere('username', 'like', '%'.$term.'%')
+                    ->orWhere('stage_name', 'like', '%'.$term.'%');
+            })
+            ->whereDoesntHave('organizationMemberships', function ($builder) use ($organization) {
+                $builder
+                    ->where('organization_id', $organization->id)
+                    ->whereIn('status', ['active', 'pending']);
+            })
+            ->orderBy('name')
+            ->limit(8)
+            ->get(['id', 'name', 'email', 'username', 'avatar_path']);
+
+        return response()->json([
+            'users' => $users,
         ]);
     }
 
