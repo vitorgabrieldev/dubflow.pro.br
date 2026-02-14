@@ -28,6 +28,11 @@ class User extends Authenticatable implements JWTSubject
         'avatar_path',
         'cover_path',
         'website_url',
+        'skills',
+        'social_links',
+        'profile_links',
+        'tags',
+        'dubbing_history',
         'locale',
         'is_private',
         'email',
@@ -54,6 +59,10 @@ class User extends Authenticatable implements JWTSubject
         return [
             'email_verified_at' => 'datetime',
             'is_private' => 'boolean',
+            'skills' => 'array',
+            'social_links' => 'array',
+            'profile_links' => 'array',
+            'tags' => 'array',
             'password' => 'hashed',
         ];
     }
@@ -103,6 +112,11 @@ class User extends Authenticatable implements JWTSubject
     public function views(): HasMany
     {
         return $this->hasMany(PostView::class);
+    }
+
+    public function organizationInvitesCreated(): HasMany
+    {
+        return $this->hasMany(OrganizationInvite::class, 'created_by_user_id');
     }
 
     public function getJWTIdentifier(): mixed

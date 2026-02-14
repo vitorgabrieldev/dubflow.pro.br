@@ -33,7 +33,7 @@ class AuthController extends Controller
 
         $token = auth('api')->login($user);
 
-        return $this->respondWithToken($token);
+        return $this->respondWithToken($token, 201);
     }
 
     public function login(Request $request): JsonResponse
@@ -57,6 +57,54 @@ class AuthController extends Controller
         ]);
     }
 
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        $validated = $request->validate([
+            'name' => ['sometimes', 'string', 'max:255'],
+            'stage_name' => ['nullable', 'string', 'max:255'],
+            'username' => [
+                'nullable',
+                'string',
+                'max:40',
+                Rule::unique('users', 'username')->ignore($user->id),
+            ],
+            'bio' => ['nullable', 'string', 'max:4000'],
+            'website_url' => ['nullable', 'url', 'max:255'],
+            'locale' => ['nullable', 'string', 'max:10'],
+            'skills' => ['nullable', 'array', 'max:50'],
+            'skills.*' => ['string', 'max:60'],
+            'tags' => ['nullable', 'array', 'max:50'],
+            'tags.*' => ['string', 'max:60'],
+            'social_links' => ['nullable', 'array', 'max:30'],
+            'social_links.*.label' => ['required_with:social_links', 'string', 'max:60'],
+            'social_links.*.url' => ['required_with:social_links', 'url', 'max:255'],
+            'profile_links' => ['nullable', 'array', 'max:30'],
+            'profile_links.*.label' => ['required_with:profile_links', 'string', 'max:60'],
+            'profile_links.*.url' => ['required_with:profile_links', 'url', 'max:255'],
+            'dubbing_history' => ['nullable', 'string', 'max:15000'],
+            'is_private' => ['nullable', 'boolean'],
+            'avatar' => ['nullable', 'image', 'max:5120'],
+            'cover' => ['nullable', 'image', 'max:10240'],
+        ]);
+
+        if ($request->hasFile('avatar')) {
+            $validated['avatar_path'] = $request->file('avatar')?->store('user-avatars', 'public');
+        }
+
+        if ($request->hasFile('cover')) {
+            $validated['cover_path'] = $request->file('cover')?->store('user-covers', 'public');
+        }
+
+        $user->fill($validated)->save();
+
+        return response()->json([
+            'message' => 'Perfil atualizado com sucesso.',
+            'user' => $user->fresh(),
+        ]);
+    }
+
     public function logout(): JsonResponse
     {
         auth('api')->logout();
@@ -69,13 +117,13 @@ class AuthController extends Controller
         return $this->respondWithToken(auth('api')->refresh());
     }
 
-    private function respondWithToken(string $token): JsonResponse
+    private function respondWithToken(string $token, int $status = 200): JsonResponse
     {
         return response()->json([
             'access_token' => $token,
             'token_type' => 'bearer',
             'expires_in' => auth('api')->factory()->getTTL() * 60,
             'user' => auth('api')->user(),
-        ]);
+        ], $status);
     }
 }

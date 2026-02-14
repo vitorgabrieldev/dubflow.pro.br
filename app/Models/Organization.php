@@ -71,6 +71,11 @@ class Organization extends Model
         return $this->belongsToMany(User::class, 'organization_follows')->withTimestamps();
     }
 
+    public function invites(): HasMany
+    {
+        return $this->hasMany(OrganizationInvite::class);
+    }
+
     public function recalculateVerification(): void
     {
         $playlistCount = $this->playlists()->count();

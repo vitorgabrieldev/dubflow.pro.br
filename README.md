@@ -68,6 +68,13 @@ Cada organizacao pode:
 - Modelos: `app/Models`
 - Regras de acesso por organizacao: `app/Support/OrganizationAccess.php`
 - Frontend Next: `frontend/`
+- Documentacao tecnica:
+  - `docs/ARCHITECTURE.md`
+  - `docs/DATABASE.md`
+  - `docs/SECURITY.md`
+  - `docs/TESTING.md`
+  - `docs/DEPLOYMENT.md`
+  - `docs/DUBBING_ROADMAP.md`
 
 ## Requisitos locais
 
@@ -83,6 +90,8 @@ Cada organizacao pode:
 
 ```bash
 nvm use 22
+# opcional: tornar padrao local
+nvm alias default 22
 ```
 
 2. Instalar dependencias PHP:
@@ -193,3 +202,4 @@ Prefixo: `/api/v1`
 3. Transcodificacao/validacao real de duracao com FFmpeg
 4. Realtime para notificacoes
 5. Politica completa de direitos autorais e termos de uso
+6. Evoluir roadmap de dublagem em `docs/DUBBING_ROADMAP.md`

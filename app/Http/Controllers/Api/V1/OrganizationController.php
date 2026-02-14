@@ -11,6 +11,8 @@ use App\Support\OrganizationAccess;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -89,10 +91,20 @@ class OrganizationController extends Controller
             $query->orderByDesc('created_at');
         }
 
-        $organizations = $query->paginate((int) $request->integer('per_page', 12));
-        $this->attachViewerState($organizations->getCollection(), $user?->id);
+        $cacheKey = sprintf(
+            'organizations:index:%s:%s',
+            $user?->id ?? 'guest',
+            md5($request->fullUrl())
+        );
 
-        return response()->json($organizations);
+        $payload = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($query, $request, $user) {
+            $organizations = $query->paginate((int) $request->integer('per_page', 12));
+            $this->attachViewerState($organizations->getCollection(), $user?->id);
+
+            return $organizations->toArray();
+        });
+
+        return response()->json($payload);
     }
 
     public function store(Request $request): JsonResponse
@@ -138,6 +150,12 @@ class OrganizationController extends Controller
             'role' => 'owner',
             'status' => 'active',
             'joined_at' => now(),
+        ]);
+
+        Log::channel('audit')->info('organization_created', [
+            'organization_id' => $organization->id,
+            'created_by_user_id' => $user->id,
+            'is_public' => (bool) $organization->is_public,
         ]);
 
         return response()->json([
@@ -303,6 +321,11 @@ class OrganizationController extends Controller
 
         $organization->recalculateVerification();
 
+        Log::channel('audit')->info('organization_followed', [
+            'organization_id' => $organization->id,
+            'user_id' => $user->id,
+        ]);
+
         return response()->json(['message' => 'Agora voce acompanha essa organizacao.']);
     }
 
@@ -316,6 +339,11 @@ class OrganizationController extends Controller
             ->delete();
 
         $organization->recalculateVerification();
+
+        Log::channel('audit')->info('organization_unfollowed', [
+            'organization_id' => $organization->id,
+            'user_id' => $user->id,
+        ]);
 
         return response()->json(['message' => 'Voce deixou de acompanhar essa organizacao.']);
     }
@@ -350,6 +378,11 @@ class OrganizationController extends Controller
                 ]);
             }
 
+            Log::channel('audit')->info('organization_joined_public', [
+                'organization_id' => $organization->id,
+                'user_id' => $user->id,
+            ]);
+
             return response()->json(['message' => 'Voce entrou na organizacao com sucesso.']);
         }
 
@@ -377,6 +410,11 @@ class OrganizationController extends Controller
                 'joined_at' => null,
             ]);
         }
+
+        Log::channel('audit')->info('organization_join_requested', [
+            'organization_id' => $organization->id,
+            'user_id' => $user->id,
+        ]);
 
         return response()->json(['message' => 'Solicitacao de entrada enviada.']);
     }

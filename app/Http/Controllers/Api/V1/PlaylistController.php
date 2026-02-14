@@ -9,6 +9,7 @@ use App\Models\PlaylistSeason;
 use App\Support\OrganizationAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class PlaylistController extends Controller
@@ -86,9 +87,17 @@ class PlaylistController extends Controller
             $query->orderByDesc('created_at');
         }
 
-        return response()->json(
-            $query->paginate((int) $request->integer('per_page', 20))
+        $cacheKey = sprintf(
+            'playlists:global-index:%s:%s',
+            $user?->id ?? 'guest',
+            md5($request->fullUrl())
         );
+
+        $payload = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($query, $request) {
+            return $query->paginate((int) $request->integer('per_page', 20))->toArray();
+        });
+
+        return response()->json($payload);
     }
 
     public function index(Request $request, Organization $organization): JsonResponse
@@ -118,9 +127,18 @@ class PlaylistController extends Controller
 
         $query->where('visibility', 'public');
 
-        return response()->json(
-            $query->paginate((int) $request->integer('per_page', 20))
+        $cacheKey = sprintf(
+            'playlists:index:%s:%s:%s',
+            $organization->id,
+            $user?->id ?? 'guest',
+            md5($request->fullUrl())
         );
+
+        $payload = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($query, $request) {
+            return $query->paginate((int) $request->integer('per_page', 20))->toArray();
+        });
+
+        return response()->json($payload);
     }
 
     public function store(Request $request, Organization $organization): JsonResponse

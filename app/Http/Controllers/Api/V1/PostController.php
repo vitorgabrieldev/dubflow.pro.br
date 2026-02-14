@@ -16,6 +16,8 @@ use App\Support\OrganizationAccess;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -113,9 +115,17 @@ class PostController extends Controller
             ]);
         }
 
-        return response()->json(
-            $query->paginate((int) $request->integer('per_page', 12))
+        $cacheKey = sprintf(
+            'posts:index:%s:%s',
+            $user?->id ?? 'guest',
+            md5($request->fullUrl())
         );
+
+        $payload = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($query, $request) {
+            return $query->paginate((int) $request->integer('per_page', 12))->toArray();
+        });
+
+        return response()->json($payload);
     }
 
     public function store(Request $request, Organization $organization): JsonResponse
@@ -284,6 +294,15 @@ class PostController extends Controller
 
         $organization->recalculateVerification();
 
+        Log::channel('audit')->info('post_created', [
+            'post_id' => $post->id,
+            'organization_id' => $organization->id,
+            'author_user_id' => $user->id,
+            'playlist_id' => $post->playlist_id,
+            'season_id' => $post->season_id,
+            'published_at' => optional($post->published_at)->toIso8601String(),
+        ]);
+
         return response()->json([
             'post' => $this->loadPost($post->id),
             'message' => $collaboratorIds->isEmpty()
@@ -382,6 +401,14 @@ class PostController extends Controller
             $this->syncCredits($post, $validated['credits'] ?? []);
         }
 
+        Log::channel('audit')->info('post_updated', [
+            'post_id' => $post->id,
+            'organization_id' => $post->organization_id,
+            'updated_by_user_id' => $user->id,
+            'playlist_id' => $post->playlist_id,
+            'season_id' => $post->season_id,
+        ]);
+
         return response()->json([
             'post' => $this->loadPost($post->id),
             'message' => 'Post atualizado com sucesso.',
@@ -397,8 +424,15 @@ class PostController extends Controller
         }
 
         $organization = $post->organization;
+        $postId = $post->id;
         $post->delete();
         $organization->recalculateVerification();
+
+        Log::channel('audit')->info('post_deleted', [
+            'post_id' => $postId,
+            'organization_id' => $organization->id,
+            'deleted_by_user_id' => $user->id,
+        ]);
 
         return response()->json([
             'message' => 'Post removido com sucesso.',

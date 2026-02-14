@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OrganizationController;
+use App\Http\Controllers\Api\V1\OrganizationInviteController;
 use App\Http\Controllers\Api\V1\OrganizationMemberController;
 use App\Http\Controllers\Api\V1\PlaylistController;
 use App\Http\Controllers\Api\V1\PublishOptionsController;
@@ -14,7 +15,7 @@ use App\Http\Controllers\Api\V1\UserProfileController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
-    Route::prefix('auth')->group(function () {
+    Route::prefix('auth')->middleware('throttle:30,1')->group(function () {
         Route::post('/register', [AuthController::class, 'register']);
         Route::post('/login', [AuthController::class, 'login']);
 
@@ -22,6 +23,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/me', [AuthController::class, 'me']);
             Route::post('/logout', [AuthController::class, 'logout']);
             Route::post('/refresh', [AuthController::class, 'refresh']);
+            Route::patch('/profile', [AuthController::class, 'updateProfile']);
         });
     });
 
@@ -37,7 +39,7 @@ Route::prefix('v1')->group(function () {
 
     Route::get('/search', SearchController::class);
 
-    Route::middleware('auth:api')->group(function () {
+    Route::middleware(['auth:api', 'throttle:120,1'])->group(function () {
         Route::get('/my-organizations', [OrganizationController::class, 'myOrganizations']);
         Route::get('/publish/options', [PublishOptionsController::class, 'index']);
         Route::post('/organizations', [OrganizationController::class, 'store']);
@@ -45,6 +47,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/organizations/{organization}/follow', [OrganizationController::class, 'follow']);
         Route::delete('/organizations/{organization}/follow', [OrganizationController::class, 'unfollow']);
         Route::post('/organizations/{organization}/join-request', [OrganizationController::class, 'requestJoin']);
+        Route::get('/organizations/{organization}/invites', [OrganizationInviteController::class, 'index']);
+        Route::post('/organizations/{organization}/invites', [OrganizationInviteController::class, 'store']);
+        Route::delete('/organizations/{organization}/invites/{invite}', [OrganizationInviteController::class, 'revoke']);
+        Route::post('/organizations/invites/{token}/accept', [OrganizationInviteController::class, 'accept']);
 
         Route::get('/organizations/{organization}/members', [OrganizationMemberController::class, 'index']);
         Route::post('/organizations/{organization}/members', [OrganizationMemberController::class, 'store']);

@@ -73,6 +73,11 @@ class UserProfileController extends Controller
                 'cover_path' => $user->cover_path,
                 'website_url' => $user->website_url,
                 'locale' => $user->locale,
+                'skills' => $user->skills,
+                'social_links' => $user->social_links,
+                'profile_links' => $user->profile_links,
+                'tags' => $user->tags,
+                'dubbing_history' => $user->dubbing_history,
                 'created_at' => $user->created_at,
             ],
             'summary' => [

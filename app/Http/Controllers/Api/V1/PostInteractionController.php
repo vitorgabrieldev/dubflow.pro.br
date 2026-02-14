@@ -15,6 +15,7 @@ use App\Notifications\PostCollaborationResponded;
 use App\Support\OrganizationAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class PostInteractionController extends Controller
@@ -28,6 +29,11 @@ class PostInteractionController extends Controller
         }
 
         PostLike::query()->firstOrCreate([
+            'post_id' => $post->id,
+            'user_id' => $user->id,
+        ]);
+
+        Log::channel('audit')->info('post_liked', [
             'post_id' => $post->id,
             'user_id' => $user->id,
         ]);
@@ -46,6 +52,11 @@ class PostInteractionController extends Controller
             ->where('post_id', $post->id)
             ->where('user_id', $user->id)
             ->delete();
+
+        Log::channel('audit')->info('post_unliked', [
+            'post_id' => $post->id,
+            'user_id' => $user->id,
+        ]);
 
         return response()->json([
             'message' => 'Curtida removida.',
@@ -90,6 +101,13 @@ class PostInteractionController extends Controller
             'body' => $validated['body'],
         ]);
 
+        Log::channel('audit')->info('comment_created', [
+            'comment_id' => $comment->id,
+            'post_id' => $post->id,
+            'user_id' => $user->id,
+            'parent_id' => $comment->parent_id,
+        ]);
+
         return response()->json([
             'message' => 'Comentario publicado.',
             'comment' => $comment->load('user:id,name,stage_name,username,avatar_path'),
@@ -113,6 +131,12 @@ class PostInteractionController extends Controller
             'edited_at' => now(),
         ]);
 
+        Log::channel('audit')->info('comment_updated', [
+            'comment_id' => $comment->id,
+            'post_id' => $comment->post_id,
+            'user_id' => $user->id,
+        ]);
+
         return response()->json([
             'message' => 'Comentario atualizado.',
             'comment' => $comment,
@@ -130,7 +154,15 @@ class PostInteractionController extends Controller
             }
         }
 
+        $commentId = $comment->id;
+        $postId = $comment->post_id;
         $comment->delete();
+
+        Log::channel('audit')->info('comment_deleted', [
+            'comment_id' => $commentId,
+            'post_id' => $postId,
+            'deleted_by_user_id' => $user->id,
+        ]);
 
         return response()->json([
             'message' => 'Comentario removido.',
@@ -195,6 +227,12 @@ class PostInteractionController extends Controller
             $collaboratorUser->notify(new PostCollaborationRequested($post, $user));
         }
 
+        Log::channel('audit')->info('post_collaborator_invited', [
+            'post_id' => $post->id,
+            'invited_user_id' => $validated['user_id'],
+            'invited_by_user_id' => $user->id,
+        ]);
+
         return response()->json([
             'message' => 'Convite enviado.',
             'collaborator' => $collaborator,
@@ -238,6 +276,12 @@ class PostInteractionController extends Controller
         }
 
         $post->author?->notify(new PostCollaborationResponded($post, $user, $validated['status']));
+
+        Log::channel('audit')->info('post_collaboration_responded', [
+            'post_id' => $post->id,
+            'user_id' => $user->id,
+            'status' => $validated['status'],
+        ]);
 
         return response()->json([
             'message' => 'Resposta registrada.',
