@@ -9,6 +9,7 @@ use App\Models\PostCollaborator;
 use App\Models\PostLike;
 use App\Models\PostView;
 use App\Models\User;
+use App\Notifications\OrganizationPostCommented;
 use App\Notifications\OrganizationPublishedPost;
 use App\Notifications\PostCollaborationRequested;
 use App\Notifications\PostCollaborationResponded;
@@ -107,6 +108,8 @@ class PostInteractionController extends Controller
             'user_id' => $user->id,
             'parent_id' => $comment->parent_id,
         ]);
+
+        $this->notifyOrganizationMembersAboutComment($post, $comment, $user->stage_name ?: $user->name);
 
         return response()->json([
             'message' => 'Comentario publicado.',
@@ -271,7 +274,7 @@ class PostInteractionController extends Controller
                     'published_at' => now(),
                 ]);
 
-                $this->notifyFollowersAboutPublication($post);
+                $this->notifyOrganizationMembersAboutPublication($post);
             }
         }
 
@@ -310,16 +313,53 @@ class PostInteractionController extends Controller
         return $post->collaborators()->where('user_id', $viewerId)->where('status', 'accepted')->exists();
     }
 
-    private function notifyFollowersAboutPublication(DubbingPost $post): void
+    private function notifyOrganizationMembersAboutPublication(DubbingPost $post): void
     {
         $post->loadMissing('organization');
 
-        $followers = $post->organization->followers()
+        $members = $post->organization->users()
+            ->wherePivot('status', 'active')
             ->where('users.id', '!=', $post->author_user_id)
+            ->distinct('users.id')
             ->get();
 
-        foreach ($followers as $follower) {
-            $follower->notify(new OrganizationPublishedPost($post));
+        $followers = $post->organization->followers()
+            ->where('users.id', '!=', $post->author_user_id)
+            ->distinct('users.id')
+            ->get();
+
+        $recipients = $members
+            ->merge($followers)
+            ->unique('id')
+            ->values();
+
+        foreach ($recipients as $recipient) {
+            $recipient->notify(new OrganizationPublishedPost($post));
+        }
+    }
+
+    private function notifyOrganizationMembersAboutComment(DubbingPost $post, Comment $comment, string $authorName): void
+    {
+        $post->loadMissing('organization');
+
+        $members = $post->organization->users()
+            ->wherePivot('status', 'active')
+            ->where('users.id', '!=', $comment->user_id)
+            ->distinct('users.id')
+            ->get();
+
+        $followers = $post->organization->followers()
+            ->where('users.id', '!=', $comment->user_id)
+            ->distinct('users.id')
+            ->get();
+
+        $recipients = $members
+            ->merge($followers)
+            ->unique('id')
+            ->values();
+
+        foreach ($recipients as $recipient) {
+            $recipient->notify(new OrganizationPostCommented($post, $authorName));
         }
     }
 }

@@ -6,8 +6,11 @@ use App\Models\Organization;
 use App\Models\OrganizationMember;
 use App\Models\Playlist;
 use App\Models\User;
+use App\Notifications\OrganizationPostCommented;
+use App\Notifications\OrganizationPublishedPost;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -194,5 +197,129 @@ class PostPublishingApiTest extends TestCase
         ]);
 
         $nestedReply->assertStatus(422);
+    }
+
+    public function test_active_members_receive_notification_when_episode_is_published(): void
+    {
+        Storage::fake('public');
+        Notification::fake();
+
+        $owner = User::factory()->create();
+        $editor = User::factory()->create();
+        $member = User::factory()->create();
+        $follower = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Notify Org',
+            'slug' => 'notify-org',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $editor->id,
+            'role' => 'editor',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $member->id,
+            'role' => 'member',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        $organization->followers()->attach($follower->id);
+
+        $token = auth('api')->login($editor);
+
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer '.$token,
+        ])->post('/api/v1/organizations/'.$organization->slug.'/posts', [
+            'title' => 'Episódio com notificação',
+            'work_title' => 'Obra X',
+            'language_code' => 'pt-BR',
+            'media_assets' => [
+                UploadedFile::fake()->create('episode.mp3', 128, 'audio/mpeg'),
+            ],
+        ]);
+
+        $response->assertCreated();
+
+        Notification::assertSentTo($owner, OrganizationPublishedPost::class);
+        Notification::assertSentTo($member, OrganizationPublishedPost::class);
+        Notification::assertSentTo($follower, OrganizationPublishedPost::class);
+        Notification::assertNotSentTo($editor, OrganizationPublishedPost::class);
+    }
+
+    public function test_active_members_receive_notification_when_new_comment_is_added(): void
+    {
+        Storage::fake('public');
+
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+        $follower = User::factory()->create();
+        $commenter = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Comments Notify Org',
+            'slug' => 'comments-notify-org',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $member->id,
+            'role' => 'member',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        $organization->followers()->attach($follower->id);
+
+        $ownerToken = auth('api')->login($owner);
+        $postResponse = $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+        ])->post('/api/v1/organizations/'.$organization->slug.'/posts', [
+            'title' => 'Post para notificação de comentário',
+            'work_title' => 'Obra Y',
+            'language_code' => 'pt-BR',
+            'media_assets' => [
+                UploadedFile::fake()->create('episode.mp3', 128, 'audio/mpeg'),
+            ],
+        ]);
+        $postResponse->assertCreated();
+        $postId = (int) $postResponse->json('post.id');
+
+        Notification::fake();
+        $commenterToken = auth('api')->login($commenter);
+
+        $commentResponse = $this->withHeaders([
+            'Authorization' => 'Bearer '.$commenterToken,
+        ])->postJson("/api/v1/posts/{$postId}/comments", [
+            'body' => 'Chegou comentário novo',
+        ]);
+
+        $commentResponse->assertCreated();
+
+        Notification::assertSentTo($owner, OrganizationPostCommented::class);
+        Notification::assertSentTo($member, OrganizationPostCommented::class);
+        Notification::assertSentTo($follower, OrganizationPostCommented::class);
+        Notification::assertNotSentTo($commenter, OrganizationPostCommented::class);
     }
 }

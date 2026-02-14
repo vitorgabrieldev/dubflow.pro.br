@@ -289,7 +289,7 @@ class PostController extends Controller
                 $collaborator->user?->notify(new PostCollaborationRequested($post, $post->author));
             }
         } elseif ($post->published_at !== null) {
-            $this->notifyFollowersAboutPublication($post);
+            $this->notifyOrganizationMembersAboutPublication($post);
         }
 
         $organization->recalculateVerification();
@@ -311,15 +311,28 @@ class PostController extends Controller
         ], 201);
     }
 
-    private function notifyFollowersAboutPublication(DubbingPost $post): void
+    private function notifyOrganizationMembersAboutPublication(DubbingPost $post): void
     {
         $post->loadMissing('organization');
-        $followers = $post->organization->followers()
+
+        $members = $post->organization->users()
+            ->wherePivot('status', 'active')
             ->where('users.id', '!=', $post->author_user_id)
+            ->distinct('users.id')
             ->get();
 
-        foreach ($followers as $follower) {
-            $follower->notify(new OrganizationPublishedPost($post));
+        $followers = $post->organization->followers()
+            ->where('users.id', '!=', $post->author_user_id)
+            ->distinct('users.id')
+            ->get();
+
+        $recipients = $members
+            ->merge($followers)
+            ->unique('id')
+            ->values();
+
+        foreach ($recipients as $recipient) {
+            $recipient->notify(new OrganizationPublishedPost($post));
         }
     }
 
