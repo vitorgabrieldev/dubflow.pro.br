@@ -21,12 +21,15 @@ Route::prefix('v1')->group(function () {
     Route::prefix('auth')->middleware('throttle:30,1')->group(function () {
         Route::post('/register', [AuthController::class, 'register']);
         Route::post('/login', [AuthController::class, 'login']);
+        Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+        Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
         Route::middleware('auth:api')->group(function () {
             Route::get('/me', [AuthController::class, 'me']);
             Route::post('/logout', [AuthController::class, 'logout']);
             Route::post('/refresh', [AuthController::class, 'refresh']);
             Route::patch('/profile', [AuthController::class, 'updateProfile']);
+            Route::post('/change-password', [AuthController::class, 'changePassword']);
         });
     });
 
@@ -60,6 +63,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/organizations/{organization}/members', [OrganizationMemberController::class, 'store']);
         Route::post('/organizations/{organization}/members/accept', [OrganizationMemberController::class, 'accept']);
         Route::post('/organizations/{organization}/members/reject', [OrganizationMemberController::class, 'reject']);
+        Route::post('/organizations/{organization}/owner-transfer', [OrganizationMemberController::class, 'requestOwnerTransfer']);
+        Route::post('/organizations/{organization}/owner-transfer/respond', [OrganizationMemberController::class, 'respondOwnerTransfer']);
         Route::delete('/organizations/{organization}/members/{memberUser}/invite', [OrganizationMemberController::class, 'cancelInvite']);
         Route::post('/organizations/{organization}/members/{memberUser}/ban', [OrganizationMemberController::class, 'ban']);
         Route::patch('/organizations/{organization}/members/{memberUser}', [OrganizationMemberController::class, 'update']);

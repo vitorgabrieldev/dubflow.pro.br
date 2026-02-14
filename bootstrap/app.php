@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\RequestContextMiddleware;
 use App\Http\Middleware\SecurityHeadersMiddleware;
+use App\Http\Middleware\EnsureTokenVersionMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -16,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(SecurityHeadersMiddleware::class);
         $middleware->append(RequestContextMiddleware::class);
+        $middleware->appendToGroup('api', EnsureTokenVersionMiddleware::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

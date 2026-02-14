@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -82,5 +83,69 @@ class AuthApiTest extends TestCase
             'stage_name' => 'Voz Oficial',
         ]);
     }
-}
 
+    public function test_change_password_invalidates_previous_tokens(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'password-change@example.com',
+            'password' => 'password123',
+        ]);
+
+        $token = auth('api')->login($user);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$token,
+            'Accept' => 'application/json',
+        ])->postJson('/api/v1/auth/change-password', [
+            'current_password' => 'password123',
+            'password' => 'newpassword123',
+            'password_confirmation' => 'newpassword123',
+        ])->assertOk();
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$token,
+            'Accept' => 'application/json',
+        ])->getJson('/api/v1/auth/me')
+            ->assertStatus(401);
+
+        $this->assertTrue(Hash::check('newpassword123', $user->fresh()->password));
+
+        $this->flushHeaders();
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'password-change@example.com',
+            'password' => 'newpassword123',
+        ])->assertOk();
+    }
+
+    public function test_user_can_reset_password_using_reset_token(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'reset-flow@example.com',
+            'password' => 'password123',
+        ]);
+
+        $forgot = $this->postJson('/api/v1/auth/forgot-password', [
+            'email' => 'reset-flow@example.com',
+        ])->assertOk();
+
+        $token = (string) $forgot->json('reset_token');
+        $this->assertNotEmpty($token);
+
+        $this->postJson('/api/v1/auth/reset-password', [
+            'email' => 'reset-flow@example.com',
+            'token' => $token,
+            'password' => 'newpassword123',
+            'password_confirmation' => 'newpassword123',
+        ])->assertOk();
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'reset-flow@example.com',
+            'password' => 'password123',
+        ])->assertStatus(401);
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'reset-flow@example.com',
+            'password' => 'newpassword123',
+        ])->assertOk();
+    }
+}

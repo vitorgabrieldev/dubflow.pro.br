@@ -59,6 +59,7 @@ class User extends Authenticatable implements JWTSubject
         return [
             'email_verified_at' => 'datetime',
             'is_private' => 'boolean',
+            'token_version' => 'integer',
             'skills' => 'array',
             'social_links' => 'array',
             'profile_links' => 'array',
@@ -139,6 +140,8 @@ class User extends Authenticatable implements JWTSubject
      */
     public function getJWTCustomClaims(): array
     {
-        return [];
+        return [
+            'token_version' => (int) ($this->token_version ?? 0),
+        ];
     }
 }

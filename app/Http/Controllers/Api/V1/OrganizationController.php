@@ -8,6 +8,7 @@ use App\Models\OrganizationFollow;
 use App\Models\OrganizationMember;
 use App\Notifications\OrganizationFollowed;
 use App\Support\OrganizationAccess;
+use App\Support\PostViewerPermissions;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -110,7 +111,7 @@ class OrganizationController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255', Rule::unique('organizations', 'name')],
             'slug' => ['nullable', 'string', 'max:255', Rule::unique('organizations', 'slug')],
             'description' => ['nullable', 'string', 'max:2000'],
             'website_url' => ['nullable', 'url', 'max:255'],
@@ -204,6 +205,8 @@ class OrganizationController extends Controller
                 ->latest(),
         ])->loadCount(['followers', 'posts', 'playlists']);
 
+        PostViewerPermissions::attachToCollection($organization->posts, $user);
+
         $viewer = [
             'is_following' => false,
             'membership_status' => null,
@@ -292,7 +295,7 @@ class OrganizationController extends Controller
         }
 
         $validated = $request->validate([
-            'name' => ['sometimes', 'string', 'max:255'],
+            'name' => ['sometimes', 'string', 'max:255', Rule::unique('organizations', 'name')->ignore($organization->id)],
             'description' => ['nullable', 'string', 'max:2000'],
             'website_url' => ['nullable', 'url', 'max:255'],
             'avatar_path' => ['nullable', 'string', 'max:255'],

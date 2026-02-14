@@ -5,13 +5,17 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\OrganizationMember;
+use App\Models\OrganizationOwnerTransfer;
 use App\Models\User;
+use App\Notifications\OrganizationOwnerTransferRequested;
+use App\Notifications\OrganizationOwnerTransferResponded;
 use App\Notifications\OrganizationMemberInvited;
 use App\Notifications\OrganizationMemberInviteResponded;
 use App\Notifications\OrganizationMemberJoined;
 use App\Support\OrganizationAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class OrganizationMemberController extends Controller
@@ -325,6 +329,163 @@ class OrganizationMemberController extends Controller
         return response()->json([
             'message' => 'Membro banido com sucesso.',
             'member' => $member->load('user:id,name,username,avatar_path,email'),
+        ]);
+    }
+
+    public function requestOwnerTransfer(Request $request, Organization $organization): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (! OrganizationAccess::hasRole($user, $organization, ['owner'])) {
+            abort(403, 'Apenas o dono pode transferir a propriedade.');
+        }
+
+        $validated = $request->validate([
+            'target_user_id' => ['required', 'integer', 'exists:users,id'],
+        ]);
+
+        $targetUser = User::query()->findOrFail($validated['target_user_id']);
+        if ($targetUser->id === $user->id) {
+            abort(422, 'Escolha outro membro para transferir a propriedade.');
+        }
+
+        $targetMember = OrganizationMember::query()
+            ->where('organization_id', $organization->id)
+            ->where('user_id', $targetUser->id)
+            ->where('status', 'active')
+            ->where('role', '!=', 'owner')
+            ->first();
+
+        if (! $targetMember) {
+            abort(422, 'Esse usuário precisa ser membro ativo da comunidade para receber a propriedade.');
+        }
+
+        OrganizationOwnerTransfer::query()
+            ->where('organization_id', $organization->id)
+            ->where('status', 'pending')
+            ->update([
+                'status' => 'canceled',
+                'responded_at' => now(),
+            ]);
+
+        $transfer = OrganizationOwnerTransfer::create([
+            'organization_id' => $organization->id,
+            'current_owner_user_id' => $user->id,
+            'target_user_id' => $targetUser->id,
+            'status' => 'pending',
+        ]);
+
+        $targetUser->notify(new OrganizationOwnerTransferRequested($organization, $user, $transfer));
+
+        return response()->json([
+            'message' => 'Pedido de transferência enviado. Aguardando aceite do membro.',
+            'transfer' => $transfer,
+        ]);
+    }
+
+    public function respondOwnerTransfer(Request $request, Organization $organization): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        $validated = $request->validate([
+            'decision' => ['required', Rule::in(['accept', 'reject'])],
+        ]);
+
+        $transfer = OrganizationOwnerTransfer::query()
+            ->where('organization_id', $organization->id)
+            ->where('target_user_id', $user->id)
+            ->where('status', 'pending')
+            ->first();
+
+        if (! $transfer) {
+            abort(422, 'Não existe transferência pendente para sua conta.');
+        }
+
+        if ($validated['decision'] === 'reject') {
+            $transfer->update([
+                'status' => 'rejected',
+                'responded_at' => now(),
+            ]);
+
+            $transfer->currentOwner?->notify(
+                new OrganizationOwnerTransferResponded($organization, $user, 'rejected')
+            );
+
+            return response()->json([
+                'message' => 'Transferência recusada.',
+                'transfer' => $transfer->fresh(),
+            ]);
+        }
+
+        DB::transaction(function () use ($organization, $transfer): void {
+            $lockedTransfer = OrganizationOwnerTransfer::query()
+                ->where('id', $transfer->id)
+                ->where('status', 'pending')
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $lockedOrganization = Organization::query()->where('id', $organization->id)->lockForUpdate()->firstOrFail();
+            $oldOwnerId = (int) $lockedTransfer->current_owner_user_id;
+            $newOwnerId = (int) $lockedTransfer->target_user_id;
+
+            $lockedOrganization->owner_user_id = $newOwnerId;
+            $lockedOrganization->save();
+
+            OrganizationMember::query()
+                ->where('organization_id', $lockedOrganization->id)
+                ->where('role', 'owner')
+                ->where('user_id', '!=', $newOwnerId)
+                ->update([
+                    'role' => 'admin',
+                    'status' => 'active',
+                ]);
+
+            $newOwnerMembership = OrganizationMember::query()
+                ->where('organization_id', $lockedOrganization->id)
+                ->where('user_id', $newOwnerId)
+                ->firstOrFail();
+
+            $newOwnerMembership->role = 'owner';
+            $newOwnerMembership->status = 'active';
+            $newOwnerMembership->joined_at = $newOwnerMembership->joined_at ?: now();
+            $newOwnerMembership->save();
+
+            if ($oldOwnerId !== $newOwnerId) {
+                $oldOwnerMembership = OrganizationMember::query()
+                    ->where('organization_id', $lockedOrganization->id)
+                    ->where('user_id', $oldOwnerId)
+                    ->first();
+
+                if ($oldOwnerMembership) {
+                    $oldOwnerMembership->role = 'admin';
+                    $oldOwnerMembership->status = 'active';
+                    $oldOwnerMembership->joined_at = $oldOwnerMembership->joined_at ?: now();
+                    $oldOwnerMembership->save();
+                }
+            }
+
+            $lockedTransfer->status = 'accepted';
+            $lockedTransfer->responded_at = now();
+            $lockedTransfer->save();
+
+            OrganizationOwnerTransfer::query()
+                ->where('organization_id', $lockedOrganization->id)
+                ->where('status', 'pending')
+                ->where('id', '!=', $lockedTransfer->id)
+                ->update([
+                    'status' => 'canceled',
+                    'responded_at' => now(),
+                ]);
+        });
+
+        $transfer->refresh();
+        $transfer->currentOwner?->notify(
+            new OrganizationOwnerTransferResponded($organization, $user, 'accepted')
+        );
+
+        return response()->json([
+            'message' => 'Transferência aceita. Você agora é o dono da comunidade.',
+            'transfer' => $transfer,
         ]);
     }
 

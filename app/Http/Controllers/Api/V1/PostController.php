@@ -10,9 +10,14 @@ use App\Models\PlaylistSeason;
 use App\Models\PostCollaborator;
 use App\Models\PostCredit;
 use App\Models\Tag;
+use App\Models\User;
+use App\Models\Comment;
+use App\Models\PostLike;
 use App\Notifications\OrganizationPublishedPost;
 use App\Notifications\PostCollaborationRequested;
 use App\Support\OrganizationAccess;
+use App\Support\PostViewerPermissions;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -48,9 +53,7 @@ class PostController extends Controller
                     ->limit(3),
                 'tags:id,name,slug',
             ])
-            ->withCount(['likes', 'comments', 'views'])
-            ->orderByDesc('published_at')
-            ->orderByDesc('created_at');
+            ->withCount(['likes', 'comments', 'views']);
 
         if (! $user) {
             $query->where('visibility', 'public')->whereNotNull('published_at');
@@ -115,14 +118,19 @@ class PostController extends Controller
             ]);
         }
 
+        $this->applyFeedOrdering($query, $user?->id);
+
         $cacheKey = sprintf(
             'posts:index:%s:%s',
             $user?->id ?? 'guest',
             md5($request->fullUrl())
         );
 
-        $payload = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($query, $request) {
-            return $query->paginate((int) $request->integer('per_page', 12))->toArray();
+        $payload = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($query, $request, $user) {
+            $paginator = $query->paginate((int) $request->integer('per_page', 12));
+            PostViewerPermissions::attachToCollection($paginator->getCollection(), $user);
+
+            return $paginator->toArray();
         });
 
         return response()->json($payload);
@@ -145,7 +153,7 @@ class PostController extends Controller
                 'max:1048576',
                 'mimetypes:video/mp4,video/quicktime,video/x-matroska,video/webm,audio/mpeg,audio/wav,audio/x-wav,audio/flac,audio/mp4,audio/aac,audio/ogg',
             ],
-            'media_assets' => ['nullable', 'array', 'min:1', 'max:20'],
+            'media_assets' => ['nullable', 'array', 'min:1', 'max:40'],
             'media_assets.*' => [
                 'file',
                 'max:1048576',
@@ -304,7 +312,7 @@ class PostController extends Controller
         ]);
 
         return response()->json([
-            'post' => $this->loadPost($post->id),
+            'post' => $this->loadPost($post->id, $user),
             'message' => $collaboratorIds->isEmpty()
                 ? 'Post publicado com sucesso.'
                 : 'Post criado. Publicacao pendente de aprovacao dos colaboradores.',
@@ -336,6 +344,255 @@ class PostController extends Controller
         }
     }
 
+    private function applyFeedOrdering(Builder $query, ?int $userId): void
+    {
+        $engagementSince = now()->subDays(7)->toDateTimeString();
+        $freshStrong = now()->subDays(2)->toDateTimeString();
+        $freshSoft = now()->subDays(7)->toDateTimeString();
+
+        $recentCommentsExpr = "(SELECT COUNT(*) FROM comments WHERE comments.post_id = dubbing_posts.id AND comments.deleted_at IS NULL AND comments.created_at >= ?)";
+        $recentLikesExpr = "(SELECT COUNT(*) FROM post_likes WHERE post_likes.post_id = dubbing_posts.id AND post_likes.created_at >= ?)";
+        $recentViewsExpr = "(SELECT COUNT(*) FROM post_views WHERE post_views.post_id = dubbing_posts.id AND post_views.created_at >= ?)";
+
+        $orderSql = "(
+            ({$recentCommentsExpr}) * 3.0 +
+            ({$recentLikesExpr}) * 2.0 +
+            ({$recentViewsExpr}) * 0.08 +
+            CASE
+                WHEN dubbing_posts.published_at >= ? THEN 4
+                WHEN dubbing_posts.published_at >= ? THEN 2
+                ELSE 0
+            END
+        )";
+        $bindings = [$engagementSince, $engagementSince, $engagementSince, $freshStrong, $freshSoft];
+
+        if ($userId) {
+            $profile = $this->buildPersonalizationProfile($userId);
+
+            if (! empty($profile['author_ids'])) {
+                $placeholders = implode(', ', array_fill(0, count($profile['author_ids']), '?'));
+                $orderSql .= " + CASE WHEN dubbing_posts.author_user_id IN ({$placeholders}) THEN 5 ELSE 0 END";
+                $bindings = [...$bindings, ...$profile['author_ids']];
+            }
+
+            if (! empty($profile['organization_ids'])) {
+                $placeholders = implode(', ', array_fill(0, count($profile['organization_ids']), '?'));
+                $orderSql .= " + CASE WHEN dubbing_posts.organization_id IN ({$placeholders}) THEN 2.5 ELSE 0 END";
+                $bindings = [...$bindings, ...$profile['organization_ids']];
+            }
+
+            if (! empty($profile['playlist_ids'])) {
+                $placeholders = implode(', ', array_fill(0, count($profile['playlist_ids']), '?'));
+                $orderSql .= " + CASE WHEN dubbing_posts.playlist_id IN ({$placeholders}) THEN 2 ELSE 0 END";
+                $bindings = [...$bindings, ...$profile['playlist_ids']];
+            }
+
+            if (! empty($profile['tag_ids'])) {
+                $placeholders = implode(', ', array_fill(0, count($profile['tag_ids']), '?'));
+                $orderSql .= " + ((SELECT COUNT(*) FROM dubbing_post_tag WHERE dubbing_post_tag.post_id = dubbing_posts.id AND dubbing_post_tag.tag_id IN ({$placeholders})) * 3.5)";
+                $bindings = [...$bindings, ...$profile['tag_ids']];
+            }
+
+            if (! empty($profile['keywords'])) {
+                $keywordMatches = [];
+                foreach ($profile['keywords'] as $keyword) {
+                    $keywordMatches[] = "(CASE WHEN LOWER(dubbing_posts.title) LIKE ? OR LOWER(COALESCE(dubbing_posts.description, '')) LIKE ? THEN 1 ELSE 0 END)";
+                    $like = '%'.$keyword.'%';
+                    $bindings[] = $like;
+                    $bindings[] = $like;
+                }
+                $orderSql .= " + (".implode(' + ', $keywordMatches).")";
+            }
+
+            if (! empty($profile['work_titles'])) {
+                $workExpr = $this->metadataWorkTitleExpression();
+                $placeholders = implode(', ', array_fill(0, count($profile['work_titles']), '?'));
+                $orderSql .= " + CASE WHEN {$workExpr} IN ({$placeholders}) THEN 6 ELSE 0 END";
+                $bindings = [...$bindings, ...$profile['work_titles']];
+            }
+        }
+
+        $query->orderByRaw($orderSql.' DESC', $bindings)
+            ->orderByDesc('published_at')
+            ->orderByDesc('created_at');
+    }
+
+    /**
+     * @return array{
+     *   author_ids: array<int>,
+     *   organization_ids: array<int>,
+     *   playlist_ids: array<int>,
+     *   tag_ids: array<int>,
+     *   keywords: array<string>,
+     *   work_titles: array<string>
+     * }
+     */
+    private function buildPersonalizationProfile(int $userId): array
+    {
+        $likedPostIds = PostLike::query()
+            ->where('user_id', $userId)
+            ->latest('created_at')
+            ->limit(160)
+            ->pluck('post_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+
+        $commentedPostIds = Comment::query()
+            ->where('user_id', $userId)
+            ->whereNull('deleted_at')
+            ->latest('created_at')
+            ->limit(160)
+            ->pluck('post_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+
+        $interactedPostIds = collect([...$likedPostIds, ...$commentedPostIds])
+            ->filter(static fn ($id): bool => $id > 0)
+            ->unique()
+            ->take(220)
+            ->values();
+
+        if ($interactedPostIds->isEmpty()) {
+            return [
+                'author_ids' => [],
+                'organization_ids' => [],
+                'playlist_ids' => [],
+                'tag_ids' => [],
+                'keywords' => [],
+                'work_titles' => [],
+            ];
+        }
+
+        $interactedPosts = DubbingPost::query()
+            ->whereIn('id', $interactedPostIds->all())
+            ->get(['id', 'author_user_id', 'organization_id', 'playlist_id', 'title', 'description', 'metadata']);
+
+        $tagIds = DB::table('dubbing_post_tag')
+            ->select('tag_id', DB::raw('COUNT(*) AS score'))
+            ->whereIn('post_id', $interactedPostIds->all())
+            ->groupBy('tag_id')
+            ->orderByDesc('score')
+            ->limit(24)
+            ->pluck('tag_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+
+        $authorIds = $interactedPosts
+            ->pluck('author_user_id')
+            ->filter(static fn ($id): bool => is_numeric($id))
+            ->map(static fn ($id): int => (int) $id)
+            ->unique()
+            ->take(24)
+            ->values()
+            ->all();
+
+        $organizationIds = $interactedPosts
+            ->pluck('organization_id')
+            ->filter(static fn ($id): bool => is_numeric($id))
+            ->map(static fn ($id): int => (int) $id)
+            ->unique()
+            ->take(24)
+            ->values()
+            ->all();
+
+        $playlistIds = $interactedPosts
+            ->pluck('playlist_id')
+            ->filter(static fn ($id): bool => is_numeric($id))
+            ->map(static fn ($id): int => (int) $id)
+            ->unique()
+            ->take(24)
+            ->values()
+            ->all();
+
+        $workTitles = $interactedPosts
+            ->map(function (DubbingPost $post): ?string {
+                $metadata = is_array($post->metadata) ? $post->metadata : [];
+                $value = isset($metadata['work_title']) ? trim((string) $metadata['work_title']) : '';
+                if ($value === '') {
+                    return null;
+                }
+
+                return mb_strtolower($value);
+            })
+            ->filter(static fn (?string $title): bool => $title !== null && mb_strlen($title) >= 2)
+            ->unique()
+            ->take(16)
+            ->values()
+            ->all();
+
+        $keywordTexts = [];
+        foreach ($interactedPosts as $post) {
+            $keywordTexts[] = (string) $post->title;
+            if (! empty($post->description)) {
+                $keywordTexts[] = (string) $post->description;
+            }
+            $metadata = is_array($post->metadata) ? $post->metadata : [];
+            if (! empty($metadata['work_title'])) {
+                $keywordTexts[] = (string) $metadata['work_title'];
+            }
+        }
+
+        return [
+            'author_ids' => $authorIds,
+            'organization_ids' => $organizationIds,
+            'playlist_ids' => $playlistIds,
+            'tag_ids' => $tagIds,
+            'keywords' => $this->extractTopKeywords($keywordTexts, 10),
+            'work_titles' => $workTitles,
+        ];
+    }
+
+    /**
+     * @param array<int, string> $texts
+     * @return array<int, string>
+     */
+    private function extractTopKeywords(array $texts, int $limit): array
+    {
+        $stopWords = [
+            'a', 'o', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'e', 'é', 'em', 'no', 'na', 'nos', 'nas',
+            'um', 'uma', 'uns', 'umas', 'por', 'para', 'com', 'sem', 'que', 'se', 'ao', 'aos', 'à', 'às',
+            'the', 'and', 'for', 'with', 'from', 'this', 'that', 'your', 'you',
+        ];
+
+        $frequency = [];
+
+        foreach ($texts as $text) {
+            $normalized = mb_strtolower(trim($text));
+            if ($normalized === '') {
+                continue;
+            }
+
+            $tokens = preg_split('/[^\p{L}\p{N}]+/u', $normalized) ?: [];
+
+            foreach ($tokens as $token) {
+                if ($token === '' || mb_strlen($token) < 3 || in_array($token, $stopWords, true)) {
+                    continue;
+                }
+
+                if (preg_match('/^\d+$/', $token) === 1) {
+                    continue;
+                }
+
+                $frequency[$token] = ($frequency[$token] ?? 0) + 1;
+            }
+        }
+
+        arsort($frequency);
+
+        return array_slice(array_keys($frequency), 0, max(1, $limit));
+    }
+
+    private function metadataWorkTitleExpression(): string
+    {
+        $driver = DB::connection()->getDriverName();
+
+        return match ($driver) {
+            'pgsql' => "LOWER(COALESCE(dubbing_posts.metadata->>'work_title', ''))",
+            'sqlite' => "LOWER(COALESCE(json_extract(dubbing_posts.metadata, '$.work_title'), ''))",
+            default => "LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(dubbing_posts.metadata, '$.work_title')), ''))",
+        };
+    }
+
     public function show(DubbingPost $post): JsonResponse
     {
         $user = auth('api')->user();
@@ -345,7 +602,7 @@ class PostController extends Controller
         }
 
         return response()->json([
-            'post' => $this->loadPost($post->id),
+            'post' => $this->loadPost($post->id, $user),
         ]);
     }
 
@@ -353,7 +610,7 @@ class PostController extends Controller
     {
         $user = auth('api')->user();
 
-        if (! OrganizationAccess::canManagePost($user, $post)) {
+        if (! OrganizationAccess::canEditPost($user, $post)) {
             abort(403, 'Sem permissao para editar este post.');
         }
 
@@ -367,6 +624,8 @@ class PostController extends Controller
             'duration_seconds' => ['sometimes', 'integer', 'min:1', 'max:3600'],
             'visibility' => ['nullable', Rule::in(['public', 'private', 'unlisted'])],
             'allow_comments' => ['nullable', 'boolean'],
+            'show_likes_count' => ['nullable', 'boolean'],
+            'show_views_count' => ['nullable', 'boolean'],
             'language_code' => ['sometimes', 'string', 'max:10'],
             'work_title' => ['sometimes', 'string', 'max:255'],
             'content_license' => ['nullable', Rule::in(['all_rights_reserved', 'allow_reshare_with_credit', 'allow_remix_with_credit'])],
@@ -391,6 +650,16 @@ class PostController extends Controller
         $metadata = is_array($post->metadata) ? $post->metadata : [];
         if (isset($validated['work_title'])) {
             $metadata['work_title'] = $validated['work_title'];
+        }
+        $displayMetrics = is_array($metadata['display_metrics'] ?? null) ? $metadata['display_metrics'] : [];
+        if (array_key_exists('show_likes_count', $validated)) {
+            $displayMetrics['show_likes'] = (bool) $validated['show_likes_count'];
+        }
+        if (array_key_exists('show_views_count', $validated)) {
+            $displayMetrics['show_views'] = (bool) $validated['show_views_count'];
+        }
+        if (! empty($displayMetrics)) {
+            $metadata['display_metrics'] = $displayMetrics;
         }
 
         $post->fill([
@@ -423,7 +692,7 @@ class PostController extends Controller
         ]);
 
         return response()->json([
-            'post' => $this->loadPost($post->id),
+            'post' => $this->loadPost($post->id, $user),
             'message' => 'Post atualizado com sucesso.',
         ]);
     }
@@ -432,7 +701,7 @@ class PostController extends Controller
     {
         $user = auth('api')->user();
 
-        if (! OrganizationAccess::canManagePost($user, $post)) {
+        if (! OrganizationAccess::canDeletePost($user, $post)) {
             abort(403, 'Sem permissao para remover este post.');
         }
 
@@ -481,9 +750,9 @@ class PostController extends Controller
             ->exists();
     }
 
-    private function loadPost(int $postId): DubbingPost
+    private function loadPost(int $postId, ?User $viewer = null): DubbingPost
     {
-        return DubbingPost::query()
+        $post = DubbingPost::query()
             ->with([
                 'organization:id,name,slug,avatar_path,is_verified',
                 'author:id,name,stage_name,username,avatar_path',
@@ -506,6 +775,10 @@ class PostController extends Controller
             ])
             ->withCount(['likes', 'comments', 'views'])
             ->findOrFail($postId);
+
+        PostViewerPermissions::attachToCollection(collect([$post]), $viewer);
+
+        return $post;
     }
 
     /**

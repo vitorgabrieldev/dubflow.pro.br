@@ -7,6 +7,7 @@ use App\Models\Organization;
 use App\Models\Playlist;
 use App\Models\PlaylistSeason;
 use App\Support\OrganizationAccess;
+use App\Support\PostViewerPermissions;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -145,7 +146,7 @@ class PlaylistController extends Controller
     {
         $user = auth('api')->user();
 
-        if (! OrganizationAccess::canPublish($user, $organization)) {
+        if (! OrganizationAccess::canManagePlaylists($user, $organization)) {
             abort(403, 'Sem permissao para criar playlist.');
         }
 
@@ -154,7 +155,7 @@ class PlaylistController extends Controller
             'slug' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
             'work_title' => ['nullable', 'string', 'max:255'],
-            'release_year' => ['nullable', 'integer', 'min:1900', 'max:2100'],
+            'release_year' => ['required', 'integer', 'min:1900', 'max:2100'],
         ]);
 
         $slugBase = $validated['slug'] ?? Str::slug($validated['title']);
@@ -166,7 +167,7 @@ class PlaylistController extends Controller
             'slug' => $slug,
             'description' => $validated['description'] ?? null,
             'work_title' => $validated['work_title'] ?? null,
-            'release_year' => $validated['release_year'] ?? null,
+            'release_year' => $validated['release_year'],
             'visibility' => 'public',
         ]);
 
@@ -221,10 +222,13 @@ class PlaylistController extends Controller
             $postsQuery->where('season_id', $seasonId);
         }
 
+        $posts = $postsQuery->paginate(20);
+        PostViewerPermissions::attachToCollection($posts->getCollection(), $user);
+
         return response()->json([
             'playlist' => $playlist,
             'seasons' => $seasons,
-            'posts' => $postsQuery->paginate(20),
+            'posts' => $posts,
         ]);
     }
 
@@ -236,7 +240,7 @@ class PlaylistController extends Controller
 
         $user = auth('api')->user();
 
-        if (! OrganizationAccess::canPublish($user, $organization)) {
+        if (! OrganizationAccess::canManagePlaylists($user, $organization)) {
             abort(403, 'Sem permissao para editar playlist.');
         }
 
@@ -244,7 +248,7 @@ class PlaylistController extends Controller
             'title' => ['sometimes', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
             'work_title' => ['nullable', 'string', 'max:255'],
-            'release_year' => ['nullable', 'integer', 'min:1900', 'max:2100'],
+            'release_year' => ['sometimes', 'integer', 'min:1900', 'max:2100'],
         ]);
 
         $playlist->fill($validated);
@@ -266,6 +270,10 @@ class PlaylistController extends Controller
 
         if (! OrganizationAccess::canManageOrganization($user, $organization)) {
             abort(403, 'Sem permissao para remover playlist.');
+        }
+
+        if ($playlist->posts()->exists()) {
+            abort(422, 'Remova todos os episódios desta playlist antes de excluí-la.');
         }
 
         $playlist->delete();
@@ -303,7 +311,7 @@ class PlaylistController extends Controller
 
         $user = auth('api')->user();
 
-        if (! OrganizationAccess::canPublish($user, $organization)) {
+        if (! OrganizationAccess::canManagePlaylists($user, $organization)) {
             abort(403, 'Sem permissao para criar temporada.');
         }
 

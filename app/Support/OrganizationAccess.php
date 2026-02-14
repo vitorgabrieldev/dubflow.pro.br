@@ -41,12 +41,27 @@ class OrganizationAccess
         return self::hasRole($user, $organization, ['owner', 'admin', 'editor']);
     }
 
+    public static function canManagePlaylists(User $user, Organization $organization): bool
+    {
+        return self::hasRole($user, $organization, ['owner', 'admin']);
+    }
+
     public static function canManagePost(User $user, DubbingPost $post): bool
     {
-        if ($post->author_user_id === $user->id) {
+        return self::canEditPost($user, $post);
+    }
+
+    public static function canEditPost(User $user, DubbingPost $post): bool
+    {
+        if (self::hasRole($user, $post->organization, ['owner', 'admin'])) {
             return true;
         }
 
-        return self::canPublish($user, $post->organization);
+        return $post->author_user_id === $user->id && self::hasRole($user, $post->organization, ['editor']);
+    }
+
+    public static function canDeletePost(User $user, DubbingPost $post): bool
+    {
+        return self::hasRole($user, $post->organization, ['owner', 'admin']);
     }
 }

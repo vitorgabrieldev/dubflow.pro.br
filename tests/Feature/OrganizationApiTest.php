@@ -738,4 +738,220 @@ class OrganizationApiTest extends TestCase
             'status' => 'banned',
         ]);
     }
+
+    public function test_admin_cannot_ban_or_expel_other_admin(): void
+    {
+        $owner = User::factory()->create();
+        $adminA = User::factory()->create();
+        $adminB = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Admin Rules Org',
+            'slug' => 'admin-rules-org',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $adminA->id,
+            'role' => 'admin',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $adminB->id,
+            'role' => 'admin',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $adminToken = auth('api')->login($adminA);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$adminToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/{$organization->slug}/members/{$adminB->id}/ban")
+            ->assertStatus(403);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$adminToken,
+            'Accept' => 'application/json',
+        ])->deleteJson("/api/v1/organizations/{$organization->slug}/members/{$adminB->id}")
+            ->assertStatus(403);
+    }
+
+    public function test_owner_can_transfer_community_ownership_when_target_accepts(): void
+    {
+        $owner = User::factory()->create();
+        $target = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Transfer Ownership Org',
+            'slug' => 'transfer-ownership-org',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $target->id,
+            'role' => 'admin',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $ownerToken = auth('api')->login($owner);
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/{$organization->slug}/owner-transfer", [
+            'target_user_id' => $target->id,
+        ])->assertOk();
+
+        $targetToken = auth('api')->login($target);
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$targetToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/{$organization->slug}/owner-transfer/respond", [
+            'decision' => 'accept',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('organizations', [
+            'id' => $organization->id,
+            'owner_user_id' => $target->id,
+        ]);
+
+        $this->assertDatabaseHas('organization_members', [
+            'organization_id' => $organization->id,
+            'user_id' => $target->id,
+            'role' => 'owner',
+            'status' => 'active',
+        ]);
+
+        $this->assertDatabaseHas('organization_members', [
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'admin',
+            'status' => 'active',
+        ]);
+    }
+
+    public function test_organization_name_must_be_unique_on_create_and_update(): void
+    {
+        $owner = User::factory()->create();
+        $ownerToken = auth('api')->login($owner);
+
+        $firstCreate = $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->postJson('/api/v1/organizations', [
+            'name' => 'Nome Único Comunidade',
+            'description' => 'Primeira comunidade',
+        ]);
+
+        $firstCreate->assertCreated();
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->postJson('/api/v1/organizations', [
+            'name' => 'Nome Único Comunidade',
+            'description' => 'Tentativa duplicada',
+        ])->assertStatus(422);
+
+        $secondCreate = $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->postJson('/api/v1/organizations', [
+            'name' => 'Outra Comunidade',
+            'description' => 'Comunidade secundária',
+        ]);
+
+        $secondCreate->assertCreated();
+        $secondSlug = (string) $secondCreate->json('organization.slug');
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->patchJson("/api/v1/organizations/{$secondSlug}", [
+            'name' => 'Nome Único Comunidade',
+        ])->assertStatus(422);
+    }
+
+    public function test_editor_cannot_create_playlist_and_release_year_is_required(): void
+    {
+        $owner = User::factory()->create();
+        $admin = User::factory()->create();
+        $editor = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Playlist Permission Org',
+            'slug' => 'playlist-permission-org',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $admin->id,
+            'role' => 'admin',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $editor->id,
+            'role' => 'editor',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $editorToken = auth('api')->login($editor);
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$editorToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/{$organization->slug}/playlists", [
+            'title' => 'Playlist de Dublador',
+            'release_year' => 2025,
+        ])->assertStatus(403);
+
+        $adminToken = auth('api')->login($admin);
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$adminToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/{$organization->slug}/playlists", [
+            'title' => 'Playlist sem ano',
+        ])->assertStatus(422);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$adminToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/{$organization->slug}/playlists", [
+            'title' => 'Playlist com ano',
+            'release_year' => 2026,
+        ])->assertCreated();
+    }
 }

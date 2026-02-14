@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\DubbingPost;
 use App\Models\User;
+use App\Support\PostViewerPermissions;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -59,6 +60,7 @@ class UserProfileController extends Controller
         }
 
         $posts = $postsQuery->paginate((int) $request->integer('per_page', 20));
+        PostViewerPermissions::attachToCollection($posts->getCollection(), $viewer);
 
         $summaryQuery = DubbingPost::query()->where('author_user_id', $user->id);
         if (! $viewer || $viewer->id !== $user->id) {

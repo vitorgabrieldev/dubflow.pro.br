@@ -322,4 +322,109 @@ class PostPublishingApiTest extends TestCase
         Notification::assertSentTo($follower, OrganizationPostCommented::class);
         Notification::assertNotSentTo($commenter, OrganizationPostCommented::class);
     }
+
+    public function test_post_author_as_editor_can_edit_but_cannot_delete_and_loses_access_when_role_changes(): void
+    {
+        Storage::fake('public');
+
+        $owner = User::factory()->create();
+        $author = User::factory()->create();
+        $admin = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Author Post Rules Org',
+            'slug' => 'author-post-rules-org',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $admin->id,
+            'role' => 'admin',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        $authorMembership = OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $author->id,
+            'role' => 'editor',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $authorToken = auth('api')->login($author);
+        $create = $this->withHeaders([
+            'Authorization' => 'Bearer '.$authorToken,
+            'Accept' => 'application/json',
+        ])->post('/api/v1/organizations/'.$organization->slug.'/posts', [
+            'title' => 'Episódio do Autor',
+            'work_title' => 'Obra Autor',
+            'language_code' => 'pt-BR',
+            'media_assets' => [
+                UploadedFile::fake()->create('author-episode.mp3', 128, 'audio/mpeg'),
+            ],
+        ]);
+
+        $create->assertCreated();
+        $postId = (int) $create->json('post.id');
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$authorToken,
+            'Accept' => 'application/json',
+        ])->patchJson("/api/v1/posts/{$postId}", [
+            'title' => 'Episódio do Autor Atualizado',
+            'show_likes_count' => false,
+            'show_views_count' => false,
+        ])->assertOk()->assertJsonPath('post.title', 'Episódio do Autor Atualizado');
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$authorToken,
+            'Accept' => 'application/json',
+        ])->deleteJson("/api/v1/posts/{$postId}")
+            ->assertStatus(403);
+
+        $this->assertDatabaseHas('dubbing_posts', [
+            'id' => $postId,
+            'title' => 'Episódio do Autor Atualizado',
+            'author_user_id' => $author->id,
+        ]);
+
+        $authorMembership->role = 'member';
+        $authorMembership->save();
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$authorToken,
+            'Accept' => 'application/json',
+        ])->patchJson("/api/v1/posts/{$postId}", [
+            'title' => 'Tentativa sem cargo',
+        ])->assertStatus(403);
+
+        $authorMembership->delete();
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$authorToken,
+            'Accept' => 'application/json',
+        ])->patchJson("/api/v1/posts/{$postId}", [
+            'title' => 'Tentativa fora da comunidade',
+        ])->assertStatus(403);
+
+        $adminToken = auth('api')->login($admin);
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$adminToken,
+            'Accept' => 'application/json',
+        ])->deleteJson("/api/v1/posts/{$postId}")
+            ->assertOk();
+
+        $this->assertDatabaseMissing('dubbing_posts', [
+            'id' => $postId,
+        ]);
+    }
 }

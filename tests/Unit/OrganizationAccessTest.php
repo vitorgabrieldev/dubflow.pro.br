@@ -61,7 +61,7 @@ class OrganizationAccessTest extends TestCase
         $this->assertTrue(OrganizationAccess::canPublish($editor, $organization));
     }
 
-    public function test_author_can_manage_own_post_even_without_publish_role(): void
+    public function test_author_cannot_manage_own_post_without_editor_role(): void
     {
         $owner = User::factory()->create();
         $author = User::factory()->create();
@@ -73,6 +73,14 @@ class OrganizationAccessTest extends TestCase
             'is_public' => true,
         ]);
 
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $author->id,
+            'role' => 'member',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
         $post = DubbingPost::create([
             'organization_id' => $organization->id,
             'author_user_id' => $author->id,
@@ -82,7 +90,8 @@ class OrganizationAccessTest extends TestCase
             'language_code' => 'pt-BR',
         ]);
 
-        $this->assertTrue(OrganizationAccess::canManagePost($author, $post));
+        $this->assertFalse(OrganizationAccess::canManagePost($author, $post));
+        $this->assertFalse(OrganizationAccess::canEditPost($author, $post));
+        $this->assertFalse(OrganizationAccess::canDeletePost($author, $post));
     }
 }
-
