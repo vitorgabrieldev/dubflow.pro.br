@@ -16,7 +16,17 @@ class UserProfileController extends Controller
         $viewer = auth('api')->user();
 
         if ($user->is_private && $viewer?->id !== $user->id) {
-            abort(403, 'Perfil privado.');
+            if (! $viewer) {
+                abort(403, 'Perfil privado.');
+            }
+
+            $isAllowedViewer = $user->followingUsers()
+                ->where('users.id', $viewer->id)
+                ->exists();
+
+            if (! $isAllowedViewer) {
+                abort(403, 'Perfil privado.');
+            }
         }
 
         $postsQuery = DubbingPost::query()
@@ -61,6 +71,12 @@ class UserProfileController extends Controller
         $summaryViews = DB::table('post_views')->whereIn('post_id', clone $summaryPostIdsQuery)->count();
 
         $organizationsCount = $user->organizationMemberships()->where('status', 'active')->count();
+        $followersCount = $user->followerUsers()->count();
+        $followingCount = $user->followingUsers()->count();
+        $viewerCanFollow = (bool) $viewer && $viewer->id !== $user->id;
+        $viewerIsFollowing = $viewerCanFollow
+            ? $viewer->followingUsers()->where('users.id', $user->id)->exists()
+            : false;
 
         return response()->json([
             'user' => [
@@ -85,8 +101,46 @@ class UserProfileController extends Controller
                 'likes' => $summaryLikes,
                 'views' => $summaryViews,
                 'organizations' => $organizationsCount,
+                'followers' => $followersCount,
+                'following' => $followingCount,
+            ],
+            'viewer' => [
+                'can_follow' => $viewerCanFollow,
+                'is_following' => $viewerIsFollowing,
             ],
             'posts' => $posts,
+        ]);
+    }
+
+    public function follow(User $user): JsonResponse
+    {
+        $viewer = auth('api')->user();
+
+        if ($viewer->id === $user->id) {
+            abort(422, 'Você não pode seguir a própria conta.');
+        }
+
+        $viewer->followingUsers()->syncWithoutDetaching([$user->id]);
+
+        return response()->json([
+            'message' => 'Agora você está seguindo este usuário.',
+            'followers_count' => $user->followerUsers()->count(),
+        ]);
+    }
+
+    public function unfollow(User $user): JsonResponse
+    {
+        $viewer = auth('api')->user();
+
+        if ($viewer->id === $user->id) {
+            abort(422, 'Você não pode deixar de seguir a própria conta.');
+        }
+
+        $viewer->followingUsers()->detach($user->id);
+
+        return response()->json([
+            'message' => 'Você deixou de seguir este usuário.',
+            'followers_count' => $user->followerUsers()->count(),
         ]);
     }
 }

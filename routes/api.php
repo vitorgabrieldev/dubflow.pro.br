@@ -85,6 +85,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/posts/{post}/collaborators', [PostInteractionController::class, 'inviteCollaborator']);
         Route::post('/posts/{post}/collaborators/respond', [PostInteractionController::class, 'respondCollaboration']);
 
+        Route::post('/users/{user}/follow', [UserProfileController::class, 'follow']);
+        Route::delete('/users/{user}/follow', [UserProfileController::class, 'unfollow']);
+
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
         Route::post('/notifications/{notificationId}/invite-accepted', [NotificationController::class, 'markInviteAccepted']);
