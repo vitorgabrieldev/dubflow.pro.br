@@ -18,6 +18,9 @@ $COMPOSER_BIN install --no-dev --prefer-dist --no-interaction --optimize-autoloa
 echo "[backend] Running migrations"
 $PHP_BIN artisan migrate --force
 
+echo "[backend] Ensuring public storage symlink"
+$PHP_BIN artisan storage:link || true
+
 echo "[backend] Caching framework artifacts"
 $PHP_BIN artisan config:clear
 $PHP_BIN artisan cache:clear
@@ -33,4 +36,3 @@ $PHP_BIN artisan about --only=environment
 $PHP_BIN artisan optimize
 
 echo "[backend] Deployment completed"
-
