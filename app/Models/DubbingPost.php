@@ -80,7 +80,10 @@ class DubbingPost extends Model
 
     public function comments(): HasMany
     {
-        return $this->hasMany(Comment::class, 'post_id')->latest();
+        // Apenas comentários raiz (respostas ficam em Comment::replies).
+        return $this->hasMany(Comment::class, 'post_id')
+            ->whereNull('parent_id')
+            ->latest();
     }
 
     public function tags(): BelongsToMany
