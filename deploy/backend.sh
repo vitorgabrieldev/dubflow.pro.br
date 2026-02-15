@@ -12,6 +12,12 @@ git fetch --all --prune
 git checkout "${DEPLOY_REF:-main}"
 git pull --ff-only origin "${DEPLOY_REF:-main}"
 
+if [[ "${RUN_BACKEND_TESTS:-0}" == "1" ]]; then
+  echo "[backend] Running backend tests (RUN_BACKEND_TESTS=1)"
+  $COMPOSER_BIN install --prefer-dist --no-interaction
+  $PHP_BIN artisan test
+fi
+
 echo "[backend] Installing dependencies"
 $COMPOSER_BIN install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
