@@ -1,0 +1,97 @@
+services:
+  - type: web
+    name: dubflow-api
+    env: docker
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    healthCheckPath: /up
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: RUN_MIGRATIONS
+        value: "true"
+      - key: PORT
+        value: "10000"
+      - key: APP_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: APP_FRONTEND_URL
+        sync: false
+      - key: DB_CONNECTION
+        value: mysql
+      - key: DB_HOST
+        fromDatabase:
+          name: dubflow-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: dubflow-db
+          property: port
+      - key: DB_DATABASE
+        fromDatabase:
+          name: dubflow-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: dubflow-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: dubflow-db
+          property: password
+
+  - type: worker
+    name: dubflow-queue-worker
+    env: docker
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    dockerCommand: php artisan queue:work --sleep=1 --tries=3 --timeout=120
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: RUN_MIGRATIONS
+        value: "false"
+      - key: APP_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: APP_FRONTEND_URL
+        sync: false
+      - key: DB_CONNECTION
+        value: mysql
+      - key: DB_HOST
+        fromDatabase:
+          name: dubflow-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: dubflow-db
+          property: port
+      - key: DB_DATABASE
+        fromDatabase:
+          name: dubflow-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: dubflow-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: dubflow-db
+          property: password
+
+databases:
+  - name: dubflow-db
