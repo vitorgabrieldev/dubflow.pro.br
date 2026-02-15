@@ -7,6 +7,7 @@ use App\Models\DubbingPost;
 use App\Models\Organization;
 use App\Models\Playlist;
 use App\Models\User;
+use App\Support\MediaAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -122,6 +123,7 @@ class SearchController extends Controller
             ->latest()
             ->limit(10)
             ->get(['id', 'organization_id', 'author_user_id', 'title', 'media_type', 'thumbnail_path', 'published_at']);
+        MediaAccess::signPostCollection($posts);
 
         return response()->json([
             'organizations' => $organizations,

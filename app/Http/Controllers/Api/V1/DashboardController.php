@@ -7,6 +7,7 @@ use App\Models\DubbingPost;
 use App\Models\Organization;
 use App\Models\PostCollaborator;
 use App\Models\PostView;
+use App\Support\MediaAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +45,7 @@ class DashboardController extends Controller
             ->limit(10)
             ->get(['id', 'title', 'organization_id', 'playlist_id', 'thumbnail_path', 'published_at'])
             ->load('organization:id,name,slug');
+        MediaAccess::signPostCollection($postPerformance);
 
         return response()->json([
             'summary' => [

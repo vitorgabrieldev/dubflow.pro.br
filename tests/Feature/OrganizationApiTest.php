@@ -105,6 +105,136 @@ class OrganizationApiTest extends TestCase
         $this->assertSame(1, $invite->uses_count);
     }
 
+    public function test_private_join_request_cannot_be_self_accepted_via_invite_endpoint(): void
+    {
+        $owner = User::factory()->create();
+        $requester = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Private Join Org',
+            'slug' => 'private-join-org',
+            'is_public' => false,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $requesterToken = auth('api')->login($requester);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$requesterToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/{$organization->slug}/join-request")
+            ->assertOk();
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$requesterToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/{$organization->slug}/members/accept")
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('organization_members', [
+            'organization_id' => $organization->id,
+            'user_id' => $requester->id,
+            'status' => 'pending',
+            'source' => 'join_request',
+        ]);
+    }
+
+    public function test_owner_can_approve_private_join_request(): void
+    {
+        $owner = User::factory()->create();
+        $requester = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Approve Join Org',
+            'slug' => 'approve-join-org',
+            'is_public' => false,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $requesterToken = auth('api')->login($requester);
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$requesterToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/{$organization->slug}/join-request")
+            ->assertOk();
+
+        $ownerToken = auth('api')->login($owner);
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/{$organization->slug}/join-requests/{$requester->id}/approve")
+            ->assertOk()
+            ->assertJsonPath('member.status', 'active');
+
+        $this->assertDatabaseHas('organization_members', [
+            'organization_id' => $organization->id,
+            'user_id' => $requester->id,
+            'status' => 'active',
+            'source' => 'join_request',
+            'approved_by_user_id' => $owner->id,
+        ]);
+    }
+
+    public function test_owner_can_reject_private_join_request(): void
+    {
+        $owner = User::factory()->create();
+        $requester = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Reject Join Org',
+            'slug' => 'reject-join-org',
+            'is_public' => false,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $requesterToken = auth('api')->login($requester);
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$requesterToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/{$organization->slug}/join-request")
+            ->assertOk();
+
+        $ownerToken = auth('api')->login($owner);
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/{$organization->slug}/join-requests/{$requester->id}/reject")
+            ->assertOk()
+            ->assertJsonPath('member.status', 'rejected');
+
+        $this->assertDatabaseHas('organization_members', [
+            'organization_id' => $organization->id,
+            'user_id' => $requester->id,
+            'status' => 'rejected',
+            'source' => 'join_request',
+            'approved_by_user_id' => $owner->id,
+        ]);
+    }
+
     public function test_owner_can_update_organization_with_images(): void
     {
         Storage::fake('public');

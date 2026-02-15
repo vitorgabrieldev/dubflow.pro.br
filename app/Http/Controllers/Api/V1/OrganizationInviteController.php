@@ -9,6 +9,7 @@ use App\Models\OrganizationMember;
 use App\Support\OrganizationAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -104,50 +105,63 @@ class OrganizationInviteController extends Controller
     {
         $user = auth('api')->user();
 
-        $invite = OrganizationInvite::query()
-            ->where('token', $token)
-            ->with('organization')
-            ->firstOrFail();
+        return DB::transaction(function () use ($token, $user): JsonResponse {
+            $invite = OrganizationInvite::query()
+                ->where('token', $token)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        if (! $invite->isActive()) {
-            abort(422, 'Convite expirado, revogado ou sem vagas.');
-        }
+            if (! $invite->isActive()) {
+                abort(422, 'Convite expirado, revogado ou sem vagas.');
+            }
 
-        $membership = OrganizationMember::query()->firstOrNew([
-            'organization_id' => $invite->organization_id,
-            'user_id' => $user->id,
-        ]);
+            $membership = OrganizationMember::query()
+                ->where('organization_id', $invite->organization_id)
+                ->where('user_id', $user->id)
+                ->lockForUpdate()
+                ->first();
 
-        if ($membership->exists && $membership->status === 'active') {
-            return response()->json([
-                'message' => 'Você já é membro da organização.',
+            if ($membership?->status === 'active') {
+                return response()->json([
+                    'message' => 'Você já é membro da organização.',
+                ]);
+            }
+
+            if (! $membership) {
+                $membership = new OrganizationMember([
+                    'organization_id' => $invite->organization_id,
+                    'user_id' => $user->id,
+                ]);
+            }
+
+            $membership->role = $membership->role === 'owner' ? 'owner' : $invite->role;
+            $membership->status = 'active';
+            $membership->source = 'invite';
+            $membership->invited_by_user_id = $invite->created_by_user_id;
+            $membership->requested_by_user_id = $user->id;
+            $membership->approved_by_user_id = $invite->created_by_user_id;
+            $membership->joined_at = now();
+            $membership->approved_at = now();
+            $membership->save();
+
+            $invite->uses_count += 1;
+            if ($invite->uses_count >= $invite->max_uses) {
+                $invite->revoked_at = now();
+            }
+            $invite->save();
+
+            Log::channel('audit')->info('organization_invite_accepted', [
+                'organization_id' => $invite->organization_id,
+                'invite_id' => $invite->id,
+                'accepted_by_user_id' => $user->id,
+                'role' => $membership->role,
             ]);
-        }
 
-        $membership->role = $membership->role === 'owner' ? 'owner' : $invite->role;
-        $membership->status = 'active';
-        $membership->joined_at = now();
-        $membership->invited_by_user_id = $invite->created_by_user_id;
-        $membership->save();
-
-        $invite->uses_count += 1;
-        if ($invite->uses_count >= $invite->max_uses) {
-            $invite->revoked_at = now();
-        }
-        $invite->save();
-
-        Log::channel('audit')->info('organization_invite_accepted', [
-            'organization_id' => $invite->organization_id,
-            'invite_id' => $invite->id,
-            'accepted_by_user_id' => $user->id,
-            'role' => $membership->role,
-        ]);
-
-        return response()->json([
-            'message' => 'Convite aceito com sucesso.',
-            'organization_id' => $invite->organization_id,
-            'membership' => $membership,
-        ]);
+            return response()->json([
+                'message' => 'Convite aceito com sucesso.',
+                'organization_id' => $invite->organization_id,
+                'membership' => $membership,
+            ]);
+        });
     }
 }
-

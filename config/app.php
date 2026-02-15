@@ -84,6 +84,8 @@ return [
 
     'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
 
+    'media_url_ttl_minutes' => (int) env('MEDIA_URL_TTL_MINUTES', 30),
+
     /*
     |--------------------------------------------------------------------------
     | Encryption Key

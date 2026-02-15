@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Support\MediaAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,6 +14,14 @@ class NotificationController extends Controller
         $user = auth('api')->user();
 
         $notifications = $user->notifications()->latest()->paginate((int) $request->integer('per_page', 20));
+        $notifications->getCollection()->transform(static function ($notification) {
+            $data = is_array($notification->data) ? $notification->data : [];
+            $imagePath = isset($data['image']) && is_string($data['image']) ? $data['image'] : null;
+            $data['image'] = MediaAccess::signNotificationImagePath($imagePath);
+            $notification->setAttribute('data', $data);
+
+            return $notification;
+        });
 
         return response()->json([
             'items' => $notifications,

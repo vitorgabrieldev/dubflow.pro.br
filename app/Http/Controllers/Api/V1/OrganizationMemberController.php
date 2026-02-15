@@ -71,8 +71,12 @@ class OrganizationMemberController extends Controller
         if ($member) {
             $member->role = $validated['role'];
             $member->status = 'pending';
+            $member->source = 'invite';
             $member->invited_by_user_id = $user->id;
+            $member->requested_by_user_id = null;
+            $member->approved_by_user_id = null;
             $member->joined_at = null;
+            $member->approved_at = null;
             $member->save();
         } else {
             $member = OrganizationMember::create([
@@ -80,6 +84,7 @@ class OrganizationMemberController extends Controller
                 'user_id' => $validated['user_id'],
                 'role' => $validated['role'],
                 'status' => 'pending',
+                'source' => 'invite',
                 'invited_by_user_id' => $user->id,
             ]);
         }
@@ -102,9 +107,17 @@ class OrganizationMemberController extends Controller
             ->where('status', 'pending')
             ->firstOrFail();
 
+        if (! $this->isPendingInviteMembership($member)) {
+            abort(422, 'Solicitacoes de entrada devem ser aprovadas por owner/admin.');
+        }
+
         $member->update([
             'status' => 'active',
+            'source' => 'invite',
+            'requested_by_user_id' => $member->requested_by_user_id ?: $user->id,
+            'approved_by_user_id' => $member->invited_by_user_id,
             'joined_at' => now(),
+            'approved_at' => now(),
         ]);
 
         $member->loadMissing([
@@ -132,8 +145,15 @@ class OrganizationMemberController extends Controller
             ->where('status', 'pending')
             ->firstOrFail();
 
+        if (! $this->isPendingInviteMembership($member)) {
+            abort(422, 'Solicitacoes de entrada devem ser aprovadas por owner/admin.');
+        }
+
         $member->update([
             'status' => 'rejected',
+            'source' => 'invite',
+            'approved_by_user_id' => null,
+            'approved_at' => null,
         ]);
 
         $member->loadMissing([
@@ -146,6 +166,79 @@ class OrganizationMemberController extends Controller
 
         return response()->json([
             'message' => 'Convite recusado.',
+            'member' => $member,
+        ]);
+    }
+
+    public function approveJoinRequest(Organization $organization, User $memberUser): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (! OrganizationAccess::canManageOrganization($user, $organization)) {
+            abort(403, 'Sem permissao para aprovar solicitacoes.');
+        }
+
+        $member = OrganizationMember::query()
+            ->where('organization_id', $organization->id)
+            ->where('user_id', $memberUser->id)
+            ->where('status', 'pending')
+            ->where('source', 'join_request')
+            ->first();
+
+        if (! $member) {
+            abort(422, 'Nao ha solicitacao pendente para este usuario.');
+        }
+
+        $member->update([
+            'status' => 'active',
+            'approved_by_user_id' => $user->id,
+            'joined_at' => now(),
+            'approved_at' => now(),
+        ]);
+
+        $member->loadMissing([
+            'user:id,name,username,avatar_path,email',
+        ]);
+
+        $this->notifyCommunityAboutNewMember($organization, $memberUser, $member->role);
+
+        return response()->json([
+            'message' => 'Solicitacao aprovada.',
+            'member' => $member,
+        ]);
+    }
+
+    public function rejectJoinRequest(Organization $organization, User $memberUser): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (! OrganizationAccess::canManageOrganization($user, $organization)) {
+            abort(403, 'Sem permissao para rejeitar solicitacoes.');
+        }
+
+        $member = OrganizationMember::query()
+            ->where('organization_id', $organization->id)
+            ->where('user_id', $memberUser->id)
+            ->where('status', 'pending')
+            ->where('source', 'join_request')
+            ->first();
+
+        if (! $member) {
+            abort(422, 'Nao ha solicitacao pendente para este usuario.');
+        }
+
+        $member->update([
+            'status' => 'rejected',
+            'approved_by_user_id' => $user->id,
+            'approved_at' => now(),
+        ]);
+
+        $member->loadMissing([
+            'user:id,name,username,avatar_path,email',
+        ]);
+
+        return response()->json([
+            'message' => 'Solicitacao rejeitada.',
             'member' => $member,
         ]);
     }
@@ -277,6 +370,7 @@ class OrganizationMemberController extends Controller
             ->where('organization_id', $organization->id)
             ->where('user_id', $memberUser->id)
             ->where('status', 'pending')
+            ->where('source', 'invite')
             ->where('role', '!=', 'owner')
             ->first();
 
@@ -487,6 +581,19 @@ class OrganizationMemberController extends Controller
             'message' => 'Transferência aceita. Você agora é o dono da comunidade.',
             'transfer' => $transfer,
         ]);
+    }
+
+    private function isPendingInviteMembership(OrganizationMember $member): bool
+    {
+        if ($member->status !== 'pending') {
+            return false;
+        }
+
+        if ($member->source === 'invite') {
+            return true;
+        }
+
+        return $member->source === null && $member->invited_by_user_id !== null;
     }
 
     private function notifyInviterAboutResponse(OrganizationMember $member, string $status): void

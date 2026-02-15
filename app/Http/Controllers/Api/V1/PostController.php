@@ -3,27 +3,28 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Comment;
 use App\Models\DubbingPost;
 use App\Models\Organization;
 use App\Models\Playlist;
 use App\Models\PlaylistSeason;
 use App\Models\PostCollaborator;
 use App\Models\PostCredit;
+use App\Models\PostLike;
 use App\Models\Tag;
 use App\Models\User;
-use App\Models\Comment;
-use App\Models\PostLike;
 use App\Notifications\OrganizationPublishedPost;
 use App\Notifications\PostCollaborationRequested;
+use App\Support\MediaAccess;
 use App\Support\OrganizationAccess;
 use App\Support\PostViewerPermissions;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -129,6 +130,7 @@ class PostController extends Controller
         $payload = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($query, $request, $user) {
             $paginator = $query->paginate((int) $request->integer('per_page', 12));
             PostViewerPermissions::attachToCollection($paginator->getCollection(), $user);
+            MediaAccess::signPostCollection($paginator->getCollection());
 
             return $paginator->toArray();
         });
@@ -227,7 +229,7 @@ class PostController extends Controller
                 }
 
                 return [
-                    'path' => $file->store('dubbing-media', 'public'),
+                    'path' => $file->store('dubbing-media', 'local'),
                     'type' => $type,
                     'mime' => $mime,
                     'size_bytes' => (int) $file->getSize(),
@@ -243,7 +245,7 @@ class PostController extends Controller
             abort(422, 'Não foi possível processar os arquivos enviados.');
         }
 
-        $thumbnailPath = $request->file('thumbnail')?->store('dubbing-thumbnails', 'public')
+        $thumbnailPath = $request->file('thumbnail')?->store('dubbing-thumbnails', 'local')
             ?? ($storedAssets->firstWhere('type', 'image')['path'] ?? null);
         $durationSeconds = max(1, min(3600, (int) ($validated['duration_seconds'] ?? 0)));
 
@@ -350,9 +352,9 @@ class PostController extends Controller
         $freshStrong = now()->subDays(2)->toDateTimeString();
         $freshSoft = now()->subDays(7)->toDateTimeString();
 
-        $recentCommentsExpr = "(SELECT COUNT(*) FROM comments WHERE comments.post_id = dubbing_posts.id AND comments.deleted_at IS NULL AND comments.created_at >= ?)";
-        $recentLikesExpr = "(SELECT COUNT(*) FROM post_likes WHERE post_likes.post_id = dubbing_posts.id AND post_likes.created_at >= ?)";
-        $recentViewsExpr = "(SELECT COUNT(*) FROM post_views WHERE post_views.post_id = dubbing_posts.id AND post_views.created_at >= ?)";
+        $recentCommentsExpr = '(SELECT COUNT(*) FROM comments WHERE comments.post_id = dubbing_posts.id AND comments.deleted_at IS NULL AND comments.created_at >= ?)';
+        $recentLikesExpr = '(SELECT COUNT(*) FROM post_likes WHERE post_likes.post_id = dubbing_posts.id AND post_likes.created_at >= ?)';
+        $recentViewsExpr = '(SELECT COUNT(*) FROM post_views WHERE post_views.post_id = dubbing_posts.id AND post_views.created_at >= ?)';
 
         $orderSql = "(
             ({$recentCommentsExpr}) * 3.0 +
@@ -401,7 +403,7 @@ class PostController extends Controller
                     $bindings[] = $like;
                     $bindings[] = $like;
                 }
-                $orderSql .= " + (".implode(' + ', $keywordMatches).")";
+                $orderSql .= ' + ('.implode(' + ', $keywordMatches).')';
             }
 
             if (! empty($profile['work_titles'])) {
@@ -543,7 +545,7 @@ class PostController extends Controller
     }
 
     /**
-     * @param array<int, string> $texts
+     * @param  array<int, string>  $texts
      * @return array<int, string>
      */
     private function extractTopKeywords(array $texts, int $limit): array
@@ -777,12 +779,13 @@ class PostController extends Controller
             ->findOrFail($postId);
 
         PostViewerPermissions::attachToCollection(collect([$post]), $viewer);
+        MediaAccess::signPost($post);
 
         return $post;
     }
 
     /**
-     * @param array<string,mixed> $validated
+     * @param  array<string,mixed>  $validated
      */
     private function resolveSeasonId(?int $playlistId, array $validated, int $userId, ?int $currentSeasonId = null): ?int
     {
@@ -827,7 +830,7 @@ class PostController extends Controller
     }
 
     /**
-     * @param array<int, string> $tagNames
+     * @param  array<int, string>  $tagNames
      */
     private function syncTags(DubbingPost $post, array $tagNames): void
     {
@@ -855,7 +858,7 @@ class PostController extends Controller
     }
 
     /**
-     * @param array<int, array<string, mixed>> $credits
+     * @param  array<int, array<string, mixed>>  $credits
      */
     private function syncCredits(DubbingPost $post, array $credits): void
     {

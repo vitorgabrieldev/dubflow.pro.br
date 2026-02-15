@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Support\MediaAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -17,7 +18,18 @@ class MediaController extends Controller
             abort(404, 'Arquivo não encontrado.');
         }
 
-        $disk = Storage::disk('public');
+        $isProtectedPath = MediaAccess::isProtectedPath($normalizedPath);
+
+        if ($isProtectedPath && ! $request->hasValidSignature()) {
+            abort(403, 'Acesso negado para este arquivo de mídia.');
+        }
+
+        $disk = Storage::disk($isProtectedPath ? 'local' : 'public');
+
+        if (! $disk->exists($normalizedPath) && $isProtectedPath) {
+            // Compatibilidade com arquivos antigos gravados no disco público.
+            $disk = Storage::disk('public');
+        }
 
         if (! $disk->exists($normalizedPath)) {
             abort(404, 'Arquivo não encontrado.');
@@ -57,7 +69,9 @@ class MediaController extends Controller
             'Content-Length' => (string) $length,
             'Accept-Ranges' => 'bytes',
             'Content-Disposition' => 'inline; filename="'.basename($normalizedPath).'"',
-            'Cache-Control' => 'public, max-age=31536000, immutable',
+            'Cache-Control' => $isProtectedPath
+                ? 'private, max-age=300'
+                : 'public, max-age=31536000, immutable',
         ];
 
         if ($status === 206) {
@@ -138,4 +152,3 @@ class MediaController extends Controller
         return [$start, $end];
     }
 }
-

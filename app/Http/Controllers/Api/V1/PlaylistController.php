@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\Playlist;
 use App\Models\PlaylistSeason;
+use App\Support\MediaAccess;
 use App\Support\OrganizationAccess;
 use App\Support\PostViewerPermissions;
 use Illuminate\Http\JsonResponse;
@@ -224,6 +225,7 @@ class PlaylistController extends Controller
 
         $posts = $postsQuery->paginate(20);
         PostViewerPermissions::attachToCollection($posts->getCollection(), $user);
+        MediaAccess::signPostCollection($posts->getCollection());
 
         return response()->json([
             'playlist' => $playlist,

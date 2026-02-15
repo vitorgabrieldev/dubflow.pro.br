@@ -8,15 +8,17 @@ use App\Http\Controllers\Api\V1\OrganizationController;
 use App\Http\Controllers\Api\V1\OrganizationInviteController;
 use App\Http\Controllers\Api\V1\OrganizationMemberController;
 use App\Http\Controllers\Api\V1\PlaylistController;
-use App\Http\Controllers\Api\V1\PublishOptionsController;
 use App\Http\Controllers\Api\V1\PostController;
 use App\Http\Controllers\Api\V1\PostInteractionController;
+use App\Http\Controllers\Api\V1\PublishOptionsController;
 use App\Http\Controllers\Api\V1\SearchController;
 use App\Http\Controllers\Api\V1\UserProfileController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
-    Route::get('/media/{path}', [MediaController::class, 'show'])->where('path', '.*');
+    Route::get('/media/{path}', [MediaController::class, 'show'])
+        ->where('path', '.*')
+        ->name('api.v1.media.show');
 
     Route::prefix('auth')->middleware('throttle:30,1')->group(function () {
         Route::post('/register', [AuthController::class, 'register']);
@@ -63,6 +65,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/organizations/{organization}/members', [OrganizationMemberController::class, 'store']);
         Route::post('/organizations/{organization}/members/accept', [OrganizationMemberController::class, 'accept']);
         Route::post('/organizations/{organization}/members/reject', [OrganizationMemberController::class, 'reject']);
+        Route::post('/organizations/{organization}/join-requests/{memberUser}/approve', [OrganizationMemberController::class, 'approveJoinRequest']);
+        Route::post('/organizations/{organization}/join-requests/{memberUser}/reject', [OrganizationMemberController::class, 'rejectJoinRequest']);
         Route::post('/organizations/{organization}/owner-transfer', [OrganizationMemberController::class, 'requestOwnerTransfer']);
         Route::post('/organizations/{organization}/owner-transfer/respond', [OrganizationMemberController::class, 'respondOwnerTransfer']);
         Route::delete('/organizations/{organization}/members/{memberUser}/invite', [OrganizationMemberController::class, 'cancelInvite']);

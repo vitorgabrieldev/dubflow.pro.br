@@ -179,6 +179,65 @@ class OrganizationInviteApiTest extends TestCase
         $this->assertNotNull($invite->revoked_at);
     }
 
+    public function test_invite_with_single_use_cannot_be_accepted_by_second_user(): void
+    {
+        $owner = User::factory()->create();
+        $firstCandidate = User::factory()->create();
+        $secondCandidate = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Single Use Invite Org',
+            'slug' => 'single-use-invite-org',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $invite = OrganizationInvite::create([
+            'organization_id' => $organization->id,
+            'created_by_user_id' => $owner->id,
+            'token' => Str::random(64),
+            'role' => 'member',
+            'max_uses' => 1,
+            'uses_count' => 0,
+            'expires_at' => now()->addDay(),
+        ]);
+
+        $firstToken = auth('api')->login($firstCandidate);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$firstToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/invites/{$invite->token}/accept")
+            ->assertOk();
+
+        $secondToken = auth('api')->login($secondCandidate);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$secondToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/invites/{$invite->token}/accept")
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('organization_members', [
+            'organization_id' => $organization->id,
+            'user_id' => $firstCandidate->id,
+            'status' => 'active',
+        ]);
+
+        $this->assertDatabaseMissing('organization_members', [
+            'organization_id' => $organization->id,
+            'user_id' => $secondCandidate->id,
+        ]);
+    }
+
     public function test_user_cannot_accept_expired_or_revoked_or_exhausted_invite(): void
     {
         $owner = User::factory()->create();
@@ -233,4 +292,3 @@ class OrganizationInviteApiTest extends TestCase
         }
     }
 }
-

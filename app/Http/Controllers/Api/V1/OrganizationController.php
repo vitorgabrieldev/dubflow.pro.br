@@ -7,6 +7,7 @@ use App\Models\Organization;
 use App\Models\OrganizationFollow;
 use App\Models\OrganizationMember;
 use App\Notifications\OrganizationFollowed;
+use App\Support\MediaAccess;
 use App\Support\OrganizationAccess;
 use App\Support\PostViewerPermissions;
 use Illuminate\Database\Eloquent\Collection;
@@ -150,7 +151,11 @@ class OrganizationController extends Controller
             'user_id' => $user->id,
             'role' => 'owner',
             'status' => 'active',
+            'source' => 'owner_created',
+            'requested_by_user_id' => $user->id,
+            'approved_by_user_id' => $user->id,
             'joined_at' => now(),
+            'approved_at' => now(),
         ]);
 
         Log::channel('audit')->info('organization_created', [
@@ -206,6 +211,7 @@ class OrganizationController extends Controller
         ])->loadCount(['followers', 'posts', 'playlists']);
 
         PostViewerPermissions::attachToCollection($organization->posts, $user);
+        MediaAccess::signPostCollection($organization->posts);
 
         $viewer = [
             'is_following' => false,
@@ -389,7 +395,11 @@ class OrganizationController extends Controller
                 $existing->update([
                     'status' => 'active',
                     'role' => $existing->role ?: 'member',
+                    'source' => 'self_join_public',
+                    'requested_by_user_id' => $user->id,
+                    'approved_by_user_id' => $user->id,
                     'joined_at' => now(),
+                    'approved_at' => now(),
                 ]);
             } else {
                 OrganizationMember::create([
@@ -397,7 +407,11 @@ class OrganizationController extends Controller
                     'user_id' => $user->id,
                     'role' => 'member',
                     'status' => 'active',
+                    'source' => 'self_join_public',
+                    'requested_by_user_id' => $user->id,
+                    'approved_by_user_id' => $user->id,
                     'joined_at' => now(),
+                    'approved_at' => now(),
                 ]);
             }
 
@@ -421,7 +435,12 @@ class OrganizationController extends Controller
             $existing->update([
                 'status' => 'pending',
                 'role' => $existing->role ?: 'member',
+                'source' => 'join_request',
+                'invited_by_user_id' => null,
+                'requested_by_user_id' => $user->id,
+                'approved_by_user_id' => null,
                 'joined_at' => null,
+                'approved_at' => null,
             ]);
         } else {
             OrganizationMember::create([
@@ -429,7 +448,9 @@ class OrganizationController extends Controller
                 'user_id' => $user->id,
                 'role' => 'member',
                 'status' => 'pending',
+                'source' => 'join_request',
                 'invited_by_user_id' => null,
+                'requested_by_user_id' => $user->id,
                 'joined_at' => null,
             ]);
         }

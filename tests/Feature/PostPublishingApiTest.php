@@ -22,6 +22,7 @@ class PostPublishingApiTest extends TestCase
     public function test_editor_can_publish_episode_with_media_assets(): void
     {
         Storage::fake('public');
+        Storage::fake('local');
 
         $owner = User::factory()->create();
         $editor = User::factory()->create();
@@ -82,6 +83,7 @@ class PostPublishingApiTest extends TestCase
     public function test_editor_can_publish_standalone_episode_without_playlist(): void
     {
         Storage::fake('public');
+        Storage::fake('local');
 
         $owner = User::factory()->create();
         $editor = User::factory()->create();
@@ -134,6 +136,7 @@ class PostPublishingApiTest extends TestCase
     public function test_comments_allow_only_two_levels(): void
     {
         Storage::fake('public');
+        Storage::fake('local');
 
         $owner = User::factory()->create();
         $commenter = User::factory()->create();
@@ -203,6 +206,7 @@ class PostPublishingApiTest extends TestCase
     public function test_active_members_receive_notification_when_episode_is_published(): void
     {
         Storage::fake('public');
+        Storage::fake('local');
         Notification::fake();
 
         $owner = User::factory()->create();
@@ -264,6 +268,7 @@ class PostPublishingApiTest extends TestCase
     public function test_active_members_receive_notification_when_new_comment_is_added(): void
     {
         Storage::fake('public');
+        Storage::fake('local');
 
         $owner = User::factory()->create();
         $member = User::factory()->create();
@@ -327,6 +332,7 @@ class PostPublishingApiTest extends TestCase
     public function test_comment_author_receives_notification_when_their_comment_gets_a_reply(): void
     {
         Storage::fake('public');
+        Storage::fake('local');
         Notification::fake();
 
         $owner = User::factory()->create();
@@ -391,6 +397,7 @@ class PostPublishingApiTest extends TestCase
     public function test_post_author_as_editor_can_edit_but_cannot_delete_and_loses_access_when_role_changes(): void
     {
         Storage::fake('public');
+        Storage::fake('local');
 
         $owner = User::factory()->create();
         $author = User::factory()->create();
