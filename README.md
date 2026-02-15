@@ -84,6 +84,16 @@ Cada organizacao pode:
 - NPM `10+`
 - Banco SQL (SQLite/MySQL/PostgreSQL)
 
+## Versao atual
+
+- Backend/API: `1.0.0`
+- Frontend: `1.0.0`
+- Status: primeira versao estavel
+
+Arquivos de versao:
+- raiz: `VERSION` e `CHANGELOG.md`
+- frontend: `frontend/VERSION` e `frontend/CHANGELOG.md`
+
 ## Setup
 
 1. Ativar Node 22:
@@ -131,6 +141,23 @@ composer run dev
 
 - Laravel API: `http://localhost:8000`
 - Next frontend: `http://localhost:3000` (redireciona automaticamente para `http://localhost:3000/pt-BR`)
+
+## Padrao local oficial (sem Docker)
+
+Para desenvolvimento e testes, o padrao oficial deste projeto e:
+- API em `http://127.0.0.1:8000`
+- Frontend em `http://localhost:3000`
+
+Comando unico de validacao completa local:
+
+```bash
+./scripts/test-all-local.sh
+```
+
+Esse comando executa:
+- backend (`phpunit`)
+- frontend (`tsc --noEmit` e `eslint`)
+- e2e (`playwright`)
 
 ## Docker (API + Frontend)
 
