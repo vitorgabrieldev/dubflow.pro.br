@@ -10,7 +10,7 @@ MIGRATION_RETRY_SLEEP="${MIGRATION_RETRY_SLEEP:-3}"
 cd "${APP_DIR}"
 
 if [ ! -f .env ] && [ -f .env.example ]; then
-  cp .env.example .env
+  cp .env.example .env 2>/dev/null || echo "[entrypoint] .env copy skipped (directory is read-only for current user)"
 fi
 
 mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache

@@ -6,7 +6,15 @@ node_modules
 vendor
 frontend/node_modules
 frontend/.next
+frontend/test-results
+frontend/playwright-report
+frontend/tests
+frontend/.git
+frontend/.turbo
+frontend/*.log
 storage/logs
+storage/app
+storage/pail
 storage/framework/cache/*
 storage/framework/sessions/*
 storage/framework/views/*

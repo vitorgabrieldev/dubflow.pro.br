@@ -132,6 +132,19 @@ composer run dev
 - Laravel API: `http://localhost:8000`
 - Next frontend: `http://localhost:3000` (redireciona automaticamente para `http://localhost:3000/pt-BR`)
 
+## Docker (API + Frontend)
+
+Com Docker Compose, basta subir:
+
+```bash
+docker compose up -d
+```
+
+- API: `http://localhost:3030`
+- Frontend: `http://localhost:3031`
+
+Obs.: no modo Docker, o frontend usa `INTERNAL_API_URL` para comunicação interna com a API e `NEXT_PUBLIC_API_URL` para chamadas do navegador.
+
 ## Dados demo
 
 O seeder `DemoPortfolioSeeder` cria:

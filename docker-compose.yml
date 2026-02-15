@@ -5,14 +5,15 @@ services:
       dockerfile: Dockerfile
     container_name: dubflow-api
     ports:
-      - "8000:8000"
+      - "3030:8000"
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
-      APP_URL: http://localhost:8000
-      FRONTEND_URL: http://localhost:3000
-      APP_KEY: ${APP_KEY:-base64:CHANGE_ME}
-      JWT_SECRET: ${JWT_SECRET:-CHANGE_ME}
+      APP_URL: http://localhost:3030
+      FRONTEND_URL: http://localhost:3031
+      APP_FRONTEND_URL: http://localhost:3031
+      APP_KEY: ${APP_KEY:-base64:90hkmFvVklU1R0xpe20eqIwIZlbd9+3u16fKKtrDMYw=}
+      JWT_SECRET: ${JWT_SECRET:-4f4859cd8ca7099b18e1dfc14495de19dfa85facd32ef4e2ca914c6f9ade6bd6}
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
@@ -29,19 +30,38 @@ services:
       - mysql
       - redis
 
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: dubflow-frontend
+    ports:
+      - "3031:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: http://localhost:3030/api/v1
+      INTERNAL_API_URL: http://api:8000/api/v1
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      - api
+
   worker:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: dubflow-worker
     command: ["php", "artisan", "queue:work", "--sleep=1", "--tries=3", "--timeout=120"]
+    healthcheck:
+      disable: true
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
-      APP_URL: http://localhost:8000
-      FRONTEND_URL: http://localhost:3000
-      APP_KEY: ${APP_KEY:-base64:CHANGE_ME}
-      JWT_SECRET: ${JWT_SECRET:-CHANGE_ME}
+      APP_URL: http://localhost:3030
+      FRONTEND_URL: http://localhost:3031
+      APP_FRONTEND_URL: http://localhost:3031
+      APP_KEY: ${APP_KEY:-base64:90hkmFvVklU1R0xpe20eqIwIZlbd9+3u16fKKtrDMYw=}
+      JWT_SECRET: ${JWT_SECRET:-4f4859cd8ca7099b18e1dfc14495de19dfa85facd32ef4e2ca914c6f9ade6bd6}
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
@@ -66,16 +86,11 @@ services:
       MYSQL_USER: dubflow
       MYSQL_PASSWORD: dubflow
       MYSQL_ROOT_PASSWORD: root
-    ports:
-      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
 
   redis:
     image: redis:7-alpine
     container_name: dubflow-redis
-    ports:
-      - "6379:6379"
-
 volumes:
   mysql_data:
