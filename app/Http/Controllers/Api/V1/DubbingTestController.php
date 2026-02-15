@@ -11,6 +11,7 @@ use App\Models\DubbingTestSubmissionMedia;
 use App\Notifications\DubbingTestResultReleased;
 use App\Models\Organization;
 use App\Models\User;
+use App\Support\AchievementEngine;
 use App\Support\AuditTrail;
 use App\Support\MediaAccess;
 use App\Support\OrganizationAccess;
@@ -218,6 +219,7 @@ class DubbingTestController extends Controller
 
         $dubbingTest->load(['organization:id,name,slug', 'characters', 'media']);
         $dubbingTest->media->each(fn (DubbingTestMedia $media) => $media->media_path = MediaAccess::signPath($media->media_path));
+        app(AchievementEngine::class)->onDubbingTestCreated($dubbingTest);
 
         return response()->json([
             'message' => 'Teste de dublagem criado com sucesso.',
@@ -516,6 +518,7 @@ class DubbingTestController extends Controller
         ]);
 
         $submission->media->each(fn (DubbingTestSubmissionMedia $media) => $media->media_path = MediaAccess::signPath($media->media_path));
+        app(AchievementEngine::class)->onDubbingTestSubmitted($submission);
 
         return response()->json([
             'message' => 'Inscricao enviada com sucesso. O envio nao pode ser editado.',

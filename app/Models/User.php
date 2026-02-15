@@ -140,6 +140,21 @@ class User extends Authenticatable implements JWTSubject
         return $this->hasMany(DubbingTestSubmission::class);
     }
 
+    public function achievementProgress(): HasMany
+    {
+        return $this->hasMany(UserAchievementProgress::class);
+    }
+
+    public function achievements(): HasMany
+    {
+        return $this->hasMany(UserAchievement::class);
+    }
+
+    public function achievementFeedItems(): HasMany
+    {
+        return $this->hasMany(AchievementFeedItem::class);
+    }
+
     public function getJWTIdentifier(): mixed
     {
         return $this->getKey();

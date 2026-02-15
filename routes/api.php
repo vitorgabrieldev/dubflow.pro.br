@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\AchievementController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\DubbingTestController;
 use App\Http\Controllers\Api\V1\MediaController;
@@ -119,6 +120,10 @@ Route::prefix('v1')->group(function () {
         Route::delete('/notifications/clear', [NotificationController::class, 'clearAll']);
         Route::delete('/notifications/{notificationId}', [NotificationController::class, 'destroy']);
 
+        Route::get('/achievements/me', [AchievementController::class, 'mine']);
+        Route::get('/achievements/feed', [AchievementController::class, 'feed']);
+
         Route::get('/dashboard/overview', [DashboardController::class, 'overview']);
+        Route::get('/dashboard/rising-dubbers', [DashboardController::class, 'risingDubbers30Days']);
     });
 });

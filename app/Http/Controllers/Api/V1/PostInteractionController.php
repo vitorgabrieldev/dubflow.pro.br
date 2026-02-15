@@ -14,6 +14,7 @@ use App\Notifications\OrganizationPostCommented;
 use App\Notifications\OrganizationPublishedPost;
 use App\Notifications\PostCollaborationRequested;
 use App\Notifications\PostCollaborationResponded;
+use App\Support\AchievementEngine;
 use App\Support\OrganizationAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,10 +31,12 @@ class PostInteractionController extends Controller
             abort(403, 'Sem permissao para curtir este post.');
         }
 
-        PostLike::query()->firstOrCreate([
+        $like = PostLike::query()->firstOrCreate([
             'post_id' => $post->id,
             'user_id' => $user->id,
         ]);
+
+        app(AchievementEngine::class)->onPostLiked($post, (int) $user->id, $like->wasRecentlyCreated);
 
         Log::channel('audit')->info('post_liked', [
             'post_id' => $post->id,
@@ -103,6 +106,8 @@ class PostInteractionController extends Controller
             'parent_id' => $validated['parent_id'] ?? null,
             'body' => $validated['body'],
         ]);
+
+        app(AchievementEngine::class)->onCommentCreated($comment);
 
         Log::channel('audit')->info('comment_created', [
             'comment_id' => $comment->id,
@@ -283,6 +288,7 @@ class PostInteractionController extends Controller
                 ]);
 
                 $this->notifyOrganizationMembersAboutPublication($post);
+                app(AchievementEngine::class)->onEpisodePublished($post->fresh());
             }
         }
 

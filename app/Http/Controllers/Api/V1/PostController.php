@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Notifications\OrganizationPublishedPost;
 use App\Notifications\PostCollaborationRequested;
 use App\Support\MediaAccess;
+use App\Support\AchievementEngine;
 use App\Support\OrganizationAccess;
 use App\Support\PostViewerPermissions;
 use Illuminate\Database\Eloquent\Builder;
@@ -300,6 +301,7 @@ class PostController extends Controller
             }
         } elseif ($post->published_at !== null) {
             $this->notifyOrganizationMembersAboutPublication($post);
+            app(AchievementEngine::class)->onEpisodePublished($post);
         }
 
         $organization->recalculateVerification();
