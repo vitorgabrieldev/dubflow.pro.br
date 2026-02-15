@@ -44,6 +44,14 @@ class DemoPortfolioSeeder extends Seeder
         Schema::disableForeignKeyConstraints();
 
         foreach ([
+            'achievement_processed_events',
+            'achievement_feed_items',
+            'user_achievements',
+            'user_achievement_progress',
+            'achievement_posting_days',
+            'achievement_comment_uniques',
+            'achievement_levels',
+            'achievement_definitions',
             'post_views',
             'dubbing_post_tag',
             'tags',

@@ -6,9 +6,10 @@ use App\Models\AchievementDefinition;
 use App\Models\AchievementLevel;
 use App\Models\UserAchievement;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 
-class AchievementUnlocked extends Notification
+class AchievementUnlocked extends Notification implements ShouldQueue
 {
     use Queueable;
 

@@ -10,144 +10,177 @@ use App\Models\UserAchievement;
 use App\Models\UserAchievementProgress;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class AchievementController extends Controller
 {
     public function mine(Request $request): JsonResponse
     {
         $user = auth('api')->user();
-        $activeAt = now();
+        $version = (int) Cache::get($this->cacheVersionKey((int) $user->id), 1);
+        $cacheKey = sprintf('achievements:me:user:%d:v:%d', (int) $user->id, $version);
 
-        $definitions = AchievementDefinition::query()
-            ->where('is_active', true)
-            ->with('levels')
-            ->orderBy('display_order')
-            ->orderBy('id')
-            ->get();
+        $payload = Cache::remember($cacheKey, now()->addSeconds(30), function () use ($user) {
+            $activeAt = now();
 
-        $totalUsers = max(1, User::query()->count());
+            $unlockedRows = UserAchievement::query()
+                ->where('user_id', $user->id)
+                ->where(function ($query) use ($activeAt): void {
+                    $query->whereNull('expires_at')->orWhere('expires_at', '>=', $activeAt);
+                })
+                ->orderByDesc('level')
+                ->get()
+                ->groupBy('achievement_definition_id');
 
-        $progressMap = UserAchievementProgress::query()
-            ->where('user_id', $user->id)
-            ->pluck('progress_value', 'achievement_definition_id');
+            $unlockedDefinitionIds = $unlockedRows->keys()->map(static fn ($id): int => (int) $id)->all();
 
-        $unlockedRows = UserAchievement::query()
-            ->where('user_id', $user->id)
-            ->where(function ($query) use ($activeAt): void {
-                $query->whereNull('expires_at')->orWhere('expires_at', '>=', $activeAt);
-            })
-            ->orderByDesc('level')
-            ->get()
-            ->groupBy('achievement_definition_id');
+            $definitions = AchievementDefinition::query()
+                ->where('is_active', true)
+                ->where(function ($query) use ($unlockedDefinitionIds): void {
+                    $query->where('is_hidden', false);
 
-        $holdersByDefinition = UserAchievement::query()
-            ->selectRaw('achievement_definition_id, COUNT(DISTINCT user_id) as holders_count')
-            ->where(function ($query) use ($activeAt): void {
-                $query->whereNull('expires_at')->orWhere('expires_at', '>=', $activeAt);
-            })
-            ->groupBy('achievement_definition_id')
-            ->pluck('holders_count', 'achievement_definition_id');
+                    if ($unlockedDefinitionIds !== []) {
+                        $query->orWhereIn('id', $unlockedDefinitionIds);
+                    }
+                })
+                ->with('levels')
+                ->orderBy('display_order')
+                ->orderBy('id')
+                ->get();
 
-        $holdersByLevel = UserAchievement::query()
-            ->selectRaw('achievement_definition_id, level, COUNT(DISTINCT user_id) as holders_count')
-            ->where(function ($query) use ($activeAt): void {
-                $query->whereNull('expires_at')->orWhere('expires_at', '>=', $activeAt);
-            })
-            ->groupBy('achievement_definition_id', 'level')
-            ->get()
-            ->groupBy('achievement_definition_id');
+            $totalUsers = max(1, User::query()->count());
+            $definitionIds = $definitions->pluck('id')->map(static fn ($id): int => (int) $id)->all();
 
-        $items = $definitions->map(function (AchievementDefinition $definition) use ($progressMap, $unlockedRows, $holdersByDefinition, $holdersByLevel, $totalUsers) {
-            $levels = $definition->levels->sortBy('level')->values();
-            $userDefinitionUnlocks = $unlockedRows->get($definition->id) ?? collect();
-            $highestUnlocked = $userDefinitionUnlocks->first();
-            $progressValue = (int) ($progressMap[$definition->id] ?? 0);
+            $progressMap = UserAchievementProgress::query()
+                ->where('user_id', $user->id)
+                ->whereIn('achievement_definition_id', $definitionIds)
+                ->pluck('progress_value', 'achievement_definition_id');
 
-            $nextLevel = $levels->first(function ($level) use ($highestUnlocked) {
-                if (! $highestUnlocked) {
-                    return true;
-                }
+            $holdersByDefinition = UserAchievement::query()
+                ->selectRaw('achievement_definition_id, COUNT(DISTINCT user_id) as holders_count')
+                ->whereIn('achievement_definition_id', $definitionIds)
+                ->where(function ($query) use ($activeAt): void {
+                    $query->whereNull('expires_at')->orWhere('expires_at', '>=', $activeAt);
+                })
+                ->groupBy('achievement_definition_id')
+                ->pluck('holders_count', 'achievement_definition_id');
 
-                return (int) $level->level > (int) $highestUnlocked->level;
-            });
+            $holdersByLevel = UserAchievement::query()
+                ->selectRaw('achievement_definition_id, level, COUNT(DISTINCT user_id) as holders_count')
+                ->whereIn('achievement_definition_id', $definitionIds)
+                ->where(function ($query) use ($activeAt): void {
+                    $query->whereNull('expires_at')->orWhere('expires_at', '>=', $activeAt);
+                })
+                ->groupBy('achievement_definition_id', 'level')
+                ->get()
+                ->groupBy('achievement_definition_id');
 
-            $holdersCount = (int) ($holdersByDefinition[$definition->id] ?? 0);
-            $holdersPercentage = round(($holdersCount / $totalUsers) * 100, 2);
+            $items = $definitions->map(function (AchievementDefinition $definition) use ($progressMap, $unlockedRows, $holdersByDefinition, $holdersByLevel, $totalUsers) {
+                $levels = $definition->levels->sortBy('level')->values();
+                $userDefinitionUnlocks = $unlockedRows->get($definition->id) ?? collect();
+                $highestUnlocked = $userDefinitionUnlocks->first();
+                $progressValue = (int) ($progressMap[$definition->id] ?? 0);
+
+                $nextLevel = $levels->first(function ($level) use ($highestUnlocked) {
+                    if (! $highestUnlocked) {
+                        return true;
+                    }
+
+                    return (int) $level->level > (int) $highestUnlocked->level;
+                });
+
+                $holdersCount = (int) ($holdersByDefinition[$definition->id] ?? 0);
+                $holdersPercentage = round(($holdersCount / $totalUsers) * 100, 2);
+
+                return [
+                    'id' => $definition->id,
+                    'slug' => $definition->slug,
+                    'title' => $definition->title,
+                    'description' => $definition->description,
+                    'category' => $definition->category,
+                    'metric_key' => $definition->metric_key,
+                    'rarity' => $definition->rarity,
+                    'icon' => $definition->icon,
+                    'color_start' => $definition->color_start,
+                    'color_end' => $definition->color_end,
+                    'is_hidden' => (bool) $definition->is_hidden,
+                    'progress' => [
+                        'value' => $progressValue,
+                        'next_threshold' => $nextLevel?->threshold,
+                        'remaining_to_next' => $nextLevel ? max(0, (int) $nextLevel->threshold - $progressValue) : 0,
+                    ],
+                    'user_status' => [
+                        'is_unlocked' => $highestUnlocked !== null,
+                        'highest_level' => $highestUnlocked ? (int) $highestUnlocked->level : 0,
+                        'unlocked_at' => $highestUnlocked?->unlocked_at?->toIso8601String(),
+                        'expires_at' => $highestUnlocked?->expires_at?->toIso8601String(),
+                    ],
+                    'stats' => [
+                        'holders_count' => $holdersCount,
+                        'holders_percentage' => $holdersPercentage,
+                    ],
+                    'levels' => $levels->map(function ($level) use ($userDefinitionUnlocks, $holdersByLevel, $definition, $totalUsers) {
+                        $isUnlocked = $userDefinitionUnlocks->contains(fn ($row) => (int) $row->level === (int) $level->level);
+                        $levelGroup = $holdersByLevel->get($definition->id) ?? collect();
+                        $holdersForLevel = (int) ($levelGroup->firstWhere('level', $level->level)?->holders_count ?? 0);
+
+                        return [
+                            'id' => $level->id,
+                            'level' => (int) $level->level,
+                            'threshold' => (int) $level->threshold,
+                            'title' => $level->title,
+                            'description' => $level->description,
+                            'rarity' => $level->rarity,
+                            'icon' => $level->icon,
+                            'color_start' => $level->color_start,
+                            'color_end' => $level->color_end,
+                            'valid_for_days' => $level->valid_for_days,
+                            'is_unlocked' => $isUnlocked,
+                            'holders_count' => $holdersForLevel,
+                            'holders_percentage' => round(($holdersForLevel / $totalUsers) * 100, 2),
+                        ];
+                    })->values(),
+                ];
+            })->values();
 
             return [
-                'id' => $definition->id,
-                'slug' => $definition->slug,
-                'title' => $definition->title,
-                'description' => $definition->description,
-                'category' => $definition->category,
-                'metric_key' => $definition->metric_key,
-                'rarity' => $definition->rarity,
-                'icon' => $definition->icon,
-                'color_start' => $definition->color_start,
-                'color_end' => $definition->color_end,
-                'is_hidden' => (bool) $definition->is_hidden,
-                'progress' => [
-                    'value' => $progressValue,
-                    'next_threshold' => $nextLevel?->threshold,
-                    'remaining_to_next' => $nextLevel ? max(0, (int) $nextLevel->threshold - $progressValue) : 0,
+                'summary' => [
+                    'total_achievements' => $items->count(),
+                    'unlocked_achievements' => $items->where('user_status.is_unlocked', true)->count(),
+                    'total_users' => $totalUsers,
                 ],
-                'user_status' => [
-                    'is_unlocked' => $highestUnlocked !== null,
-                    'highest_level' => $highestUnlocked ? (int) $highestUnlocked->level : 0,
-                    'unlocked_at' => $highestUnlocked?->unlocked_at?->toIso8601String(),
-                    'expires_at' => $highestUnlocked?->expires_at?->toIso8601String(),
-                ],
-                'stats' => [
-                    'holders_count' => $holdersCount,
-                    'holders_percentage' => $holdersPercentage,
-                ],
-                'levels' => $levels->map(function ($level) use ($userDefinitionUnlocks, $holdersByLevel, $definition, $totalUsers) {
-                    $isUnlocked = $userDefinitionUnlocks->contains(fn ($row) => (int) $row->level === (int) $level->level);
-                    $levelGroup = $holdersByLevel->get($definition->id) ?? collect();
-                    $holdersForLevel = (int) ($levelGroup->firstWhere('level', $level->level)?->holders_count ?? 0);
-
-                    return [
-                        'id' => $level->id,
-                        'level' => (int) $level->level,
-                        'threshold' => (int) $level->threshold,
-                        'title' => $level->title,
-                        'description' => $level->description,
-                        'rarity' => $level->rarity,
-                        'icon' => $level->icon,
-                        'color_start' => $level->color_start,
-                        'color_end' => $level->color_end,
-                        'valid_for_days' => $level->valid_for_days,
-                        'is_unlocked' => $isUnlocked,
-                        'holders_count' => $holdersForLevel,
-                        'holders_percentage' => round(($holdersForLevel / $totalUsers) * 100, 2),
-                    ];
-                })->values(),
+                'items' => $items,
             ];
-        })->values();
+        });
 
-        return response()->json([
-            'summary' => [
-                'total_achievements' => $items->count(),
-                'unlocked_achievements' => $items->where('user_status.is_unlocked', true)->count(),
-                'total_users' => $totalUsers,
-            ],
-            'items' => $items,
-        ]);
+        return response()->json($payload);
     }
 
     public function feed(Request $request): JsonResponse
     {
         $user = auth('api')->user();
+        $perPage = max(1, min(50, (int) $request->integer('per_page', 20)));
+        $page = max(1, (int) $request->integer('page', 1));
+        $version = (int) Cache::get($this->cacheVersionKey((int) $user->id), 1);
+        $cacheKey = sprintf('achievements:feed:user:%d:per:%d:page:%d:v:%d', (int) $user->id, $perPage, $page, $version);
 
-        $feed = AchievementFeedItem::query()
-            ->where('user_id', $user->id)
-            ->with([
-                'definition:id,slug,title,description,category,rarity,icon,color_start,color_end',
-                'levelDefinition:id,achievement_definition_id,level,threshold,title,description,rarity,icon,color_start,color_end',
-            ])
-            ->latest('unlocked_at')
-            ->paginate((int) $request->integer('per_page', 20));
+        $payload = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($user, $perPage, $page) {
+            return AchievementFeedItem::query()
+                ->where('user_id', $user->id)
+                ->with([
+                    'definition:id,slug,title,description,category,rarity,icon,color_start,color_end',
+                    'levelDefinition:id,achievement_definition_id,level,threshold,title,description,rarity,icon,color_start,color_end',
+                ])
+                ->latest('unlocked_at')
+                ->paginate($perPage, ['*'], 'page', $page)
+                ->toArray();
+        });
 
-        return response()->json($feed);
+        return response()->json($payload);
+    }
+
+    private function cacheVersionKey(int $userId): string
+    {
+        return 'achievements:cache-version:user:'.$userId;
     }
 }

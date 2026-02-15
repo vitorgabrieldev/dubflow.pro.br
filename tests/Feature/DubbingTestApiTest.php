@@ -1012,6 +1012,25 @@ class DubbingTestApiTest extends TestCase
         ]);
     }
 
+    public function test_update_rejects_direct_transition_to_results_released_status(): void
+    {
+        $owner = User::factory()->create();
+        $organization = $this->createOrganizationWithOwner($owner, 'org-update-results-block', 'Org Update Results Block');
+
+        $test = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Teste sem concluir seleção',
+            'visibility' => 'external',
+            'status' => 'published',
+        ]);
+
+        $this->withHeaders($this->authHeaders($owner))
+            ->patchJson("/api/v1/organizations/{$organization->slug}/dubbing-tests/{$test->id}", [
+                'status' => 'results_released',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Use "Concluir seleção" para finalizar e liberar os resultados.');
+    }
+
     private function createOrganizationWithOwner(User $owner, string $slug, string $name, bool $isPublic = true): Organization
     {
         $organization = Organization::create([

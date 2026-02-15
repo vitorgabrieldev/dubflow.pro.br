@@ -243,10 +243,6 @@ class DubbingTestController extends Controller
             abort(422, 'Teste finalizado. Não é possível editar após concluir a seleção.');
         }
 
-        if (($validated['status'] ?? null) === 'results_released') {
-            abort(422, 'Use "Concluir seleção" para finalizar e liberar os resultados.');
-        }
-
         $validated = $request->validate([
             'title' => ['sometimes', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:5000'],
@@ -265,6 +261,10 @@ class DubbingTestController extends Controller
             'remove_media_ids' => ['nullable', 'array'],
             'remove_media_ids.*' => ['integer'],
         ]);
+
+        if (($validated['status'] ?? null) === 'results_released') {
+            abort(422, 'Use "Concluir seleção" para finalizar e liberar os resultados.');
+        }
 
         $startsAt = array_key_exists('starts_at', $validated)
             ? Carbon::parse((string) $validated['starts_at'])

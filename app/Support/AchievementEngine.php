@@ -7,6 +7,7 @@ use App\Models\AchievementDefinition;
 use App\Models\AchievementFeedItem;
 use App\Models\AchievementLevel;
 use App\Models\AchievementPostingDay;
+use App\Models\AchievementProcessedEvent;
 use App\Models\Comment;
 use App\Models\DubbingPost;
 use App\Models\DubbingTest;
@@ -16,6 +17,7 @@ use App\Models\UserAchievement;
 use App\Models\UserAchievementProgress;
 use App\Notifications\AchievementUnlocked;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -27,6 +29,18 @@ class AchievementEngine
     {
         $authorId = (int) ($post->author_user_id ?? 0);
         if ($authorId <= 0 || $post->published_at === null) {
+            return;
+        }
+
+        $eventRecorded = $this->recordUniqueEvent(
+            eventKey: 'episode_published:post:'.$post->id,
+            eventType: 'episode_published',
+            resourceId: (int) $post->id,
+            userId: $authorId,
+            processedAt: $post->published_at instanceof CarbonInterface ? $post->published_at : now()
+        );
+
+        if (! $eventRecorded) {
             return;
         }
 
@@ -144,30 +158,17 @@ class AchievementEngine
 
         DB::transaction(function () use ($definitions, $userId, $incrementBy, $eventTime): void {
             foreach ($definitions as $definition) {
-                $progress = UserAchievementProgress::query()
-                    ->where('user_id', $userId)
-                    ->where('achievement_definition_id', $definition->id)
-                    ->lockForUpdate()
-                    ->first();
-
-                $nextValue = (int) ($progress?->progress_value ?? 0) + $incrementBy;
-
-                if ($progress) {
-                    $progress->progress_value = $nextValue;
-                    $progress->last_event_at = $eventTime;
-                    $progress->save();
-                } else {
-                    UserAchievementProgress::query()->create([
-                        'user_id' => $userId,
-                        'achievement_definition_id' => $definition->id,
-                        'progress_value' => $nextValue,
-                        'last_event_at' => $eventTime,
-                    ]);
-                }
+                $progress = $this->lockProgressRow($userId, (int) $definition->id, $eventTime);
+                $nextValue = (int) $progress->progress_value + $incrementBy;
+                $progress->progress_value = $nextValue;
+                $progress->last_event_at = $eventTime;
+                $progress->save();
 
                 $this->unlockEligibleLevels($userId, $definition, $nextValue, $eventTime);
             }
         });
+
+        $this->bumpUserCacheVersion($userId);
     }
 
     private function setMetric(int $userId, string $metricKey, int $value, CarbonInterface $eventTime): void
@@ -181,28 +182,16 @@ class AchievementEngine
 
         DB::transaction(function () use ($definitions, $userId, $normalizedValue, $eventTime): void {
             foreach ($definitions as $definition) {
-                $progress = UserAchievementProgress::query()
-                    ->where('user_id', $userId)
-                    ->where('achievement_definition_id', $definition->id)
-                    ->lockForUpdate()
-                    ->first();
-
-                if ($progress) {
-                    $progress->progress_value = $normalizedValue;
-                    $progress->last_event_at = $eventTime;
-                    $progress->save();
-                } else {
-                    UserAchievementProgress::query()->create([
-                        'user_id' => $userId,
-                        'achievement_definition_id' => $definition->id,
-                        'progress_value' => $normalizedValue,
-                        'last_event_at' => $eventTime,
-                    ]);
-                }
+                $progress = $this->lockProgressRow($userId, (int) $definition->id, $eventTime);
+                $progress->progress_value = $normalizedValue;
+                $progress->last_event_at = $eventTime;
+                $progress->save();
 
                 $this->unlockEligibleLevels($userId, $definition, $normalizedValue, $eventTime);
             }
         });
+
+        $this->bumpUserCacheVersion($userId);
     }
 
     private function unlockEligibleLevels(int $userId, AchievementDefinition $definition, int $currentValue, CarbonInterface $eventTime): void
@@ -221,32 +210,37 @@ class AchievementEngine
             return;
         }
 
-        $alreadyUnlockedLevels = UserAchievement::query()
-            ->where('user_id', $userId)
-            ->where('achievement_definition_id', $definition->id)
-            ->pluck('level')
-            ->map(static fn ($level): int => (int) $level)
-            ->all();
-
         $user = User::query()->find($userId);
 
         foreach ($eligibleLevels as $level) {
-            if (in_array((int) $level->level, $alreadyUnlockedLevels, true)) {
-                continue;
-            }
-
             $expiresAt = $this->resolveExpiration($level, $definition, $eventTime);
 
-            $userAchievement = UserAchievement::query()->create([
-                'user_id' => $userId,
-                'achievement_definition_id' => $definition->id,
-                'achievement_level_id' => $level->id,
-                'level' => $level->level,
-                'progress_value_at_unlock' => $currentValue,
-                'unlocked_at' => $eventTime,
-                'expires_at' => $expiresAt,
-                'notified_at' => $user ? now() : null,
-            ]);
+            try {
+                $userAchievement = UserAchievement::query()->firstOrCreate(
+                    [
+                        'user_id' => $userId,
+                        'achievement_definition_id' => $definition->id,
+                        'level' => $level->level,
+                    ],
+                    [
+                        'achievement_level_id' => $level->id,
+                        'progress_value_at_unlock' => $currentValue,
+                        'unlocked_at' => $eventTime,
+                        'expires_at' => $expiresAt,
+                        'notified_at' => null,
+                    ]
+                );
+            } catch (Throwable $exception) {
+                if ($this->isUniqueConstraintViolation($exception)) {
+                    continue;
+                }
+
+                throw $exception;
+            }
+
+            if (! $userAchievement->wasRecentlyCreated) {
+                continue;
+            }
 
             AchievementFeedItem::query()->create([
                 'user_id' => $userId,
@@ -273,9 +267,23 @@ class AchievementEngine
             );
 
             if ($user) {
-                $userAchievement->setRelation('definition', $definition);
-                $userAchievement->setRelation('levelDefinition', $level);
-                $user->notify(new AchievementUnlocked($userAchievement));
+                DB::afterCommit(function () use ($userId, $userAchievement, $definition, $level): void {
+                    $notifyUser = User::query()->find($userId);
+                    $freshAchievement = UserAchievement::query()
+                        ->where('id', $userAchievement->id)
+                        ->whereNull('notified_at')
+                        ->first();
+
+                    if (! $notifyUser || ! $freshAchievement) {
+                        return;
+                    }
+
+                    $freshAchievement->setRelation('definition', $definition);
+                    $freshAchievement->setRelation('levelDefinition', $level);
+
+                    $notifyUser->notify(new AchievementUnlocked($freshAchievement));
+                    $freshAchievement->forceFill(['notified_at' => now()])->save();
+                });
             }
         }
     }
@@ -304,6 +312,28 @@ class AchievementEngine
             ->get();
     }
 
+    private function lockProgressRow(int $userId, int $definitionId, CarbonInterface $eventTime): UserAchievementProgress
+    {
+        $now = now();
+
+        UserAchievementProgress::query()->upsert([
+            [
+                'user_id' => $userId,
+                'achievement_definition_id' => $definitionId,
+                'progress_value' => 0,
+                'last_event_at' => $eventTime,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+        ], ['user_id', 'achievement_definition_id'], ['updated_at']);
+
+        return UserAchievementProgress::query()
+            ->where('user_id', $userId)
+            ->where('achievement_definition_id', $definitionId)
+            ->lockForUpdate()
+            ->firstOrFail();
+    }
+
     private function isUniqueConstraintViolation(Throwable $exception): bool
     {
         if ($exception instanceof QueryException) {
@@ -318,5 +348,47 @@ class AchievementEngine
         return str_contains($message, 'unique constraint')
             || str_contains($message, 'duplicate entry')
             || str_contains($message, 'integrity constraint violation');
+    }
+
+    private function recordUniqueEvent(
+        string $eventKey,
+        string $eventType,
+        ?int $resourceId,
+        ?int $userId,
+        CarbonInterface $processedAt
+    ): bool {
+        try {
+            AchievementProcessedEvent::query()->create([
+                'event_key' => $eventKey,
+                'event_type' => $eventType,
+                'resource_id' => $resourceId,
+                'user_id' => $userId,
+                'processed_at' => $processedAt,
+            ]);
+
+            return true;
+        } catch (Throwable $exception) {
+            if ($this->isUniqueConstraintViolation($exception)) {
+                return false;
+            }
+
+            throw $exception;
+        }
+    }
+
+    private function bumpUserCacheVersion(int $userId): void
+    {
+        $versionKey = $this->cacheVersionKey($userId);
+
+        if (! Cache::has($versionKey)) {
+            Cache::forever($versionKey, 1);
+        }
+
+        Cache::increment($versionKey);
+    }
+
+    private function cacheVersionKey(int $userId): string
+    {
+        return 'achievements:cache-version:user:'.$userId;
     }
 }

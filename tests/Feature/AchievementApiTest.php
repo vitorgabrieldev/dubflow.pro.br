@@ -3,6 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\AchievementDefinition;
+use App\Models\AchievementFeedItem;
+use App\Models\PostCollaborator;
+use App\Models\UserAchievement;
 use App\Models\DubbingTest;
 use App\Models\Organization;
 use App\Models\OrganizationMember;
@@ -198,6 +201,134 @@ class AchievementApiTest extends TestCase
         $latestCandidateNotification = $candidate->notifications()->latest()->first();
         $this->assertNotNull($latestCandidateNotification);
         $this->assertSame('achievement_unlocked', $latestCandidateNotification->data['type'] ?? null);
+    }
+
+    public function test_hidden_achievement_is_not_exposed_until_it_is_unlocked(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $definition = AchievementDefinition::query()->where('slug', 'cena-aberta')->firstOrFail();
+        $definition->update(['is_hidden' => true]);
+
+        $initialResponse = $this->withHeaders($this->authHeaders($user))
+            ->getJson('/api/v1/achievements/me')
+            ->assertOk();
+
+        $initialSlugs = collect($initialResponse->json('items'))->pluck('slug')->all();
+        $this->assertNotContains('cena-aberta', $initialSlugs);
+
+        $organization = $this->createOrganizationWithOwner($user, 'hidden-achievement-org', 'Hidden Achievement Org');
+
+        $this->withHeaders($this->authHeaders($user))
+            ->post('/api/v1/organizations/'.$organization->slug.'/posts', [
+                'title' => 'Post para desbloquear hidden',
+                'description' => 'Publica para desbloquear conquista escondida',
+                'work_title' => 'Obra Hidden',
+                'language_code' => 'pt-BR',
+                'media_assets' => [UploadedFile::fake()->create('hidden.mp3', 64, 'audio/mpeg')],
+            ])->assertCreated();
+
+        $afterUnlockResponse = $this->withHeaders($this->authHeaders($user))
+            ->getJson('/api/v1/achievements/me')
+            ->assertOk();
+
+        $hiddenItem = collect($afterUnlockResponse->json('items'))->firstWhere('slug', 'cena-aberta');
+        $this->assertIsArray($hiddenItem);
+        $this->assertTrue((bool) ($hiddenItem['is_hidden'] ?? false));
+        $this->assertTrue((bool) ($hiddenItem['user_status']['is_unlocked'] ?? false));
+    }
+
+    public function test_feed_endpoint_caps_per_page_to_50(): void
+    {
+        $user = User::factory()->create();
+        $created = 0;
+
+        $definitions = AchievementDefinition::query()->with('levels')->orderBy('id')->get();
+        foreach ($definitions as $definition) {
+            foreach ($definition->levels as $level) {
+                if ($created >= 60) {
+                    break 2;
+                }
+
+                $userAchievement = UserAchievement::query()->create([
+                    'user_id' => $user->id,
+                    'achievement_definition_id' => $definition->id,
+                    'achievement_level_id' => $level->id,
+                    'level' => $level->level,
+                    'progress_value_at_unlock' => $level->threshold,
+                    'unlocked_at' => now()->subMinutes($created),
+                    'expires_at' => null,
+                    'notified_at' => null,
+                ]);
+
+                AchievementFeedItem::query()->create([
+                    'user_id' => $user->id,
+                    'user_achievement_id' => $userAchievement->id,
+                    'achievement_definition_id' => $definition->id,
+                    'achievement_level_id' => $level->id,
+                    'level' => $level->level,
+                    'unlocked_at' => now()->subMinutes($created),
+                ]);
+
+                $created++;
+            }
+        }
+
+        $this->assertGreaterThanOrEqual(50, $created);
+
+        $this->withHeaders($this->authHeaders($user))
+            ->getJson('/api/v1/achievements/feed?per_page=9999')
+            ->assertOk()
+            ->assertJsonPath('per_page', 50)
+            ->assertJsonCount(50, 'data');
+    }
+
+    public function test_republishing_same_post_after_collaborator_flow_does_not_increment_episode_metric_twice(): void
+    {
+        Storage::fake('local');
+
+        $owner = User::factory()->create();
+        $collaborator = User::factory()->create();
+
+        $organization = $this->createOrganizationWithOwner($owner, 'achievements-republish-org', 'Achievements Republish Org');
+
+        $postResponse = $this->withHeaders($this->authHeaders($owner))
+            ->post('/api/v1/organizations/'.$organization->slug.'/posts', [
+                'title' => 'Post para republicação',
+                'description' => 'Teste de idempotência de publicação',
+                'work_title' => 'Obra republish',
+                'language_code' => 'pt-BR',
+                'media_assets' => [
+                    UploadedFile::fake()->create('republish.mp3', 128, 'audio/mpeg'),
+                ],
+            ])
+            ->assertCreated();
+
+        $postId = (int) $postResponse->json('post.id');
+
+        $inviteResponse = $this->withHeaders($this->authHeaders($owner))
+            ->postJson("/api/v1/posts/{$postId}/collaborators", [
+                'user_id' => $collaborator->id,
+            ])
+            ->assertCreated();
+
+        $collaboratorRecord = PostCollaborator::query()->findOrFail((int) $inviteResponse->json('collaborator.id'));
+        $this->assertSame('pending', $collaboratorRecord->status);
+
+        $this->withHeaders($this->authHeaders($collaborator))
+            ->postJson("/api/v1/posts/{$postId}/collaborators/respond", [
+                'status' => 'accepted',
+            ])
+            ->assertOk();
+
+        $episodeDefinition = AchievementDefinition::query()->where('slug', 'cena-aberta')->firstOrFail();
+
+        $this->assertDatabaseHas('user_achievement_progress', [
+            'user_id' => $owner->id,
+            'achievement_definition_id' => $episodeDefinition->id,
+            'progress_value' => 1,
+        ]);
     }
 
     private function authHeaders(User $user): array
