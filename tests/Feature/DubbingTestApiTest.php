@@ -6,6 +6,7 @@ use App\Models\DubbingTest;
 use App\Models\DubbingTestCharacter;
 use App\Models\DubbingTestMedia;
 use App\Models\DubbingTestSubmission;
+use App\Models\DubbingTestSubmissionMedia;
 use App\Models\Organization;
 use App\Models\OrganizationMember;
 use App\Models\User;
@@ -20,6 +21,320 @@ use Tests\TestCase;
 class DubbingTestApiTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_organization_tests_lists_all_for_manager_and_filters_for_non_manager(): void
+    {
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+        $outsider = User::factory()->create();
+
+        $organization = $this->createOrganizationWithOwner($owner, 'org-tests-list', 'Org Tests List');
+        $this->addActiveMember($organization, $member, 'member');
+
+        $draftInternal = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Draft interno',
+            'visibility' => 'internal',
+            'status' => 'draft',
+        ]);
+        $publishedExternal = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Published externo',
+            'visibility' => 'external',
+            'status' => 'published',
+        ]);
+        $publishedInternal = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Published interno',
+            'visibility' => 'internal',
+            'status' => 'published',
+        ]);
+        $closedExternal = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Closed externo',
+            'visibility' => 'external',
+            'status' => 'closed',
+        ]);
+        $resultsExternal = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Results externo',
+            'visibility' => 'external',
+            'status' => 'results_released',
+        ]);
+        $archivedExternal = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Archived externo',
+            'visibility' => 'external',
+            'status' => 'archived',
+        ]);
+
+        $ownerResponse = $this->withHeaders($this->authHeaders($owner))
+            ->getJson("/api/v1/organizations/{$organization->slug}/dubbing-tests?per_page=50")
+            ->assertOk();
+
+        $ownerIds = collect($ownerResponse->json('data'))->pluck('id')->all();
+        $this->assertContains($draftInternal->id, $ownerIds);
+        $this->assertContains($publishedExternal->id, $ownerIds);
+        $this->assertContains($publishedInternal->id, $ownerIds);
+        $this->assertContains($closedExternal->id, $ownerIds);
+        $this->assertContains($resultsExternal->id, $ownerIds);
+        $this->assertContains($archivedExternal->id, $ownerIds);
+
+        $outsiderResponse = $this->withHeaders($this->authHeaders($outsider))
+            ->getJson("/api/v1/organizations/{$organization->slug}/dubbing-tests?per_page=50")
+            ->assertOk();
+
+        $outsiderIds = collect($outsiderResponse->json('data'))->pluck('id')->all();
+        $this->assertContains($publishedExternal->id, $outsiderIds);
+        $this->assertContains($closedExternal->id, $outsiderIds);
+        $this->assertContains($resultsExternal->id, $outsiderIds);
+        $this->assertNotContains($draftInternal->id, $outsiderIds);
+        $this->assertNotContains($publishedInternal->id, $outsiderIds);
+        $this->assertNotContains($archivedExternal->id, $outsiderIds);
+    }
+
+    public function test_show_endpoint_respects_visibility_and_status_rules(): void
+    {
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+        $outsider = User::factory()->create();
+
+        $organization = $this->createOrganizationWithOwner($owner, 'org-show-rules', 'Org Show Rules', false);
+        $this->addActiveMember($organization, $member, 'member');
+
+        $internalPublished = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Interno publicado',
+            'visibility' => 'internal',
+            'status' => 'published',
+        ]);
+        $internalDraft = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Interno draft',
+            'visibility' => 'internal',
+            'status' => 'draft',
+        ]);
+        $externalPublished = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Externo publicado',
+            'visibility' => 'external',
+            'status' => 'published',
+        ]);
+        $externalDraft = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Externo draft',
+            'visibility' => 'external',
+            'status' => 'draft',
+        ]);
+
+        $this->withHeaders($this->authHeaders($outsider))
+            ->getJson("/api/v1/dubbing-tests/{$internalPublished->id}")
+            ->assertStatus(403);
+
+        $this->withHeaders($this->authHeaders($member))
+            ->getJson("/api/v1/dubbing-tests/{$internalPublished->id}")
+            ->assertOk()
+            ->assertJsonPath('dubbing_test.id', $internalPublished->id);
+
+        $this->withHeaders($this->authHeaders($member))
+            ->getJson("/api/v1/dubbing-tests/{$internalDraft->id}")
+            ->assertStatus(403);
+
+        $this->withHeaders($this->authHeaders($owner))
+            ->getJson("/api/v1/dubbing-tests/{$internalDraft->id}")
+            ->assertOk()
+            ->assertJsonPath('dubbing_test.id', $internalDraft->id);
+
+        $this->withHeaders($this->authHeaders($outsider))
+            ->getJson("/api/v1/dubbing-tests/{$externalPublished->id}")
+            ->assertOk()
+            ->assertJsonPath('dubbing_test.id', $externalPublished->id);
+
+        $this->withHeaders($this->authHeaders($outsider))
+            ->getJson("/api/v1/dubbing-tests/{$externalDraft->id}")
+            ->assertStatus(403);
+    }
+
+    public function test_opportunities_endpoint_applies_query_and_appearance_filters(): void
+    {
+        $owner = User::factory()->create();
+        $viewer = User::factory()->create();
+
+        $organization = $this->createOrganizationWithOwner($owner, 'org-opportunity-filters', 'Org Opportunity Filters');
+
+        $matching = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Naruto casting aberto',
+            'visibility' => 'external',
+            'status' => 'published',
+        ]);
+        DubbingTestCharacter::create([
+            'dubbing_test_id' => $matching->id,
+            'name' => 'Naruto',
+            'appearance_estimate' => 'protagonista',
+            'position' => 0,
+        ]);
+
+        $wrongAppearance = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Naruto coadjuvante',
+            'visibility' => 'external',
+            'status' => 'published',
+        ]);
+        DubbingTestCharacter::create([
+            'dubbing_test_id' => $wrongAppearance->id,
+            'name' => 'Shikamaru',
+            'appearance_estimate' => 'coadjuvante',
+            'position' => 0,
+        ]);
+
+        $expired = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Naruto expirado',
+            'visibility' => 'external',
+            'status' => 'published',
+            'starts_at' => now()->subDays(5),
+            'ends_at' => now()->subDay(),
+            'results_release_at' => now()->addDay(),
+        ]);
+        DubbingTestCharacter::create([
+            'dubbing_test_id' => $expired->id,
+            'name' => 'Kakashi',
+            'appearance_estimate' => 'protagonista',
+            'position' => 0,
+        ]);
+
+        $response = $this->withHeaders($this->authHeaders($viewer))
+            ->getJson('/api/v1/dubbing-tests/opportunities?q=Naruto&appearance=protagonista&visibility=external')
+            ->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id')->all();
+        $this->assertContains($matching->id, $ids);
+        $this->assertNotContains($wrongAppearance->id, $ids);
+        $this->assertNotContains($expired->id, $ids);
+    }
+
+    public function test_list_submissions_requires_manager_role_and_returns_submission_payload(): void
+    {
+        Storage::fake('local');
+
+        $owner = User::factory()->create();
+        $candidate = User::factory()->create();
+        $outsider = User::factory()->create();
+
+        $organization = $this->createOrganizationWithOwner($owner, 'org-list-submissions', 'Org List Submissions');
+
+        $test = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Teste lista inscrições',
+            'visibility' => 'external',
+            'status' => 'published',
+        ]);
+
+        $character = DubbingTestCharacter::create([
+            'dubbing_test_id' => $test->id,
+            'name' => 'Personagem 1',
+            'appearance_estimate' => 'coadjuvante',
+            'position' => 0,
+        ]);
+
+        $submission = DubbingTestSubmission::create([
+            'dubbing_test_id' => $test->id,
+            'character_id' => $character->id,
+            'user_id' => $candidate->id,
+            'cover_letter' => 'Minha demo',
+            'status' => 'submitted',
+            'visible_to_candidate_at' => null,
+        ]);
+
+        $mediaPath = "dubbing-tests/{$test->id}/submissions/{$submission->id}/voice.mp3";
+        Storage::disk('local')->put($mediaPath, 'voice');
+
+        DubbingTestSubmissionMedia::create([
+            'submission_id' => $submission->id,
+            'media_path' => $mediaPath,
+            'media_type' => 'audio',
+            'disk' => 'local',
+            'size_bytes' => 5,
+        ]);
+
+        $this->withHeaders($this->authHeaders($owner))
+            ->getJson("/api/v1/organizations/{$organization->slug}/dubbing-tests/{$test->id}/submissions")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $submission->id)
+            ->assertJsonPath('data.0.user.id', $candidate->id)
+            ->assertJsonPath('data.0.character.id', $character->id);
+
+        $this->withHeaders($this->authHeaders($outsider))
+            ->getJson("/api/v1/organizations/{$organization->slug}/dubbing-tests/{$test->id}/submissions")
+            ->assertStatus(403);
+    }
+
+    public function test_destroy_requires_manager_and_removes_all_related_files_and_records_audit(): void
+    {
+        Storage::fake('local');
+
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+        $candidate = User::factory()->create();
+
+        $organization = $this->createOrganizationWithOwner($owner, 'org-destroy-test', 'Org Destroy Test');
+        $this->addActiveMember($organization, $member, 'member');
+
+        $test = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Teste para remover',
+            'visibility' => 'external',
+            'status' => 'results_released',
+        ]);
+
+        $character = DubbingTestCharacter::create([
+            'dubbing_test_id' => $test->id,
+            'name' => 'Ken',
+            'appearance_estimate' => 'protagonista',
+            'position' => 0,
+        ]);
+
+        $briefPath = "dubbing-tests/{$test->id}/brief/brief.mp3";
+        Storage::disk('local')->put($briefPath, 'brief');
+
+        DubbingTestMedia::create([
+            'dubbing_test_id' => $test->id,
+            'media_path' => $briefPath,
+            'media_type' => 'audio',
+            'disk' => 'local',
+            'size_bytes' => 5,
+            'sort_order' => 0,
+        ]);
+
+        $submission = DubbingTestSubmission::create([
+            'dubbing_test_id' => $test->id,
+            'character_id' => $character->id,
+            'user_id' => $candidate->id,
+            'cover_letter' => 'Envio',
+            'status' => 'submitted',
+            'visible_to_candidate_at' => null,
+        ]);
+
+        $submissionPath = "dubbing-tests/{$test->id}/submissions/{$submission->id}/candidate.mp3";
+        Storage::disk('local')->put($submissionPath, 'candidate');
+
+        DubbingTestSubmissionMedia::create([
+            'submission_id' => $submission->id,
+            'media_path' => $submissionPath,
+            'media_type' => 'audio',
+            'disk' => 'local',
+            'size_bytes' => 9,
+        ]);
+
+        $this->withHeaders($this->authHeaders($member))
+            ->deleteJson("/api/v1/organizations/{$organization->slug}/dubbing-tests/{$test->id}")
+            ->assertStatus(403);
+
+        Storage::disk('local')->assertExists($briefPath);
+        Storage::disk('local')->assertExists($submissionPath);
+
+        $this->withHeaders($this->authHeaders($owner))
+            ->deleteJson("/api/v1/organizations/{$organization->slug}/dubbing-tests/{$test->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Teste de dublagem removido com sucesso.');
+
+        $this->assertSoftDeleted('dubbing_tests', ['id' => $test->id]);
+
+        Storage::disk('local')->assertMissing($briefPath);
+        Storage::disk('local')->assertMissing($submissionPath);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'dubbing_test_deleted',
+            'organization_id' => $organization->id,
+            'actor_user_id' => $owner->id,
+        ]);
+    }
 
     public function test_creation_rejects_unsupported_media_type(): void
     {
@@ -695,5 +1010,59 @@ class DubbingTestApiTest extends TestCase
             'organization_id' => $organization->id,
             'actor_user_id' => $owner->id,
         ]);
+    }
+
+    private function createOrganizationWithOwner(User $owner, string $slug, string $name, bool $isPublic = true): Organization
+    {
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => $name,
+            'slug' => $slug,
+            'is_public' => $isPublic,
+        ]);
+
+        $this->addActiveMember($organization, $owner, 'owner');
+
+        return $organization;
+    }
+
+    private function addActiveMember(Organization $organization, User $user, string $role): void
+    {
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $user->id,
+            'role' => $role,
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function authHeaders(User $user): array
+    {
+        return [
+            'Authorization' => 'Bearer '.auth('api')->login($user),
+            'Accept' => 'application/json',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $overrides
+     */
+    private function createDubbingTest(Organization $organization, User $creator, array $overrides = []): DubbingTest
+    {
+        return DubbingTest::create(array_merge([
+            'organization_id' => $organization->id,
+            'created_by_user_id' => $creator->id,
+            'title' => 'Teste '.uniqid(),
+            'description' => 'Descrição',
+            'visibility' => 'external',
+            'status' => 'published',
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+            'results_release_at' => now()->addDays(2),
+        ], $overrides));
     }
 }
