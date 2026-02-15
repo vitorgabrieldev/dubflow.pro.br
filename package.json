@@ -4,7 +4,8 @@
     "type": "module",
     "scripts": {
         "build": "npm --prefix frontend run build",
-        "dev": "npm --prefix frontend run dev"
+        "dev": "npm --prefix frontend run dev",
+        "test": "npm --prefix frontend run test:e2e -- --ui"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
