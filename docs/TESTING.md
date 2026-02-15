@@ -7,13 +7,17 @@
 
 ## Requisitos Locais
 - PHP 8.3+
-- Extensao `pdo_sqlite` habilitada para suite em memoria
+- Extensao `pdo_mysql` habilitada
+- Banco MySQL de testes dedicado (`studiodublagem_tests`)
 - Node 22+
 
 ## Comandos
 ```bash
+# preparar banco de testes (migrate + seed)
+php artisan migrate:fresh --seed --env=testing
+
 # backend
-php artisan test
+php artisan test --env=testing
 
 # frontend
 cd frontend
@@ -35,21 +39,21 @@ npm run test:e2e
   - e2e smoke
 
 ## Diagnostico Rapido
-- `could not find driver sqlite`: instalar `pdo_sqlite`.
+- `could not find driver mysql`: instalar `pdo_mysql`.
 - erro de Node: usar `nvm use 22`.
 
-### Linux (pdo_sqlite)
+### Linux (pdo_mysql)
 ```bash
 # Ubuntu/Debian (PHP 8.3)
 sudo apt update
-sudo apt install -y php8.3-sqlite3
+sudo apt install -y php8.3-mysql
 
 # Arch
-sudo pacman -S php-sqlite
+sudo pacman -S php
 ```
 
 Depois:
 ```bash
-php -m | grep -i sqlite
-php artisan test
+php -m | grep -i pdo_mysql
+php artisan test --env=testing
 ```

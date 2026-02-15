@@ -13,6 +13,19 @@ jobs:
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: studiodublagem_tests
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,12 +49,16 @@ jobs:
 
       - name: Prepare test env
         run: |
-          cp .env.example .env
-          php artisan key:generate
-          php artisan jwt:secret --force
+          cp .env.testing.example .env.testing
+          sed -i 's/^DB_HOST=.*/DB_HOST=127.0.0.1/' .env.testing
+          sed -i 's/^DB_PORT=.*/DB_PORT=3306/' .env.testing
+          sed -i 's/^DB_USERNAME=.*/DB_USERNAME=root/' .env.testing
+          sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=/' .env.testing
+          php artisan key:generate --env=testing --force
+          php artisan jwt:secret --force --env=testing
 
       - name: Run backend tests
-        run: php artisan test --parallel --coverage-text
+        run: php artisan test --env=testing --parallel --coverage-text
 
   frontend-quality:
     name: Frontend Lint + Build
@@ -95,4 +112,3 @@ jobs:
 
       - name: Run e2e smoke tests
         run: npm run test:e2e
-
