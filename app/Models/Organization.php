@@ -76,6 +76,11 @@ class Organization extends Model
         return $this->hasMany(OrganizationInvite::class);
     }
 
+    public function dubbingTests(): HasMany
+    {
+        return $this->hasMany(DubbingTest::class);
+    }
+
     public function recalculateVerification(): void
     {
         $playlistCount = $this->playlists()->count();

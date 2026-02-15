@@ -14,6 +14,7 @@ class MediaAccess
     private const PROTECTED_PREFIXES = [
         'dubbing-media/',
         'dubbing-thumbnails/',
+        'dubbing-tests/',
     ];
 
     public static function isProtectedPath(?string $path): bool

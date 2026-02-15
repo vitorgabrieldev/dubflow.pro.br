@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\DubbingTestController;
 use App\Http\Controllers\Api\V1\MediaController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OrganizationController;
@@ -37,6 +38,7 @@ Route::prefix('v1')->group(function () {
 
     Route::get('/organizations', [OrganizationController::class, 'index']);
     Route::get('/organizations/{organization}', [OrganizationController::class, 'show']);
+    Route::get('/organizations/{organization}/dubbing-tests', [DubbingTestController::class, 'organizationTests']);
     Route::get('/playlists', [PlaylistController::class, 'globalIndex']);
     Route::get('/organizations/{organization}/playlists', [PlaylistController::class, 'index']);
     Route::get('/organizations/{organization}/playlists/{playlist}', [PlaylistController::class, 'show']);
@@ -49,6 +51,7 @@ Route::prefix('v1')->group(function () {
 
     Route::middleware(['auth:api', 'throttle:120,1'])->group(function () {
         Route::get('/my-organizations', [OrganizationController::class, 'myOrganizations']);
+        Route::get('/dubbing-tests/opportunities', [DubbingTestController::class, 'opportunities']);
         Route::get('/publish/options', [PublishOptionsController::class, 'index']);
         Route::post('/organizations', [OrganizationController::class, 'store']);
         Route::patch('/organizations/{organization}', [OrganizationController::class, 'update']);
@@ -80,6 +83,18 @@ Route::prefix('v1')->group(function () {
         Route::delete('/organizations/{organization}/playlists/{playlist}', [PlaylistController::class, 'destroy']);
 
         Route::post('/organizations/{organization}/posts', [PostController::class, 'store']);
+        Route::post('/organizations/{organization}/dubbing-tests', [DubbingTestController::class, 'store']);
+        Route::patch('/organizations/{organization}/dubbing-tests/{dubbingTest}', [DubbingTestController::class, 'update']);
+        Route::delete('/organizations/{organization}/dubbing-tests/{dubbingTest}', [DubbingTestController::class, 'destroy']);
+        Route::get('/organizations/{organization}/dubbing-tests/{dubbingTest}/submissions', [DubbingTestController::class, 'listSubmissions']);
+        Route::patch('/organizations/{organization}/dubbing-tests/{dubbingTest}/submissions/{submission}/review', [DubbingTestController::class, 'reviewSubmission']);
+        Route::patch('/organizations/{organization}/dubbing-tests/{dubbingTest}/submissions/{submission}/feedback', [DubbingTestController::class, 'saveRejectionFeedback']);
+        Route::post('/organizations/{organization}/dubbing-tests/{dubbingTest}/conclude-selection', [DubbingTestController::class, 'concludeSelection']);
+
+        Route::get('/dubbing-tests/{dubbingTest}', [DubbingTestController::class, 'show']);
+        Route::post('/dubbing-tests/{dubbingTest}/submissions', [DubbingTestController::class, 'submit']);
+        Route::get('/dubbing-tests/{dubbingTest}/my-submissions', [DubbingTestController::class, 'mySubmissions']);
+
         Route::patch('/posts/{post}', [PostController::class, 'update']);
         Route::delete('/posts/{post}', [PostController::class, 'destroy']);
 

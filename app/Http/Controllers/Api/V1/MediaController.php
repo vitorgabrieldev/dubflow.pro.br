@@ -68,7 +68,11 @@ class MediaController extends Controller
             'Content-Type' => $mimeType,
             'Content-Length' => (string) $length,
             'Accept-Ranges' => 'bytes',
-            'Content-Disposition' => 'inline; filename="'.basename($normalizedPath).'"',
+            'Content-Disposition' => sprintf(
+                '%s; filename="%s"',
+                $this->isInlineRenderableMime($mimeType) ? 'inline' : 'attachment',
+                basename($normalizedPath)
+            ),
             'Cache-Control' => $isProtectedPath
                 ? 'private, max-age=300'
                 : 'public, max-age=31536000, immutable',
@@ -150,5 +154,12 @@ class MediaController extends Controller
         $end = min($end, $size - 1);
 
         return [$start, $end];
+    }
+
+    private function isInlineRenderableMime(string $mimeType): bool
+    {
+        return str_starts_with($mimeType, 'image/')
+            || str_starts_with($mimeType, 'video/')
+            || str_starts_with($mimeType, 'audio/');
     }
 }

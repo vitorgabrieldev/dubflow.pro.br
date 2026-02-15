@@ -130,6 +130,16 @@ class User extends Authenticatable implements JWTSubject
         return $this->hasMany(OrganizationInvite::class, 'created_by_user_id');
     }
 
+    public function createdDubbingTests(): HasMany
+    {
+        return $this->hasMany(DubbingTest::class, 'created_by_user_id');
+    }
+
+    public function dubbingTestSubmissions(): HasMany
+    {
+        return $this->hasMany(DubbingTestSubmission::class);
+    }
+
     public function getJWTIdentifier(): mixed
     {
         return $this->getKey();
