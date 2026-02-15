@@ -50,13 +50,17 @@ class OrganizationController extends Controller
         }
 
         $visibility = $request->string('visibility')->toString();
+        $discoverPrivate = $request->boolean('discover_private');
         if ($user) {
-            $query->where(function ($builder) use ($user, $visibility) {
+            $query->where(function ($builder) use ($user, $visibility, $discoverPrivate) {
                 if ($visibility === 'private') {
-                    $builder->where('is_public', false)
-                        ->whereHas('members', fn ($memberBuilder) => $memberBuilder
+                    $builder->where('is_public', false);
+
+                    if (! $discoverPrivate) {
+                        $builder->whereHas('members', fn ($memberBuilder) => $memberBuilder
                             ->where('user_id', $user->id)
                             ->where('status', 'active'));
+                    }
 
                     return;
                 }
@@ -67,13 +71,19 @@ class OrganizationController extends Controller
                     return;
                 }
 
+                if ($discoverPrivate) {
+                    return;
+                }
+
                 $builder->where('is_public', true)
                     ->orWhereHas('members', fn ($memberBuilder) => $memberBuilder
                         ->where('user_id', $user->id)
                         ->where('status', 'active'));
             });
         } else {
-            $query->where('is_public', true);
+            if (! $discoverPrivate) {
+                $query->where('is_public', true);
+            }
         }
 
         if ($user && $request->boolean('only_joined')) {
@@ -173,10 +183,6 @@ class OrganizationController extends Controller
     {
         $user = auth('api')->user();
 
-        if (! $organization->is_public && (! $user || ! OrganizationAccess::isActiveMember($user, $organization))) {
-            abort(403, 'Organizacao privada.');
-        }
-
         $isMember = $user ? OrganizationAccess::isActiveMember($user, $organization) : false;
 
         $organization->load([
@@ -218,6 +224,7 @@ class OrganizationController extends Controller
             'membership_status' => null,
             'role' => null,
             'can_request_join' => false,
+            'can_view' => true,
         ];
 
         if ($user) {
@@ -253,7 +260,7 @@ class OrganizationController extends Controller
                 ->where('status', 'banned')
                 ->exists();
 
-            $viewer['can_request_join'] = ! $organization->is_public && ! $viewer['membership_status'] && ! $isBanned;
+            $viewer['can_request_join'] = (bool) $organization->is_public && ! $viewer['membership_status'] && ! $isBanned;
         }
 
         return response()->json([
@@ -331,10 +338,6 @@ class OrganizationController extends Controller
     {
         $user = auth('api')->user();
 
-        if (! $organization->is_public && ! OrganizationAccess::isActiveMember($user, $organization)) {
-            abort(403, 'Organizacao privada.');
-        }
-
         OrganizationFollow::query()->firstOrCreate([
             'organization_id' => $organization->id,
             'user_id' => $user->id,
@@ -386,45 +389,8 @@ class OrganizationController extends Controller
             abort(403, 'Você foi banido desta comunidade.');
         }
 
-        if ($organization->is_public) {
-            if ($existing?->status === 'active') {
-                return response()->json(['message' => 'Voce ja faz parte desta organizacao.']);
-            }
-
-            if ($existing) {
-                $existing->update([
-                    'status' => 'active',
-                    'role' => $existing->role ?: 'member',
-                    'source' => 'self_join_public',
-                    'requested_by_user_id' => $user->id,
-                    'approved_by_user_id' => $user->id,
-                    'joined_at' => now(),
-                    'approved_at' => now(),
-                ]);
-            } else {
-                OrganizationMember::create([
-                    'organization_id' => $organization->id,
-                    'user_id' => $user->id,
-                    'role' => 'member',
-                    'status' => 'active',
-                    'source' => 'self_join_public',
-                    'requested_by_user_id' => $user->id,
-                    'approved_by_user_id' => $user->id,
-                    'joined_at' => now(),
-                    'approved_at' => now(),
-                ]);
-            }
-
-            Log::channel('audit')->info('organization_joined_public', [
-                'organization_id' => $organization->id,
-                'user_id' => $user->id,
-            ]);
-
-            return response()->json(['message' => 'Voce entrou na organizacao com sucesso.']);
-        }
-
-        if ($existing?->status === 'pending') {
-            return response()->json(['message' => 'Solicitacao de entrada ja enviada.']);
+        if (! $organization->is_public) {
+            abort(403, 'Comunidades privadas aceitam entrada apenas por convite.');
         }
 
         if ($existing?->status === 'active') {
@@ -433,34 +399,34 @@ class OrganizationController extends Controller
 
         if ($existing) {
             $existing->update([
-                'status' => 'pending',
+                'status' => 'active',
                 'role' => $existing->role ?: 'member',
-                'source' => 'join_request',
-                'invited_by_user_id' => null,
+                'source' => 'self_join_public',
                 'requested_by_user_id' => $user->id,
-                'approved_by_user_id' => null,
-                'joined_at' => null,
-                'approved_at' => null,
+                'approved_by_user_id' => $user->id,
+                'joined_at' => now(),
+                'approved_at' => now(),
             ]);
         } else {
             OrganizationMember::create([
                 'organization_id' => $organization->id,
                 'user_id' => $user->id,
                 'role' => 'member',
-                'status' => 'pending',
-                'source' => 'join_request',
-                'invited_by_user_id' => null,
+                'status' => 'active',
+                'source' => 'self_join_public',
                 'requested_by_user_id' => $user->id,
-                'joined_at' => null,
+                'approved_by_user_id' => $user->id,
+                'joined_at' => now(),
+                'approved_at' => now(),
             ]);
         }
 
-        Log::channel('audit')->info('organization_join_requested', [
+        Log::channel('audit')->info('organization_joined_public', [
             'organization_id' => $organization->id,
             'user_id' => $user->id,
         ]);
 
-        return response()->json(['message' => 'Solicitacao de entrada enviada.']);
+        return response()->json(['message' => 'Voce entrou na organizacao com sucesso.']);
     }
 
     private function attachViewerState(Collection $organizations, ?int $userId): void
@@ -476,6 +442,7 @@ class OrganizationController extends Controller
                     'membership_status' => null,
                     'role' => null,
                     'can_request_join' => false,
+                    'can_view' => true,
                 ]);
             });
 
@@ -519,7 +486,8 @@ class OrganizationController extends Controller
                 'is_following' => $followed->has($organization->id),
                 'membership_status' => $role ? 'active' : ($isPending ? 'pending' : null),
                 'role' => $role,
-                'can_request_join' => ! $organization->is_public && ! $role && ! $isPending && ! $isBanned,
+                'can_request_join' => (bool) $organization->is_public && ! $role && ! $isPending && ! $isBanned,
+                'can_view' => true,
             ]);
         });
     }

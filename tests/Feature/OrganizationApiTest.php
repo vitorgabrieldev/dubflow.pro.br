@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Organization;
 use App\Models\OrganizationInvite;
 use App\Models\OrganizationMember;
+use App\Models\Playlist;
 use App\Models\User;
 use App\Notifications\OrganizationMemberInvited;
 use App\Notifications\OrganizationMemberInviteResponded;
@@ -47,6 +48,129 @@ class OrganizationApiTest extends TestCase
         $this->assertDatabaseHas('organization_follows', [
             'user_id' => $follower->id,
         ]);
+    }
+
+    public function test_private_communities_are_listed_only_when_discover_private_is_enabled(): void
+    {
+        $owner = User::factory()->create();
+
+        Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Community Public',
+            'slug' => 'community-public',
+            'is_public' => true,
+        ]);
+
+        Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Community Private',
+            'slug' => 'community-private',
+            'is_public' => false,
+        ]);
+
+        $defaultListing = $this->getJson('/api/v1/organizations?per_page=50');
+        $defaultListing->assertOk();
+
+        $defaultSlugs = collect($defaultListing->json('data'))->pluck('slug');
+        $this->assertTrue($defaultSlugs->contains('community-public'));
+        $this->assertFalse($defaultSlugs->contains('community-private'));
+
+        $discoverListing = $this->getJson('/api/v1/organizations?discover_private=1&per_page=50');
+        $discoverListing->assertOk();
+
+        $discoverSlugs = collect($discoverListing->json('data'))->pluck('slug');
+        $this->assertTrue($discoverSlugs->contains('community-public'));
+        $this->assertTrue($discoverSlugs->contains('community-private'));
+
+        $viewer = User::factory()->create();
+        $viewerToken = auth('api')->login($viewer);
+
+        $authDiscoverListing = $this->withHeaders([
+            'Authorization' => 'Bearer '.$viewerToken,
+            'Accept' => 'application/json',
+        ])->getJson('/api/v1/organizations?discover_private=1&per_page=50');
+
+        $authDiscoverListing->assertOk();
+
+        $authDiscoverSlugs = collect($authDiscoverListing->json('data'))->pluck('slug');
+        $this->assertTrue($authDiscoverSlugs->contains('community-public'));
+        $this->assertTrue($authDiscoverSlugs->contains('community-private'));
+    }
+
+    public function test_user_can_follow_private_community_and_can_open_it_but_cannot_self_join(): void
+    {
+        $owner = User::factory()->create();
+        $follower = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Followable Private',
+            'slug' => 'followable-private',
+            'is_public' => false,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $followerToken = auth('api')->login($follower);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$followerToken,
+            'Accept' => 'application/json',
+        ])->postJson("/api/v1/organizations/{$organization->slug}/follow")
+            ->assertOk();
+
+        $this->assertDatabaseHas('organization_follows', [
+            'organization_id' => $organization->id,
+            'user_id' => $follower->id,
+        ]);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$followerToken,
+            'Accept' => 'application/json',
+        ])->getJson("/api/v1/organizations/{$organization->slug}")
+            ->assertOk()
+            ->assertJsonPath('viewer.can_request_join', false);
+    }
+
+    public function test_private_community_playlists_are_viewable_for_non_members(): void
+    {
+        $owner = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Private Viewable Org',
+            'slug' => 'private-viewable-org',
+            'is_public' => false,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $playlist = Playlist::create([
+            'organization_id' => $organization->id,
+            'title' => 'Playlist Publica',
+            'slug' => 'playlist-publica',
+            'visibility' => 'public',
+        ]);
+
+        $this->getJson("/api/v1/organizations/{$organization->slug}/playlists")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $playlist->id);
+
+        $this->getJson("/api/v1/organizations/{$organization->slug}/playlists/{$playlist->id}")
+            ->assertOk()
+            ->assertJsonPath('playlist.id', $playlist->id);
     }
 
     public function test_owner_can_create_invite_and_member_can_accept(): void
@@ -105,16 +229,16 @@ class OrganizationApiTest extends TestCase
         $this->assertSame(1, $invite->uses_count);
     }
 
-    public function test_private_join_request_cannot_be_self_accepted_via_invite_endpoint(): void
+    public function test_user_can_join_public_community_via_join_endpoint(): void
     {
         $owner = User::factory()->create();
-        $requester = User::factory()->create();
+        $member = User::factory()->create();
 
         $organization = Organization::create([
             'owner_user_id' => $owner->id,
-            'name' => 'Private Join Org',
-            'slug' => 'private-join-org',
-            'is_public' => false,
+            'name' => 'Public Join Org',
+            'slug' => 'public-join-org',
+            'is_public' => true,
         ]);
 
         OrganizationMember::create([
@@ -125,29 +249,23 @@ class OrganizationApiTest extends TestCase
             'joined_at' => now(),
         ]);
 
-        $requesterToken = auth('api')->login($requester);
+        $memberToken = auth('api')->login($member);
 
         $this->withHeaders([
-            'Authorization' => 'Bearer '.$requesterToken,
+            'Authorization' => 'Bearer '.$memberToken,
             'Accept' => 'application/json',
         ])->postJson("/api/v1/organizations/{$organization->slug}/join-request")
             ->assertOk();
 
-        $this->withHeaders([
-            'Authorization' => 'Bearer '.$requesterToken,
-            'Accept' => 'application/json',
-        ])->postJson("/api/v1/organizations/{$organization->slug}/members/accept")
-            ->assertStatus(422);
-
         $this->assertDatabaseHas('organization_members', [
             'organization_id' => $organization->id,
-            'user_id' => $requester->id,
-            'status' => 'pending',
-            'source' => 'join_request',
+            'user_id' => $member->id,
+            'status' => 'active',
+            'source' => 'self_join_public',
         ]);
     }
 
-    public function test_owner_can_approve_private_join_request(): void
+    public function test_private_community_cannot_be_joined_via_join_endpoint(): void
     {
         $owner = User::factory()->create();
         $requester = User::factory()->create();
@@ -172,66 +290,13 @@ class OrganizationApiTest extends TestCase
             'Authorization' => 'Bearer '.$requesterToken,
             'Accept' => 'application/json',
         ])->postJson("/api/v1/organizations/{$organization->slug}/join-request")
-            ->assertOk();
+            ->assertStatus(403);
 
-        $ownerToken = auth('api')->login($owner);
-        $this->withHeaders([
-            'Authorization' => 'Bearer '.$ownerToken,
-            'Accept' => 'application/json',
-        ])->postJson("/api/v1/organizations/{$organization->slug}/join-requests/{$requester->id}/approve")
-            ->assertOk()
-            ->assertJsonPath('member.status', 'active');
-
-        $this->assertDatabaseHas('organization_members', [
+        $this->assertDatabaseMissing('organization_members', [
             'organization_id' => $organization->id,
             'user_id' => $requester->id,
-            'status' => 'active',
+            'status' => 'pending',
             'source' => 'join_request',
-            'approved_by_user_id' => $owner->id,
-        ]);
-    }
-
-    public function test_owner_can_reject_private_join_request(): void
-    {
-        $owner = User::factory()->create();
-        $requester = User::factory()->create();
-
-        $organization = Organization::create([
-            'owner_user_id' => $owner->id,
-            'name' => 'Reject Join Org',
-            'slug' => 'reject-join-org',
-            'is_public' => false,
-        ]);
-
-        OrganizationMember::create([
-            'organization_id' => $organization->id,
-            'user_id' => $owner->id,
-            'role' => 'owner',
-            'status' => 'active',
-            'joined_at' => now(),
-        ]);
-
-        $requesterToken = auth('api')->login($requester);
-        $this->withHeaders([
-            'Authorization' => 'Bearer '.$requesterToken,
-            'Accept' => 'application/json',
-        ])->postJson("/api/v1/organizations/{$organization->slug}/join-request")
-            ->assertOk();
-
-        $ownerToken = auth('api')->login($owner);
-        $this->withHeaders([
-            'Authorization' => 'Bearer '.$ownerToken,
-            'Accept' => 'application/json',
-        ])->postJson("/api/v1/organizations/{$organization->slug}/join-requests/{$requester->id}/reject")
-            ->assertOk()
-            ->assertJsonPath('member.status', 'rejected');
-
-        $this->assertDatabaseHas('organization_members', [
-            'organization_id' => $organization->id,
-            'user_id' => $requester->id,
-            'status' => 'rejected',
-            'source' => 'join_request',
-            'approved_by_user_id' => $owner->id,
         ]);
     }
 

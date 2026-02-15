@@ -123,9 +123,6 @@ class PlaylistController extends Controller
             ->latest();
 
         $user = auth('api')->user();
-        if (! $organization->is_public && (! $user || ! OrganizationAccess::isActiveMember($user, $organization))) {
-            abort(403, 'Organizacao privada.');
-        }
 
         $query->where('visibility', 'public');
 
@@ -186,9 +183,6 @@ class PlaylistController extends Controller
         }
 
         $user = auth('api')->user();
-        if (! $organization->is_public && (! $user || ! OrganizationAccess::isActiveMember($user, $organization))) {
-            abort(403, 'Organizacao privada.');
-        }
 
         $playlist->loadCount(['posts', 'seasons']);
         $seasons = $playlist->seasons()
