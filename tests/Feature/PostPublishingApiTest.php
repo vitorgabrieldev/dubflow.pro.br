@@ -6,6 +6,7 @@ use App\Models\Organization;
 use App\Models\OrganizationMember;
 use App\Models\Playlist;
 use App\Models\User;
+use App\Notifications\CommentReplyReceived;
 use App\Notifications\OrganizationPostCommented;
 use App\Notifications\OrganizationPublishedPost;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -321,6 +322,70 @@ class PostPublishingApiTest extends TestCase
         Notification::assertSentTo($member, OrganizationPostCommented::class);
         Notification::assertSentTo($follower, OrganizationPostCommented::class);
         Notification::assertNotSentTo($commenter, OrganizationPostCommented::class);
+    }
+
+    public function test_comment_author_receives_notification_when_their_comment_gets_a_reply(): void
+    {
+        Storage::fake('public');
+        Notification::fake();
+
+        $owner = User::factory()->create();
+        $commentAuthor = User::factory()->create();
+        $replier = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Reply Notify Org',
+            'slug' => 'reply-notify-org',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $ownerToken = auth('api')->login($owner);
+        $postResponse = $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+        ])->post('/api/v1/organizations/'.$organization->slug.'/posts', [
+            'title' => 'Post para resposta de comentário',
+            'work_title' => 'Obra Z',
+            'language_code' => 'pt-BR',
+            'media_assets' => [
+                UploadedFile::fake()->create('episode.mp3', 128, 'audio/mpeg'),
+            ],
+        ]);
+        $postResponse->assertCreated();
+        $postId = (int) $postResponse->json('post.id');
+
+        Notification::fake();
+
+        $commentAuthorToken = auth('api')->login($commentAuthor);
+        $rootCommentResponse = $this->withHeaders([
+            'Authorization' => 'Bearer '.$commentAuthorToken,
+        ])->postJson("/api/v1/posts/{$postId}/comments", [
+            'body' => 'Comentário raiz do autor',
+        ]);
+        $rootCommentResponse->assertCreated();
+        $rootCommentId = (int) $rootCommentResponse->json('comment.id');
+
+        Notification::fake();
+
+        $replierToken = auth('api')->login($replier);
+        $replyResponse = $this->withHeaders([
+            'Authorization' => 'Bearer '.$replierToken,
+        ])->postJson("/api/v1/posts/{$postId}/comments", [
+            'body' => 'Resposta ao comentário raiz',
+            'parent_id' => $rootCommentId,
+        ]);
+        $replyResponse->assertCreated();
+
+        Notification::assertSentTo($commentAuthor, CommentReplyReceived::class);
+        Notification::assertNotSentTo($replier, CommentReplyReceived::class);
     }
 
     public function test_post_author_as_editor_can_edit_but_cannot_delete_and_loses_access_when_role_changes(): void

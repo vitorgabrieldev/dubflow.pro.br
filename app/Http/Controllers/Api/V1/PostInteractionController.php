@@ -9,6 +9,7 @@ use App\Models\PostCollaborator;
 use App\Models\PostLike;
 use App\Models\PostView;
 use App\Models\User;
+use App\Notifications\CommentReplyReceived;
 use App\Notifications\OrganizationPostCommented;
 use App\Notifications\OrganizationPublishedPost;
 use App\Notifications\PostCollaborationRequested;
@@ -82,15 +83,16 @@ class PostInteractionController extends Controller
             'parent_id' => ['nullable', 'integer', 'exists:comments,id'],
         ]);
 
+        $parentComment = null;
         if (! empty($validated['parent_id'])) {
-            $parent = Comment::query()->findOrFail($validated['parent_id']);
+            $parentComment = Comment::query()->findOrFail($validated['parent_id']);
 
-            if ($parent->post_id !== $post->id) {
+            if ($parentComment->post_id !== $post->id) {
                 abort(422, 'Comentario pai invalido para este post.');
             }
 
             // Limita a 2 niveis: resposta apenas em comentarios da raiz.
-            if ($parent->parent_id !== null) {
+            if ($parentComment->parent_id !== null) {
                 abort(422, 'Respostas so podem ser criadas em comentarios da raiz.');
             }
         }
@@ -109,6 +111,12 @@ class PostInteractionController extends Controller
             'parent_id' => $comment->parent_id,
         ]);
 
+        $this->notifyCommentOwnerAboutReply(
+            $post,
+            $parentComment,
+            $comment,
+            $user->stage_name ?: $user->name
+        );
         $this->notifyOrganizationMembersAboutComment($post, $comment, $user->stage_name ?: $user->name);
 
         return response()->json([
@@ -361,5 +369,27 @@ class PostInteractionController extends Controller
         foreach ($recipients as $recipient) {
             $recipient->notify(new OrganizationPostCommented($post, $authorName));
         }
+    }
+
+    private function notifyCommentOwnerAboutReply(
+        DubbingPost $post,
+        ?Comment $parentComment,
+        Comment $replyComment,
+        string $authorName
+    ): void {
+        if (! $parentComment) {
+            return;
+        }
+
+        if ($parentComment->user_id === $replyComment->user_id) {
+            return;
+        }
+
+        $recipient = User::query()->find($parentComment->user_id);
+        if (! $recipient) {
+            return;
+        }
+
+        $recipient->notify(new CommentReplyReceived($post, $parentComment, $replyComment, $authorName));
     }
 }
