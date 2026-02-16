@@ -21,11 +21,14 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class ChatController extends Controller
 {
     private const MAX_ATTACHMENT_SIZE_KB = 51200; // 50 MB
+    private const MAX_CONVERSATIONS_PER_PAGE = 40;
+    private const MAX_PENDING_BLOCKED_MESSAGES_PER_CONVERSATION = 120;
 
     /**
      * @var array<int, string>
@@ -51,9 +54,11 @@ class ChatController extends Controller
         'image/heif',
     ];
 
-    public function conversations(): JsonResponse
+    public function conversations(Request $request): JsonResponse
     {
         $viewer = auth('api')->user();
+        $perPage = max(1, min(self::MAX_CONVERSATIONS_PER_PAGE, (int) $request->integer('per_page', 20)));
+        $requestedPage = max(1, (int) $request->integer('page', 1));
 
         $participants = ChatConversationParticipant::query()
             ->where('user_id', $viewer->id)
@@ -171,8 +176,20 @@ class ChatController extends Controller
             })
             ->values();
 
+        $total = $items->count();
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        $currentPage = min($requestedPage, $lastPage);
+        $pagedItems = $items->forPage($currentPage, $perPage)->values();
+
         return response()->json([
-            'items' => $items,
+            'items' => $pagedItems,
+            'pagination' => [
+                'current_page' => $currentPage,
+                'per_page' => $perPage,
+                'last_page' => $lastPage,
+                'total' => $total,
+                'has_more' => $currentPage < $lastPage,
+            ],
         ]);
     }
 
@@ -315,6 +332,24 @@ class ChatController extends Controller
             abort(422, 'Envie um texto ou ao menos um anexo.');
         }
 
+        $recipientBlockedSender = ChatAccess::isBlockedBy($recipient->id, $viewer->id);
+        if ($recipientBlockedSender) {
+            if ($files->isNotEmpty()) {
+                abort(422, 'Envio de anexos indisponível enquanto este usuário mantém você bloqueado.');
+            }
+
+            $pendingBlockedMessages = ChatMessage::query()
+                ->where('conversation_id', $conversation->id)
+                ->where('sender_user_id', $viewer->id)
+                ->where('recipient_user_id', $recipient->id)
+                ->whereNull('delivered_at')
+                ->count();
+
+            if ($pendingBlockedMessages >= self::MAX_PENDING_BLOCKED_MESSAGES_PER_CONVERSATION) {
+                abort(429, 'Limite de mensagens pendentes atingido nesta conversa bloqueada.');
+            }
+        }
+
         $message = DB::transaction(function () use ($conversation, $viewer, $recipient, $body, $files, $participant): ChatMessage {
             $message = ChatMessage::query()->create([
                 'conversation_id' => $conversation->id,
@@ -365,7 +400,6 @@ class ChatController extends Controller
             'message' => $this->transformMessage($message),
         ];
 
-        $recipientBlockedSender = ChatAccess::isBlockedBy($recipient->id, $viewer->id);
         if (! $recipientBlockedSender) {
             $this->broadcastSafely(new ChatMessageCreated($payload, $viewer->id, $recipient->id));
             $recipient->notify(new ChatMessageReceived($conversation, $message, $viewer));
@@ -520,14 +554,47 @@ class ChatController extends Controller
     {
         $viewer = auth('api')->user();
 
-        $participant = $this->ensureParticipant($viewer->id, $conversation);
-        $participant->forceFill([
-            'hidden_at' => now(),
-            'updated_at' => now(),
-        ])->save();
+        $this->ensureParticipant($viewer->id, $conversation);
+        $conversationId = (int) $conversation->id;
+
+        $attachmentPaths = ChatMessageAttachment::query()
+            ->whereIn('message_id', function ($query) use ($conversationId): void {
+                $query->select('id')
+                    ->from('chat_messages')
+                    ->where('conversation_id', $conversationId);
+            })
+            ->pluck('media_path')
+            ->filter(static fn ($path): bool => is_string($path) && trim($path) !== '')
+            ->values();
+
+        DB::transaction(function () use ($conversation, $conversationId): void {
+            $messageIds = ChatMessage::query()
+                ->where('conversation_id', $conversationId)
+                ->pluck('id');
+
+            if ($messageIds->isNotEmpty()) {
+                ChatMessageAttachment::query()
+                    ->whereIn('message_id', $messageIds)
+                    ->delete();
+            }
+
+            ChatMessage::query()
+                ->where('conversation_id', $conversationId)
+                ->delete();
+
+            ChatConversationParticipant::query()
+                ->where('conversation_id', $conversationId)
+                ->delete();
+
+            $conversation->delete();
+        });
+
+        if ($attachmentPaths->isNotEmpty()) {
+            Storage::disk('local')->delete($attachmentPaths->all());
+        }
 
         return response()->json([
-            'message' => 'Conversa removida da lista lateral.',
+            'message' => 'Conversa apagada com sucesso.',
         ]);
     }
 

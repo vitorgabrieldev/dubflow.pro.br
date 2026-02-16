@@ -6,6 +6,7 @@ use App\Models\ChatMessage;
 use App\Models\User;
 use App\Notifications\ChatMessageReceived;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
@@ -153,7 +154,106 @@ class ChatApiTest extends TestCase
             ->assertJsonCount(2, 'items');
     }
 
-    public function test_removed_sidebar_conversation_returns_after_new_message(): void
+    public function test_blocked_user_cannot_send_attachments_while_blocked(): void
+    {
+        $sender = User::factory()->create();
+        $recipient = User::factory()->create();
+
+        $conversation = $this->withHeaders($this->authHeaders($this->issueToken($sender)))
+            ->postJson("/api/v1/chat/conversations/with/{$recipient->id}")
+            ->assertOk()
+            ->json('conversation');
+
+        $conversationId = (int) ($conversation['id'] ?? 0);
+        $this->assertGreaterThan(0, $conversationId);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($recipient)))
+            ->postJson("/api/v1/chat/users/{$sender->id}/block")
+            ->assertOk();
+
+        $this->withHeaders($this->authHeaders($this->issueToken($sender)))
+            ->post("/api/v1/chat/conversations/{$conversationId}/messages", [
+                'body' => 'Tentando enviar arquivo',
+                'attachments' => [
+                    UploadedFile::fake()->image('chat.jpg'),
+                ],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Envio de anexos indisponível enquanto este usuário mantém você bloqueado.');
+
+        $this->assertDatabaseMissing('chat_messages', [
+            'conversation_id' => $conversationId,
+            'sender_user_id' => $sender->id,
+            'body' => 'Tentando enviar arquivo',
+        ]);
+    }
+
+    public function test_blocked_user_hits_pending_message_limit_when_blocked(): void
+    {
+        $sender = User::factory()->create();
+        $recipient = User::factory()->create();
+
+        $conversation = $this->withHeaders($this->authHeaders($this->issueToken($sender)))
+            ->postJson("/api/v1/chat/conversations/with/{$recipient->id}")
+            ->assertOk()
+            ->json('conversation');
+
+        $conversationId = (int) ($conversation['id'] ?? 0);
+        $this->assertGreaterThan(0, $conversationId);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($recipient)))
+            ->postJson("/api/v1/chat/users/{$sender->id}/block")
+            ->assertOk();
+
+        $baseTimestamp = now();
+        $rows = [];
+        for ($index = 0; $index < 120; $index++) {
+            $rows[] = [
+                'conversation_id' => $conversationId,
+                'sender_user_id' => $sender->id,
+                'recipient_user_id' => $recipient->id,
+                'body' => "Mensagem pendente {$index}",
+                'edited_at' => null,
+                'deleted_at' => null,
+                'delivered_at' => null,
+                'read_at' => null,
+                'created_at' => $baseTimestamp,
+                'updated_at' => $baseTimestamp,
+            ];
+        }
+        ChatMessage::query()->insert($rows);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($sender)))
+            ->postJson("/api/v1/chat/conversations/{$conversationId}/messages", [
+                'body' => 'Mensagem 121',
+            ])
+            ->assertStatus(429)
+            ->assertJsonPath('message', 'Limite de mensagens pendentes atingido nesta conversa bloqueada.');
+    }
+
+    public function test_conversations_endpoint_returns_paginated_payload(): void
+    {
+        $viewer = User::factory()->create();
+        $peers = User::factory()->count(6)->create();
+
+        foreach ($peers as $peer) {
+            $this->withHeaders($this->authHeaders($this->issueToken($viewer)))
+                ->postJson("/api/v1/chat/conversations/with/{$peer->id}")
+                ->assertOk();
+        }
+
+        $this->withHeaders($this->authHeaders($this->issueToken($viewer)))
+            ->getJson('/api/v1/chat/conversations?per_page=3&page=1')
+            ->assertOk()
+            ->assertJsonCount(3, 'items')
+            ->assertJsonPath('pagination.current_page', 1)
+            ->assertJsonPath('pagination.per_page', 3)
+            ->assertJsonPath('pagination.total', 6)
+            ->assertJsonPath('pagination.last_page', 2)
+            ->assertJsonPath('pagination.has_more', true);
+    }
+
+    public function test_remove_conversation_hard_deletes_messages_for_both_participants(): void
     {
         $firstUser = User::factory()->create();
         $secondUser = User::factory()->create();
@@ -164,6 +264,7 @@ class ChatApiTest extends TestCase
             ->json('conversation');
 
         $conversationId = (int) ($conversation['id'] ?? 0);
+        $this->assertGreaterThan(0, $conversationId);
 
         $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
             ->postJson("/api/v1/chat/conversations/{$conversationId}/messages", [
@@ -175,6 +276,16 @@ class ChatApiTest extends TestCase
             ->deleteJson("/api/v1/chat/conversations/{$conversationId}")
             ->assertOk();
 
+        $this->assertDatabaseMissing('chat_conversations', [
+            'id' => $conversationId,
+        ]);
+        $this->assertDatabaseMissing('chat_messages', [
+            'conversation_id' => $conversationId,
+        ]);
+        $this->assertDatabaseMissing('chat_conversation_participants', [
+            'conversation_id' => $conversationId,
+        ]);
+
         $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
             ->getJson('/api/v1/chat/conversations')
             ->assertOk()
@@ -182,15 +293,18 @@ class ChatApiTest extends TestCase
 
         $this->withHeaders($this->authHeaders($this->issueToken($secondUser)))
             ->postJson("/api/v1/chat/conversations/{$conversationId}/messages", [
-                'body' => 'Mensagem que reabre a conversa',
+                'body' => 'Mensagem após exclusão permanente',
             ])
-            ->assertCreated();
+            ->assertNotFound();
 
-        $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
-            ->getJson('/api/v1/chat/conversations')
+        $restartConversation = $this->withHeaders($this->authHeaders($this->issueToken($secondUser)))
+            ->postJson("/api/v1/chat/conversations/with/{$firstUser->id}")
             ->assertOk()
-            ->assertJsonCount(1, 'items')
-            ->assertJsonPath('items.0.id', $conversationId);
+            ->json('conversation');
+
+        $newConversationId = (int) ($restartConversation['id'] ?? 0);
+        $this->assertGreaterThan(0, $newConversationId);
+        $this->assertNotSame($conversationId, $newConversationId);
     }
 
     /**
