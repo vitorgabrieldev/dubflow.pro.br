@@ -8,6 +8,7 @@
     "require": {
         "php": "^8.2",
         "laravel/framework": "^12.0",
+        "laravel/reverb": "^1.7",
         "laravel/tinker": "^2.10.1",
         "php-open-source-saver/jwt-auth": "^2.8"
     },
@@ -47,7 +48,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#fb7185,#fdba74,#34d399\" \"sh -c 'cd public && php -d upload_max_filesize=1024M -d post_max_size=1200M -d max_execution_time=0 -d max_input_time=0 -S 127.0.0.1:8000 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php'\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm --prefix frontend run dev\" --names=server,queue,logs,next --kill-others"
+            "npx concurrently -c \"#93c5fd,#fb7185,#fdba74,#34d399,#60a5fa\" \"sh -c 'cd public && php -d upload_max_filesize=1024M -d post_max_size=1200M -d max_execution_time=0 -d max_input_time=0 -S 127.0.0.1:8000 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php'\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm --prefix frontend run dev\" \"./scripts/reverb-dev.sh\" --names=server,queue,logs,next,reverb --kill-others"
         ],
         "test": [
             "@php artisan test --env=testing"

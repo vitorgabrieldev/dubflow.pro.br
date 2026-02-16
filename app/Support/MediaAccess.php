@@ -15,6 +15,7 @@ class MediaAccess
         'dubbing-media/',
         'dubbing-thumbnails/',
         'dubbing-tests/',
+        'chat-media/',
     ];
 
     public static function isProtectedPath(?string $path): bool

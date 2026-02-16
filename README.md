@@ -141,6 +141,7 @@ composer run dev
 
 - Laravel API: `http://localhost:8000`
 - Next frontend: `http://localhost:3000` (redireciona automaticamente para `http://localhost:3000/pt-BR`)
+- WebSocket Reverb: `ws://127.0.0.1:8080` (usado pelo chat em tempo real)
 
 ## Padrao local oficial (sem Docker)
 
@@ -231,6 +232,15 @@ Prefixo: `/api/v1`
   - `POST /notifications/read-all`
   - `POST /notifications/{notificationId}/read`
   - `DELETE /notifications/clear`
+- Chat (DM):
+  - `GET /chat/conversations`
+  - `POST /chat/conversations/with/{user}`
+  - `GET /chat/conversations/{conversation}/messages`
+  - `POST /chat/conversations/{conversation}/messages`
+  - `PATCH /chat/messages/{message}`
+  - `DELETE /chat/messages/{message}`
+  - `POST /chat/users/{user}/block`
+  - `DELETE /chat/users/{user}/block`
 - Busca e dashboard:
   - `GET /search?q=...`
   - `GET /dashboard/overview`

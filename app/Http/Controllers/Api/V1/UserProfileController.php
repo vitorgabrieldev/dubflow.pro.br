@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\DubbingPost;
 use App\Models\User;
+use App\Support\ChatAccess;
+use App\Support\MediaAccess;
 use App\Support\PostViewerPermissions;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -61,6 +63,10 @@ class UserProfileController extends Controller
 
         $posts = $postsQuery->paginate((int) $request->integer('per_page', 20));
         PostViewerPermissions::attachToCollection($posts->getCollection(), $viewer);
+        MediaAccess::signPostCollection($posts->getCollection());
+
+        $signedUserAvatarPath = MediaAccess::signPath($user->avatar_path);
+        $signedUserCoverPath = MediaAccess::signPath($user->cover_path);
 
         $summaryQuery = DubbingPost::query()->where('author_user_id', $user->id);
         if (! $viewer || $viewer->id !== $user->id) {
@@ -79,6 +85,14 @@ class UserProfileController extends Controller
         $viewerIsFollowing = $viewerCanFollow
             ? $viewer->followingUsers()->where('users.id', $user->id)->exists()
             : false;
+        $viewerCanMessage = false;
+        $viewerMessageReason = null;
+
+        if ($viewer && $viewer->id !== $user->id) {
+            $chatAccess = ChatAccess::canSendMessage($viewer, $user);
+            $viewerCanMessage = (bool) $chatAccess['allowed'];
+            $viewerMessageReason = $chatAccess['reason'];
+        }
 
         return response()->json([
             'user' => [
@@ -87,8 +101,8 @@ class UserProfileController extends Controller
                 'stage_name' => $user->stage_name,
                 'username' => $user->username,
                 'bio' => $user->bio,
-                'avatar_path' => $user->avatar_path,
-                'cover_path' => $user->cover_path,
+                'avatar_path' => $signedUserAvatarPath,
+                'cover_path' => $signedUserCoverPath,
                 'website_url' => $user->website_url,
                 'locale' => $user->locale,
                 'skills' => $user->skills,
@@ -109,6 +123,8 @@ class UserProfileController extends Controller
             'viewer' => [
                 'can_follow' => $viewerCanFollow,
                 'is_following' => $viewerIsFollowing,
+                'can_message' => $viewerCanMessage,
+                'message_reason' => $viewerMessageReason,
             ],
             'posts' => $posts,
         ]);

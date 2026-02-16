@@ -21,6 +21,19 @@ if [ "$NODE_MAJOR" -lt 22 ]; then
 fi
 
 echo "[1/4] Backend (PHPUnit)"
+if [ -f bootstrap/cache/config.php ]; then
+  echo "Limpando config cache para proteger o banco principal..."
+  php artisan config:clear >/dev/null
+fi
+
+APP_ENV=testing \
+APP_CONFIG_CACHE=/tmp/dubflow-tests-config.php \
+DB_CONNECTION=mysql \
+DB_HOST=127.0.0.1 \
+DB_PORT=3306 \
+DB_DATABASE=studiodublagem_tests \
+DB_USERNAME=projetos \
+DB_PASSWORD= \
 php vendor/bin/phpunit
 
 echo "[2/4] Frontend TypeScript"

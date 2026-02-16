@@ -1,7 +1,8 @@
 <?php
 
-use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\AchievementController;
+use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\DubbingTestController;
 use App\Http\Controllers\Api\V1\MediaController;
@@ -119,6 +120,20 @@ Route::prefix('v1')->group(function () {
         Route::post('/notifications/{notificationId}/read', [NotificationController::class, 'markRead']);
         Route::delete('/notifications/clear', [NotificationController::class, 'clearAll']);
         Route::delete('/notifications/{notificationId}', [NotificationController::class, 'destroy']);
+
+        Route::prefix('chat')->group(function () {
+            Route::get('/conversations', [ChatController::class, 'conversations']);
+            Route::post('/conversations/with/{user}', [ChatController::class, 'startConversation']);
+            Route::delete('/conversations/{conversation}', [ChatController::class, 'removeConversation']);
+            Route::get('/conversations/{conversation}/messages', [ChatController::class, 'messages']);
+            Route::post('/conversations/{conversation}/messages', [ChatController::class, 'sendMessage']);
+            Route::post('/conversations/{conversation}/read', [ChatController::class, 'markConversationRead']);
+            Route::post('/conversations/{conversation}/typing', [ChatController::class, 'typing']);
+            Route::patch('/messages/{message}', [ChatController::class, 'updateMessage']);
+            Route::delete('/messages/{message}', [ChatController::class, 'destroyMessage']);
+            Route::post('/users/{user}/block', [ChatController::class, 'blockUser']);
+            Route::delete('/users/{user}/block', [ChatController::class, 'unblockUser']);
+        });
 
         Route::get('/achievements/me', [AchievementController::class, 'mine']);
         Route::get('/achievements/feed', [AchievementController::class, 'feed']);

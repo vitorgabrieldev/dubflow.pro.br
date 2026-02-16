@@ -13,6 +13,7 @@ class User extends Authenticatable implements JWTSubject
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory;
+
     use Notifiable;
 
     /**
@@ -153,6 +154,41 @@ class User extends Authenticatable implements JWTSubject
     public function achievementFeedItems(): HasMany
     {
         return $this->hasMany(AchievementFeedItem::class);
+    }
+
+    public function chatConversationsAsUserOne(): HasMany
+    {
+        return $this->hasMany(ChatConversation::class, 'user_one_id');
+    }
+
+    public function chatConversationsAsUserTwo(): HasMany
+    {
+        return $this->hasMany(ChatConversation::class, 'user_two_id');
+    }
+
+    public function chatConversationParticipants(): HasMany
+    {
+        return $this->hasMany(ChatConversationParticipant::class, 'user_id');
+    }
+
+    public function sentChatMessages(): HasMany
+    {
+        return $this->hasMany(ChatMessage::class, 'sender_user_id');
+    }
+
+    public function receivedChatMessages(): HasMany
+    {
+        return $this->hasMany(ChatMessage::class, 'recipient_user_id');
+    }
+
+    public function blockedChatUsers(): HasMany
+    {
+        return $this->hasMany(ChatUserBlock::class, 'blocker_user_id');
+    }
+
+    public function chatBlockedByUsers(): HasMany
+    {
+        return $this->hasMany(ChatUserBlock::class, 'blocked_user_id');
     }
 
     public function getJWTIdentifier(): mixed
