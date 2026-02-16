@@ -48,12 +48,13 @@ Route::prefix('v1')->group(function () {
     Route::get('/posts', [PostController::class, 'index']);
     Route::get('/posts/{post}', [PostController::class, 'show']);
     Route::get('/users/{user}', [UserProfileController::class, 'show']);
+    Route::get('/dubbing-tests/opportunities', [DubbingTestController::class, 'opportunities']);
+    Route::get('/dubbing-tests/{dubbingTest}', [DubbingTestController::class, 'show']);
 
     Route::get('/search', SearchController::class);
 
     Route::middleware(['auth:api', 'throttle:120,1'])->group(function () {
         Route::get('/my-organizations', [OrganizationController::class, 'myOrganizations']);
-        Route::get('/dubbing-tests/opportunities', [DubbingTestController::class, 'opportunities']);
         Route::get('/publish/options', [PublishOptionsController::class, 'index']);
         Route::post('/organizations', [OrganizationController::class, 'store']);
         Route::patch('/organizations/{organization}', [OrganizationController::class, 'update']);
@@ -93,7 +94,6 @@ Route::prefix('v1')->group(function () {
         Route::patch('/organizations/{organization}/dubbing-tests/{dubbingTest}/submissions/{submission}/feedback', [DubbingTestController::class, 'saveRejectionFeedback']);
         Route::post('/organizations/{organization}/dubbing-tests/{dubbingTest}/conclude-selection', [DubbingTestController::class, 'concludeSelection']);
 
-        Route::get('/dubbing-tests/{dubbingTest}', [DubbingTestController::class, 'show']);
         Route::post('/dubbing-tests/{dubbingTest}/submissions', [DubbingTestController::class, 'submit']);
         Route::get('/dubbing-tests/{dubbingTest}/my-submissions', [DubbingTestController::class, 'mySubmissions']);
 

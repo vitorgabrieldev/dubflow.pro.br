@@ -145,6 +145,41 @@ class DubbingTestApiTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_guest_can_view_only_external_published_tests(): void
+    {
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+
+        $organization = $this->createOrganizationWithOwner($owner, 'org-show-rules-guest', 'Org Show Rules Guest', false);
+        $this->addActiveMember($organization, $member, 'member');
+
+        $internalPublished = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Interno publicado guest',
+            'visibility' => 'internal',
+            'status' => 'published',
+        ]);
+        $externalPublished = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Externo publicado guest',
+            'visibility' => 'external',
+            'status' => 'published',
+        ]);
+        $externalDraft = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Externo draft guest',
+            'visibility' => 'external',
+            'status' => 'draft',
+        ]);
+
+        $this->getJson("/api/v1/dubbing-tests/{$externalPublished->id}")
+            ->assertOk()
+            ->assertJsonPath('dubbing_test.id', $externalPublished->id);
+
+        $this->getJson("/api/v1/dubbing-tests/{$internalPublished->id}")
+            ->assertStatus(403);
+
+        $this->getJson("/api/v1/dubbing-tests/{$externalDraft->id}")
+            ->assertStatus(403);
+    }
+
     public function test_opportunities_endpoint_applies_query_and_appearance_filters(): void
     {
         $owner = User::factory()->create();
@@ -255,6 +290,48 @@ class DubbingTestApiTest extends TestCase
         $outsiderDefaultIds = collect($outsiderDefaultResponse->json('data'))->pluck('id')->all();
         $this->assertContains($externalTest->id, $outsiderDefaultIds);
         $this->assertNotContains($internalTest->id, $outsiderDefaultIds);
+    }
+
+    public function test_guest_can_list_external_opportunities_but_not_internal(): void
+    {
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+
+        $organization = $this->createOrganizationWithOwner($owner, 'org-opportunity-guest', 'Org Opportunity Guest');
+        $this->addActiveMember($organization, $member, 'member');
+
+        $internalTest = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Teste Interno Guest',
+            'visibility' => 'internal',
+            'status' => 'published',
+        ]);
+        DubbingTestCharacter::create([
+            'dubbing_test_id' => $internalTest->id,
+            'name' => 'Personagem Interno',
+            'appearance_estimate' => 'protagonista',
+            'position' => 0,
+        ]);
+
+        $externalTest = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Teste Externo Guest',
+            'visibility' => 'external',
+            'status' => 'published',
+        ]);
+        DubbingTestCharacter::create([
+            'dubbing_test_id' => $externalTest->id,
+            'name' => 'Personagem Externo',
+            'appearance_estimate' => 'coadjuvante',
+            'position' => 0,
+        ]);
+
+        $defaultResponse = $this->getJson('/api/v1/dubbing-tests/opportunities')->assertOk();
+        $defaultIds = collect($defaultResponse->json('data'))->pluck('id')->all();
+        $this->assertContains($externalTest->id, $defaultIds);
+        $this->assertNotContains($internalTest->id, $defaultIds);
+
+        $internalResponse = $this->getJson('/api/v1/dubbing-tests/opportunities?visibility=internal')->assertOk();
+        $internalIds = collect($internalResponse->json('data'))->pluck('id')->all();
+        $this->assertNotContains($internalTest->id, $internalIds);
     }
 
     public function test_list_submissions_requires_manager_role_and_returns_submission_payload(): void

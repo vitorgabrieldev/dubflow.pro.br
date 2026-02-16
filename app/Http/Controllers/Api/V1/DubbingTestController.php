@@ -90,15 +90,19 @@ class DubbingTestController extends Controller
             $query->whereHas('characters', fn ($builder) => $builder->where('appearance_estimate', $appearance));
         }
 
-        $query->where(function ($builder) use ($user): void {
-            $builder->where('visibility', 'external')
-                ->orWhere(function ($internalBuilder) use ($user): void {
-                    $internalBuilder->where('visibility', 'internal')
-                        ->whereHas('organization.members', fn ($membersBuilder) => $membersBuilder
-                            ->where('user_id', $user->id)
-                            ->where('status', 'active'));
-                });
-        });
+        if ($user instanceof User) {
+            $query->where(function ($builder) use ($user): void {
+                $builder->where('visibility', 'external')
+                    ->orWhere(function ($internalBuilder) use ($user): void {
+                        $internalBuilder->where('visibility', 'internal')
+                            ->whereHas('organization.members', fn ($membersBuilder) => $membersBuilder
+                                ->where('user_id', $user->id)
+                                ->where('status', 'active'));
+                    });
+            });
+        } else {
+            $query->where('visibility', 'external');
+        }
 
         $tests = $query->paginate((int) $request->integer('per_page', 12));
 
@@ -421,7 +425,11 @@ class DubbingTestController extends Controller
             abort(403, 'Sem permissao para visualizar este teste.');
         }
 
-        if ($dubbingTest->status !== 'published' && ! OrganizationAccess::canManageOrganization($user, $dubbingTest->organization)) {
+        $canManage = $user instanceof User
+            && $dubbingTest->organization instanceof Organization
+            && OrganizationAccess::canManageOrganization($user, $dubbingTest->organization);
+
+        if ($dubbingTest->status !== 'published' && ! $canManage) {
             abort(403, 'Teste indisponivel no momento.');
         }
 
@@ -826,7 +834,7 @@ class DubbingTestController extends Controller
         ];
     }
 
-    private function canViewTest(User $user, DubbingTest $dubbingTest): bool
+    private function canViewTest(?User $user, DubbingTest $dubbingTest): bool
     {
         if ($dubbingTest->visibility === 'external') {
             return true;
@@ -835,6 +843,10 @@ class DubbingTestController extends Controller
         $organization = $dubbingTest->organization;
 
         if (! $organization) {
+            return false;
+        }
+
+        if (! ($user instanceof User)) {
             return false;
         }
 
