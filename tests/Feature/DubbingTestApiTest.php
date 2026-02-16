@@ -505,7 +505,9 @@ class DubbingTestApiTest extends TestCase
             'Accept' => 'application/json',
         ])->postJson("/api/v1/organizations/{$organization->slug}/dubbing-tests", $payload);
 
-        $create->assertCreated()->assertJsonPath('dubbing_test.visibility', 'internal');
+        $create->assertCreated()
+            ->assertJsonPath('dubbing_test.visibility', 'internal')
+            ->assertJsonPath('dubbing_test.status', 'published');
 
         $this->assertDatabaseHas('dubbing_tests', [
             'organization_id' => $organization->id,
