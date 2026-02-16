@@ -41,8 +41,6 @@ class PostController extends Controller
                 'author:id,name,stage_name,username,avatar_path',
                 'playlist:id,title,slug',
                 'season:id,playlist_id,season_number,title',
-                'collaborators' => fn ($builder) => $builder->where('status', 'accepted')->with('user:id,name,stage_name,username,avatar_path'),
-                'credits' => fn ($builder) => $builder->with('dubber:id,name,stage_name,username,avatar_path')->orderBy('display_order'),
                 'comments' => fn ($builder) => $builder->with('user:id,name,stage_name,username,avatar_path')
                     ->whereNull('parent_id')
                     ->with([
@@ -867,9 +865,42 @@ class PostController extends Controller
         $post->credits()->delete();
 
         foreach (array_values($credits) as $index => $credit) {
-            $characterName = $credit['character_name'] ?? null;
-            $dubberUserId = $credit['dubber_user_id'] ?? null;
-            $dubberName = $credit['dubber_name'] ?? null;
+            $characterName = is_string($credit['character_name'] ?? null)
+                ? trim((string) $credit['character_name'])
+                : null;
+            $dubberUserId = isset($credit['dubber_user_id']) && $credit['dubber_user_id'] !== ''
+                ? (int) $credit['dubber_user_id']
+                : null;
+            $dubberName = is_string($credit['dubber_name'] ?? null)
+                ? trim((string) $credit['dubber_name'])
+                : null;
+
+            if ($dubberUserId === null && $dubberName) {
+                $normalizedName = mb_strtolower($dubberName);
+                $matchedUser = User::query()
+                    ->whereRaw('LOWER(username) = ?', [$normalizedName])
+                    ->orWhereRaw('LOWER(stage_name) = ?', [$normalizedName])
+                    ->orWhereRaw('LOWER(name) = ?', [$normalizedName])
+                    ->first(['id', 'name', 'stage_name']);
+
+                if ($matchedUser) {
+                    $dubberUserId = $matchedUser->id;
+                    $dubberName = $matchedUser->stage_name ?: $matchedUser->name;
+                }
+            }
+
+            if ($dubberUserId !== null && ! $dubberName) {
+                $dubber = User::query()->find($dubberUserId, ['name', 'stage_name']);
+                $dubberName = $dubber?->stage_name ?: $dubber?->name;
+            }
+
+            if ($characterName === '') {
+                $characterName = null;
+            }
+
+            if ($dubberName === '') {
+                $dubberName = null;
+            }
 
             if (! $characterName && ! $dubberUserId && ! $dubberName) {
                 continue;

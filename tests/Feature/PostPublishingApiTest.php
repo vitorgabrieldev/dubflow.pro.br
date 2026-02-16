@@ -133,6 +133,71 @@ class PostPublishingApiTest extends TestCase
         ]);
     }
 
+    public function test_credit_name_matching_links_platform_user_and_prefers_stage_name(): void
+    {
+        Storage::fake('public');
+        Storage::fake('local');
+
+        $owner = User::factory()->create();
+        $editor = User::factory()->create();
+        $contributor = User::factory()->create([
+            'name' => 'João Silva',
+            'stage_name' => 'Voz de Ouro',
+        ]);
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Credits Org',
+            'slug' => 'credits-org',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $editor->id,
+            'role' => 'editor',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $token = auth('api')->login($editor);
+
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer '.$token,
+        ])->post('/api/v1/organizations/'.$organization->slug.'/posts', [
+            'title' => 'Episódio com colaboradores',
+            'description' => 'Teste de créditos',
+            'work_title' => 'Projeto X',
+            'language_code' => 'pt-BR',
+            'media_assets' => [
+                UploadedFile::fake()->create('episode.mp3', 128, 'audio/mpeg'),
+            ],
+            'credits' => [
+                [
+                    'character_name' => 'Direção',
+                    'dubber_name' => 'João Silva',
+                ],
+            ],
+        ]);
+
+        $response->assertCreated();
+        $postId = (int) $response->json('post.id');
+
+        $this->assertDatabaseHas('post_credits', [
+            'post_id' => $postId,
+            'character_name' => 'Direção',
+            'dubber_user_id' => $contributor->id,
+            'dubber_name' => 'Voz de Ouro',
+        ]);
+    }
+
     public function test_comments_allow_only_two_levels(): void
     {
         Storage::fake('public');
