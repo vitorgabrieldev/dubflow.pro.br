@@ -464,10 +464,12 @@ class ChatController extends Controller
         $viewer = auth('api')->user();
 
         $this->ensureParticipant($viewer->id, $conversation);
+        $blockedSenderIds = $this->blockedSenderIdsForViewer($viewer->id);
 
         $incoming = $conversation->messages()
             ->where('recipient_user_id', $viewer->id)
             ->whereNull('read_at')
+            ->when($blockedSenderIds !== [], fn ($query) => $query->whereNotIn('sender_user_id', $blockedSenderIds))
             ->orderBy('id')
             ->get();
 
@@ -644,11 +646,14 @@ class ChatController extends Controller
             return;
         }
 
+        $blockedSenderIds = $this->blockedSenderIdsForViewer($viewerUserId);
+
         $messages = ChatMessage::query()
             ->whereIn('conversation_id', $conversationIds)
             ->where('recipient_user_id', $viewerUserId)
             ->whereNull('delivered_at')
             ->whereNull('deleted_at')
+            ->when($blockedSenderIds !== [], fn ($query) => $query->whereNotIn('sender_user_id', $blockedSenderIds))
             ->get();
 
         if ($messages->isEmpty()) {
@@ -719,11 +724,26 @@ class ChatController extends Controller
 
     private function unreadCount(int $conversationId, int $viewerUserId): int
     {
+        $blockedSenderIds = $this->blockedSenderIdsForViewer($viewerUserId);
+
         return ChatMessage::query()
             ->where('conversation_id', $conversationId)
             ->where('recipient_user_id', $viewerUserId)
             ->whereNull('read_at')
+            ->when($blockedSenderIds !== [], fn ($query) => $query->whereNotIn('sender_user_id', $blockedSenderIds))
             ->count();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function blockedSenderIdsForViewer(int $viewerUserId): array
+    {
+        return ChatUserBlock::query()
+            ->where('blocker_user_id', $viewerUserId)
+            ->pluck('blocked_user_id')
+            ->map(static fn ($value): int => (int) $value)
+            ->all();
     }
 
     private function broadcastStatusUpdate(ChatMessage $message): void

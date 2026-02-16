@@ -111,18 +111,26 @@ class ChatApiTest extends TestCase
             'blocked_user_id' => $firstUser->id,
         ]);
 
-        $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+        $blockedSendPayload = $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
             ->postJson("/api/v1/chat/conversations/{$conversationId}/messages", [
                 'body' => 'Mensagem bloqueada',
             ])
-            ->assertCreated();
+            ->assertCreated()
+            ->json();
 
         Notification::assertNothingSent();
+
+        $blockedMessageId = (int) ($blockedSendPayload['message']['id'] ?? 0);
+        $this->assertGreaterThan(0, $blockedMessageId);
 
         $this->withHeaders($this->authHeaders($this->issueToken($secondUser)))
             ->getJson("/api/v1/chat/conversations/{$conversationId}/messages")
             ->assertOk()
             ->assertJsonCount(0, 'items');
+
+        $blockedMessage = ChatMessage::query()->findOrFail($blockedMessageId);
+        $this->assertNull($blockedMessage->delivered_at);
+        $this->assertNull($blockedMessage->read_at);
 
         $this->withHeaders($this->authHeaders($this->issueToken($secondUser)))
             ->deleteJson("/api/v1/chat/users/{$firstUser->id}/block")
