@@ -2,7 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\AchievementDefinition;
+use App\Models\AchievementLevel;
+use App\Models\Organization;
+use App\Models\OrganizationMember;
 use App\Models\User;
+use App\Models\UserAchievement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -153,5 +158,72 @@ class UserProfileApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('viewer.can_message', true)
             ->assertJsonPath('viewer.message_reason', null);
+    }
+
+    public function test_public_profile_exposes_communities_and_achievements_for_any_viewer(): void
+    {
+        $owner = User::factory()->create([
+            'is_private' => false,
+        ]);
+        $viewer = User::factory()->create();
+
+        $organization = Organization::query()->create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Studio Aurora',
+            'slug' => 'studio-aurora',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::query()->create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'source' => 'owner_created',
+            'requested_by_user_id' => $owner->id,
+            'approved_by_user_id' => $owner->id,
+            'joined_at' => now(),
+            'approved_at' => now(),
+        ]);
+
+        $definition = AchievementDefinition::query()->create([
+            'slug' => 'estrela-da-voz',
+            'title' => 'Estrela da Voz',
+            'description' => 'Conquista de teste',
+            'category' => 'engagement',
+            'metric_key' => 'episodes',
+            'rarity' => 'rare',
+            'icon' => 'star',
+            'color_start' => '#f59e0b',
+            'color_end' => '#f97316',
+            'is_active' => true,
+            'is_hidden' => false,
+        ]);
+
+        $level = AchievementLevel::query()->create([
+            'achievement_definition_id' => $definition->id,
+            'level' => 1,
+            'threshold' => 1,
+            'title' => 'Primeiro brilho',
+        ]);
+
+        UserAchievement::query()->create([
+            'user_id' => $owner->id,
+            'achievement_definition_id' => $definition->id,
+            'achievement_level_id' => $level->id,
+            'level' => 1,
+            'progress_value_at_unlock' => 1,
+            'unlocked_at' => now(),
+        ]);
+
+        $viewerToken = auth('api')->login($viewer);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$viewerToken,
+            'Accept' => 'application/json',
+        ])->getJson("/api/v1/users/{$owner->id}")
+            ->assertOk()
+            ->assertJsonPath('communities.0.name', 'Studio Aurora')
+            ->assertJsonPath('achievements.0.definition.title', 'Estrela da Voz');
     }
 }

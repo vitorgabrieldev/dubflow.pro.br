@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\DubbingPost;
+use App\Models\Organization;
 use App\Models\User;
+use App\Models\UserAchievement;
 use App\Support\ChatAccess;
 use App\Support\MediaAccess;
 use App\Support\PostViewerPermissions;
@@ -94,6 +96,90 @@ class UserProfileController extends Controller
             $viewerMessageReason = $chatAccess['reason'];
         }
 
+        $organizations = Organization::query()
+            ->select([
+                'id',
+                'owner_user_id',
+                'name',
+                'slug',
+                'description',
+                'avatar_path',
+                'cover_path',
+                'is_verified',
+                'is_public',
+                'created_at',
+            ])
+            ->withCount(['followers', 'posts', 'playlists'])
+            ->whereHas('members', fn ($builder) => $builder
+                ->where('user_id', $user->id)
+                ->where('status', 'active'))
+            ->orderByDesc('created_at')
+            ->limit(max(1, min(24, (int) $request->integer('organizations_limit', 12))))
+            ->get()
+            ->map(function (Organization $organization): array {
+                return [
+                    'id' => $organization->id,
+                    'name' => $organization->name,
+                    'slug' => $organization->slug,
+                    'description' => $organization->description,
+                    'avatar_path' => MediaAccess::signPath($organization->avatar_path),
+                    'cover_path' => MediaAccess::signPath($organization->cover_path),
+                    'is_verified' => (bool) $organization->is_verified,
+                    'is_public' => (bool) $organization->is_public,
+                    'followers_count' => (int) $organization->followers_count,
+                    'posts_count' => (int) $organization->posts_count,
+                    'playlists_count' => (int) $organization->playlists_count,
+                ];
+            })
+            ->values();
+
+        $activeAt = now();
+        $achievements = UserAchievement::query()
+            ->where('user_id', $user->id)
+            ->where(function ($builder) use ($activeAt): void {
+                $builder->whereNull('expires_at')->orWhere('expires_at', '>=', $activeAt);
+            })
+            ->with([
+                'definition:id,slug,title,description,category,rarity,icon,color_start,color_end,is_active',
+                'levelDefinition:id,achievement_definition_id,level,title,description,rarity,icon,color_start,color_end',
+            ])
+            ->orderByDesc('unlocked_at')
+            ->limit(max(1, min(60, (int) $request->integer('achievements_limit', 30))))
+            ->get()
+            ->filter(fn (UserAchievement $achievement): bool => (bool) optional($achievement->definition)->is_active)
+            ->map(function (UserAchievement $achievement): array {
+                return [
+                    'id' => $achievement->id,
+                    'achievement_definition_id' => $achievement->achievement_definition_id,
+                    'achievement_level_id' => $achievement->achievement_level_id,
+                    'level' => (int) $achievement->level,
+                    'unlocked_at' => optional($achievement->unlocked_at)?->toIso8601String(),
+                    'expires_at' => optional($achievement->expires_at)?->toIso8601String(),
+                    'definition' => [
+                        'id' => optional($achievement->definition)->id,
+                        'slug' => optional($achievement->definition)->slug,
+                        'title' => optional($achievement->definition)->title,
+                        'description' => optional($achievement->definition)->description,
+                        'category' => optional($achievement->definition)->category,
+                        'rarity' => optional($achievement->definition)->rarity,
+                        'icon' => optional($achievement->definition)->icon,
+                        'color_start' => optional($achievement->definition)->color_start,
+                        'color_end' => optional($achievement->definition)->color_end,
+                    ],
+                    'level_definition' => $achievement->levelDefinition ? [
+                        'id' => $achievement->levelDefinition->id,
+                        'level' => (int) $achievement->levelDefinition->level,
+                        'title' => $achievement->levelDefinition->title,
+                        'description' => $achievement->levelDefinition->description,
+                        'rarity' => $achievement->levelDefinition->rarity,
+                        'icon' => $achievement->levelDefinition->icon,
+                        'color_start' => $achievement->levelDefinition->color_start,
+                        'color_end' => $achievement->levelDefinition->color_end,
+                    ] : null,
+                ];
+            })
+            ->values();
+
         return response()->json([
             'user' => [
                 'id' => $user->id,
@@ -136,6 +222,8 @@ class UserProfileController extends Controller
                 'can_message' => $viewerCanMessage,
                 'message_reason' => $viewerMessageReason,
             ],
+            'communities' => $organizations,
+            'achievements' => $achievements,
             'posts' => $posts,
         ]);
     }
