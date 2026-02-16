@@ -35,6 +35,8 @@ Route::prefix('v1')->group(function () {
             Route::post('/refresh', [AuthController::class, 'refresh']);
             Route::patch('/profile', [AuthController::class, 'updateProfile']);
             Route::post('/change-password', [AuthController::class, 'changePassword']);
+            Route::get('/account/deletion-preview', [AuthController::class, 'accountDeletionPreview']);
+            Route::delete('/account', [AuthController::class, 'deleteAccount']);
         });
     });
 

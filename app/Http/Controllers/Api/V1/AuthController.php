@@ -3,9 +3,25 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\AchievementFeedItem;
+use App\Models\Comment;
+use App\Models\DubbingPost;
+use App\Models\DubbingTest;
+use App\Models\DubbingTestSubmission;
+use App\Models\Organization;
+use App\Models\OrganizationFollow;
+use App\Models\OrganizationInvite;
+use App\Models\OrganizationMember;
+use App\Models\PostCollaborator;
+use App\Models\PostLike;
+use App\Models\PostView;
 use App\Models\User;
+use App\Models\UserAchievement;
+use App\Models\UserAchievementProgress;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
@@ -151,6 +167,7 @@ class AuthController extends Controller
         $validated = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
             'stage_name' => ['nullable', 'string', 'max:255'],
+            'pronouns' => ['nullable', 'string', 'max:40'],
             'username' => [
                 'nullable',
                 'string',
@@ -162,6 +179,20 @@ class AuthController extends Controller
             'locale' => ['nullable', 'string', 'max:10'],
             'skills' => ['nullable', 'array', 'max:50'],
             'skills.*' => ['string', 'max:60'],
+            'dubbing_languages' => ['nullable', 'array', 'max:30'],
+            'dubbing_languages.*' => ['string', 'max:60'],
+            'voice_accents' => ['nullable', 'array', 'max:30'],
+            'voice_accents.*' => ['string', 'max:60'],
+            'has_recording_equipment' => ['nullable', 'boolean'],
+            'recording_equipment' => ['nullable', 'array', 'max:30'],
+            'recording_equipment.*' => ['string', 'max:80'],
+            'recording_equipment_other' => ['nullable', 'string', 'max:255'],
+            'weekly_availability' => ['nullable', 'array', 'max:7'],
+            'weekly_availability.*' => ['string', Rule::in(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])],
+            'state' => ['nullable', 'string', 'max:80'],
+            'city' => ['nullable', 'string', 'max:120'],
+            'proposal_contact_preferences' => ['nullable', 'array', 'max:20'],
+            'proposal_contact_preferences.*' => ['string', 'max:60'],
             'tags' => ['nullable', 'array', 'max:50'],
             'tags.*' => ['string', 'max:60'],
             'social_links' => ['nullable', 'array', 'max:30'],
@@ -175,6 +206,11 @@ class AuthController extends Controller
             'avatar' => ['nullable', 'image', 'max:5120'],
             'cover' => ['nullable', 'image', 'max:10240'],
         ]);
+
+        if (! ($validated['has_recording_equipment'] ?? false)) {
+            $validated['recording_equipment'] = [];
+            $validated['recording_equipment_other'] = null;
+        }
 
         if ($request->hasFile('avatar')) {
             $validated['avatar_path'] = $request->file('avatar')?->store('user-avatars', 'public');
@@ -219,6 +255,57 @@ class AuthController extends Controller
         ]);
     }
 
+    public function accountDeletionPreview(): JsonResponse
+    {
+        /** @var User $user */
+        $user = auth('api')->user();
+
+        return response()->json($this->buildAccountDeletionPreview($user));
+    }
+
+    public function deleteAccount(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = auth('api')->user();
+        $preview = $this->buildAccountDeletionPreview($user);
+
+        if (! ($preview['can_delete'] ?? false)) {
+            return response()->json([
+                'message' => 'Você precisa transferir a posse das comunidades que administra antes de excluir sua conta.',
+                'preview' => $preview,
+            ], 409);
+        }
+
+        $validated = $request->validate([
+            'confirmation_phrase' => ['required', 'string', 'max:255'],
+        ]);
+
+        $providedPhrase = trim((string) $validated['confirmation_phrase']);
+        $expectedPhrase = (string) ($preview['required_confirmation_phrase'] ?? '');
+
+        if ($providedPhrase !== $expectedPhrase) {
+            return response()->json([
+                'message' => 'Frase de confirmação inválida.',
+                'expected_phrase' => $expectedPhrase,
+            ], 422);
+        }
+
+        DB::transaction(function () use ($user): void {
+            DB::table('notifications')
+                ->where('notifiable_type', User::class)
+                ->where('notifiable_id', $user->id)
+                ->delete();
+
+            $user->delete();
+        });
+
+        auth('api')->logout();
+
+        return response()->json([
+            'message' => 'Conta removida com sucesso.',
+        ]);
+    }
+
     public function logout(): JsonResponse
     {
         auth('api')->logout();
@@ -239,5 +326,149 @@ class AuthController extends Controller
             'expires_in' => auth('api')->factory()->getTTL() * 60,
             'user' => auth('api')->user(),
         ], $status);
+    }
+
+    /**
+     * @return array{
+     *     can_delete: bool,
+     *     required_confirmation_phrase: string,
+     *     blocker: array{code: string, message: string}|null,
+     *     owned_organizations: array<int, array{id: int, name: string, slug: string}>,
+     *     summary: array<int, array{key: string, label: string, count: int}>,
+     *     total_items: int
+     * }
+     */
+    private function buildAccountDeletionPreview(User $user): array
+    {
+        $ownedOrganizations = Organization::query()
+            ->where('owner_user_id', $user->id)
+            ->orderBy('name')
+            ->get(['id', 'name', 'slug'])
+            ->map(static fn (Organization $organization): array => [
+                'id' => (int) $organization->id,
+                'name' => (string) $organization->name,
+                'slug' => (string) $organization->slug,
+            ])
+            ->values()
+            ->all();
+
+        $summary = [
+            [
+                'key' => 'organizations_owned',
+                'label' => 'Comunidades sob sua posse',
+                'count' => count($ownedOrganizations),
+            ],
+            [
+                'key' => 'organization_memberships',
+                'label' => 'Participações em comunidades',
+                'count' => OrganizationMember::query()->where('user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'organization_follows',
+                'label' => 'Comunidades seguidas',
+                'count' => OrganizationFollow::query()->where('user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'organization_invites_created',
+                'label' => 'Convites de comunidade criados',
+                'count' => OrganizationInvite::query()->where('created_by_user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'posts_authored',
+                'label' => 'Episódios publicados',
+                'count' => DubbingPost::query()->where('author_user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'post_collaborations',
+                'label' => 'Participações como colaborador',
+                'count' => PostCollaborator::query()->where('user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'post_likes',
+                'label' => 'Curtidas em episódios',
+                'count' => PostLike::query()->where('user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'comments',
+                'label' => 'Comentários',
+                'count' => Comment::query()->where('user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'post_views',
+                'label' => 'Registros de visualização',
+                'count' => PostView::query()->where('user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'dubbing_tests_created',
+                'label' => 'Testes de dublagem criados',
+                'count' => DubbingTest::query()->where('created_by_user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'dubbing_test_submissions',
+                'label' => 'Inscrições em oportunidades',
+                'count' => DubbingTestSubmission::query()->where('user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'chat_messages',
+                'label' => 'Mensagens de chat',
+                'count' => DB::table('chat_messages')
+                    ->where(static function (Builder $query) use ($user): void {
+                        $query->where('sender_user_id', $user->id)
+                            ->orWhere('recipient_user_id', $user->id);
+                    })
+                    ->count(),
+            ],
+            [
+                'key' => 'notifications',
+                'label' => 'Notificações',
+                'count' => DB::table('notifications')
+                    ->where('notifiable_type', User::class)
+                    ->where('notifiable_id', $user->id)
+                    ->count(),
+            ],
+            [
+                'key' => 'achievements',
+                'label' => 'Conquistas',
+                'count' => UserAchievement::query()->where('user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'achievement_progress',
+                'label' => 'Progresso de conquistas',
+                'count' => UserAchievementProgress::query()->where('user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'achievement_feed',
+                'label' => 'Feed de conquistas',
+                'count' => AchievementFeedItem::query()->where('user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'user_following',
+                'label' => 'Usuários seguidos',
+                'count' => DB::table('user_follows')->where('follower_user_id', $user->id)->count(),
+            ],
+            [
+                'key' => 'user_followers',
+                'label' => 'Seguidores',
+                'count' => DB::table('user_follows')->where('followed_user_id', $user->id)->count(),
+            ],
+        ];
+
+        $totalItems = collect($summary)->sum(static fn (array $row): int => (int) $row['count']);
+        $displayName = trim((string) ($user->stage_name ?: $user->name ?: $user->username ?: 'sem nome'));
+        $canDelete = count($ownedOrganizations) === 0;
+
+        return [
+            'can_delete' => $canDelete,
+            'required_confirmation_phrase' => sprintf('Eu dublador %s desejo deletar minha conta', $displayName),
+            'blocker' => $canDelete
+                ? null
+                : [
+                    'code' => 'owns_organizations',
+                    'message' => 'Transfira a posse de todas as suas comunidades para outra pessoa antes de excluir sua conta.',
+                ],
+            'owned_organizations' => $ownedOrganizations,
+            'summary' => $summary,
+            'total_items' => (int) $totalItems,
+        ];
     }
 }
