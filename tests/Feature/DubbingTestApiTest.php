@@ -201,6 +201,62 @@ class DubbingTestApiTest extends TestCase
         $this->assertNotContains($expired->id, $ids);
     }
 
+    public function test_opportunities_internal_visibility_is_limited_to_active_members(): void
+    {
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+        $outsider = User::factory()->create();
+
+        $organization = $this->createOrganizationWithOwner($owner, 'org-opportunity-internal', 'Org Opportunity Internal');
+        $this->addActiveMember($organization, $member, 'member');
+
+        $internalTest = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Teste Interno',
+            'visibility' => 'internal',
+            'status' => 'published',
+        ]);
+        DubbingTestCharacter::create([
+            'dubbing_test_id' => $internalTest->id,
+            'name' => 'Personagem Interno',
+            'appearance_estimate' => 'protagonista',
+            'position' => 0,
+        ]);
+
+        $externalTest = $this->createDubbingTest($organization, $owner, [
+            'title' => 'Teste Externo',
+            'visibility' => 'external',
+            'status' => 'published',
+        ]);
+        DubbingTestCharacter::create([
+            'dubbing_test_id' => $externalTest->id,
+            'name' => 'Personagem Externo',
+            'appearance_estimate' => 'coadjuvante',
+            'position' => 0,
+        ]);
+
+        $memberResponse = $this->withHeaders($this->authHeaders($member))
+            ->getJson('/api/v1/dubbing-tests/opportunities?visibility=internal')
+            ->assertOk();
+
+        $memberIds = collect($memberResponse->json('data'))->pluck('id')->all();
+        $this->assertContains($internalTest->id, $memberIds);
+
+        $outsiderInternalResponse = $this->withHeaders($this->authHeaders($outsider))
+            ->getJson('/api/v1/dubbing-tests/opportunities?visibility=internal')
+            ->assertOk();
+
+        $outsiderInternalIds = collect($outsiderInternalResponse->json('data'))->pluck('id')->all();
+        $this->assertNotContains($internalTest->id, $outsiderInternalIds);
+
+        $outsiderDefaultResponse = $this->withHeaders($this->authHeaders($outsider))
+            ->getJson('/api/v1/dubbing-tests/opportunities')
+            ->assertOk();
+
+        $outsiderDefaultIds = collect($outsiderDefaultResponse->json('data'))->pluck('id')->all();
+        $this->assertContains($externalTest->id, $outsiderDefaultIds);
+        $this->assertNotContains($internalTest->id, $outsiderDefaultIds);
+    }
+
     public function test_list_submissions_requires_manager_role_and_returns_submission_payload(): void
     {
         Storage::fake('local');

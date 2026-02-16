@@ -307,6 +307,133 @@ class ChatApiTest extends TestCase
         $this->assertNotSame($conversationId, $newConversationId);
     }
 
+    public function test_mark_conversation_read_marks_pending_messages_as_read(): void
+    {
+        $sender = User::factory()->create();
+        $recipient = User::factory()->create();
+
+        $conversation = $this->withHeaders($this->authHeaders($this->issueToken($sender)))
+            ->postJson("/api/v1/chat/conversations/with/{$recipient->id}")
+            ->assertOk()
+            ->json('conversation');
+
+        $conversationId = (int) ($conversation['id'] ?? 0);
+        $this->assertGreaterThan(0, $conversationId);
+
+        $sendPayload = $this->withHeaders($this->authHeaders($this->issueToken($sender)))
+            ->postJson("/api/v1/chat/conversations/{$conversationId}/messages", [
+                'body' => 'Mensagem para leitura',
+            ])
+            ->assertCreated()
+            ->json('message');
+
+        $messageId = (int) ($sendPayload['id'] ?? 0);
+        $this->assertGreaterThan(0, $messageId);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($recipient)))
+            ->getJson('/api/v1/chat/conversations')
+            ->assertOk()
+            ->assertJsonPath('items.0.unread_count', 1);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($recipient)))
+            ->postJson("/api/v1/chat/conversations/{$conversationId}/read")
+            ->assertOk()
+            ->assertJsonPath('unread_count', 0);
+
+        $message = ChatMessage::query()->findOrFail($messageId);
+        $this->assertNotNull($message->delivered_at);
+        $this->assertNotNull($message->read_at);
+    }
+
+    public function test_messages_endpoint_supports_before_id_cursor_pagination(): void
+    {
+        $sender = User::factory()->create();
+        $recipient = User::factory()->create();
+
+        $conversation = $this->withHeaders($this->authHeaders($this->issueToken($sender)))
+            ->postJson("/api/v1/chat/conversations/with/{$recipient->id}")
+            ->assertOk()
+            ->json('conversation');
+
+        $conversationId = (int) ($conversation['id'] ?? 0);
+        $this->assertGreaterThan(0, $conversationId);
+
+        foreach (['Mensagem 1', 'Mensagem 2', 'Mensagem 3'] as $body) {
+            $this->withHeaders($this->authHeaders($this->issueToken($sender)))
+                ->postJson("/api/v1/chat/conversations/{$conversationId}/messages", [
+                    'body' => $body,
+                ])
+                ->assertCreated();
+        }
+
+        $firstPage = $this->withHeaders($this->authHeaders($this->issueToken($recipient)))
+            ->getJson("/api/v1/chat/conversations/{$conversationId}/messages?per_page=2")
+            ->assertOk()
+            ->json();
+
+        $this->assertTrue((bool) ($firstPage['has_more'] ?? false));
+        $this->assertSame('Mensagem 2', (string) ($firstPage['items'][0]['body'] ?? null));
+        $this->assertSame('Mensagem 3', (string) ($firstPage['items'][1]['body'] ?? null));
+        $this->assertNotNull($firstPage['next_before_id'] ?? null);
+
+        $cursor = (int) $firstPage['next_before_id'];
+        $secondPage = $this->withHeaders($this->authHeaders($this->issueToken($recipient)))
+            ->getJson("/api/v1/chat/conversations/{$conversationId}/messages?per_page=2&before_id={$cursor}")
+            ->assertOk()
+            ->json();
+
+        $this->assertFalse((bool) ($secondPage['has_more'] ?? true));
+        $this->assertCount(1, $secondPage['items'] ?? []);
+        $this->assertSame('Mensagem 1', (string) ($secondPage['items'][0]['body'] ?? null));
+    }
+
+    public function test_typing_endpoint_handles_blocking_rules(): void
+    {
+        $firstUser = User::factory()->create();
+        $secondUser = User::factory()->create();
+
+        $conversation = $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+            ->postJson("/api/v1/chat/conversations/with/{$secondUser->id}")
+            ->assertOk()
+            ->json('conversation');
+
+        $conversationId = (int) ($conversation['id'] ?? 0);
+        $this->assertGreaterThan(0, $conversationId);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+            ->postJson("/api/v1/chat/conversations/{$conversationId}/typing", [
+                'is_typing' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Sinal de digitação enviado.');
+
+        $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+            ->postJson("/api/v1/chat/users/{$secondUser->id}/block")
+            ->assertOk();
+
+        $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+            ->postJson("/api/v1/chat/conversations/{$conversationId}/typing", [
+                'is_typing' => true,
+            ])
+            ->assertForbidden()
+            ->assertJsonPath('message', 'Não é possível usar o chat com este usuário no momento.');
+
+        $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+            ->deleteJson("/api/v1/chat/users/{$secondUser->id}/block")
+            ->assertOk();
+
+        $this->withHeaders($this->authHeaders($this->issueToken($secondUser)))
+            ->postJson("/api/v1/chat/users/{$firstUser->id}/block")
+            ->assertOk();
+
+        $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+            ->postJson("/api/v1/chat/conversations/{$conversationId}/typing", [
+                'is_typing' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Sinal de digitação ignorado.');
+    }
+
     /**
      * @return array<string, string>
      */

@@ -148,4 +148,41 @@ class AuthApiTest extends TestCase
             'password' => 'newpassword123',
         ])->assertOk();
     }
+
+    public function test_forgot_password_keeps_generic_response_for_unknown_email(): void
+    {
+        $response = $this->postJson('/api/v1/auth/forgot-password', [
+            'email' => 'nao-existe@example.com',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Se o e-mail existir, enviaremos o link de recuperação.')
+            ->assertJsonMissingPath('reset_token');
+    }
+
+    public function test_reset_password_rejects_invalid_token_and_keeps_current_password(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'invalid-token@example.com',
+            'password' => 'password123',
+        ]);
+
+        $this->postJson('/api/v1/auth/reset-password', [
+            'email' => 'invalid-token@example.com',
+            'token' => 'token-invalido',
+            'password' => 'newpassword123',
+            'password_confirmation' => 'newpassword123',
+        ])->assertStatus(422)
+            ->assertJsonPath('message', 'Não foi possível redefinir a senha com os dados informados.');
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'invalid-token@example.com',
+            'password' => 'password123',
+        ])->assertOk();
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'invalid-token@example.com',
+            'password' => 'newpassword123',
+        ])->assertStatus(401);
+    }
 }

@@ -51,8 +51,16 @@ echo "[3/4] Frontend lint"
 echo "[4/4] Frontend E2E"
 (
   cd frontend
-  INTERNAL_API_URL="http://127.0.0.1:8000/api/v1" \
-  NEXT_PUBLIC_API_URL="http://127.0.0.1:8000/api/v1" \
+  E2E_BACKEND_URL="http://127.0.0.1:18000" \
+  E2E_API_BASE_URL="http://127.0.0.1:18000/api/v1" \
+  INTERNAL_API_URL="http://127.0.0.1:18000/api/v1" \
+  NEXT_PUBLIC_API_URL="http://127.0.0.1:18000/api/v1" \
+  E2E_DB_CONNECTION="mysql" \
+  E2E_DB_HOST="127.0.0.1" \
+  E2E_DB_PORT="3306" \
+  E2E_DB_DATABASE="studiodublagem_tests" \
+  E2E_DB_USERNAME="projetos" \
+  E2E_DB_PASSWORD="" \
   npm run test:e2e
 )
 

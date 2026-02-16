@@ -138,6 +138,94 @@ class OrganizationApiTest extends TestCase
             ->assertJsonPath('viewer.can_request_join', false);
     }
 
+    public function test_organization_index_supports_query_sort_and_only_joined_filters(): void
+    {
+        $viewer = User::factory()->create();
+        $ownerAlpha = User::factory()->create();
+        $ownerBeta = User::factory()->create();
+        $ownerGamma = User::factory()->create();
+
+        $alpha = Organization::create([
+            'owner_user_id' => $ownerAlpha->id,
+            'name' => 'Alpha Central',
+            'slug' => 'alpha-central',
+            'is_public' => true,
+        ]);
+        $beta = Organization::create([
+            'owner_user_id' => $ownerBeta->id,
+            'name' => 'Beta Hall',
+            'slug' => 'beta-hall',
+            'is_public' => true,
+        ]);
+        $gamma = Organization::create([
+            'owner_user_id' => $ownerGamma->id,
+            'name' => 'Gamma Privada',
+            'slug' => 'gamma-privada',
+            'is_public' => false,
+        ]);
+
+        foreach ([[$alpha, $ownerAlpha], [$beta, $ownerBeta], [$gamma, $ownerGamma]] as [$organization, $owner]) {
+            OrganizationMember::create([
+                'organization_id' => $organization->id,
+                'user_id' => $owner->id,
+                'role' => 'owner',
+                'status' => 'active',
+                'joined_at' => now(),
+            ]);
+        }
+
+        OrganizationMember::create([
+            'organization_id' => $beta->id,
+            'user_id' => $viewer->id,
+            'role' => 'member',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $gamma->id,
+            'user_id' => $viewer->id,
+            'role' => 'member',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $betaFollowers = User::factory()->count(3)->create();
+        foreach ($betaFollowers as $follower) {
+            $follower->followedOrganizations()->syncWithoutDetaching([$beta->id]);
+        }
+        $alphaFollower = User::factory()->create();
+        $alphaFollower->followedOrganizations()->syncWithoutDetaching([$alpha->id]);
+
+        $viewerToken = auth('api')->login($viewer);
+        $headers = [
+            'Authorization' => 'Bearer '.$viewerToken,
+            'Accept' => 'application/json',
+        ];
+
+        $queryResponse = $this->withHeaders($headers)
+            ->getJson('/api/v1/organizations?q=Alpha&per_page=50')
+            ->assertOk();
+
+        $querySlugs = collect($queryResponse->json('data'))->pluck('slug')->all();
+        $this->assertSame(['alpha-central'], $querySlugs);
+
+        $joinedResponse = $this->withHeaders($headers)
+            ->getJson('/api/v1/organizations?only_joined=1&discover_private=1&per_page=50')
+            ->assertOk();
+
+        $joinedSlugs = collect($joinedResponse->json('data'))->pluck('slug')->all();
+        $this->assertContains('beta-hall', $joinedSlugs);
+        $this->assertContains('gamma-privada', $joinedSlugs);
+        $this->assertNotContains('alpha-central', $joinedSlugs);
+
+        $sortedResponse = $this->withHeaders($headers)
+            ->getJson('/api/v1/organizations?discover_private=1&sort=followers&per_page=50')
+            ->assertOk();
+
+        $sortedSlugs = collect($sortedResponse->json('data'))->pluck('slug')->all();
+        $this->assertTrue(array_search('beta-hall', $sortedSlugs, true) < array_search('alpha-central', $sortedSlugs, true));
+    }
+
     public function test_private_community_playlists_are_viewable_for_non_members(): void
     {
         $owner = User::factory()->create();

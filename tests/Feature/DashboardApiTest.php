@@ -18,6 +18,25 @@ class DashboardApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_dashboard_overview_returns_summary_organizations_and_top_posts(): void
+    {
+        $user = User::factory()->create();
+        $organization = $this->createOrganizationWithOwner($user, 'dashboard-overview-org');
+        $post = $this->createPublishedPost($organization->id, $user->id, now()->subHour());
+
+        $token = auth('api')->login($user);
+
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer '.$token,
+            'Accept' => 'application/json',
+        ])->getJson('/api/v1/dashboard/overview');
+
+        $response->assertOk()
+            ->assertJsonPath('summary.total_posts', 1)
+            ->assertJsonPath('organizations.0.id', $organization->id)
+            ->assertJsonPath('top_posts.0.id', $post->id);
+    }
+
     public function test_rising_dubbers_30_days_prioritizes_episodes_consistency_submissions_and_tests(): void
     {
         $viewer = User::factory()->create();

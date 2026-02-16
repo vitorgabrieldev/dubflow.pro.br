@@ -80,4 +80,78 @@ class UserProfileApiTest extends TestCase
             'followed_user_id' => $target->id,
         ]);
     }
+
+    public function test_public_profile_exposes_message_permission_and_block_reason(): void
+    {
+        $target = User::factory()->create([
+            'is_private' => false,
+        ]);
+        $viewer = User::factory()->create();
+        $viewerToken = auth('api')->login($viewer);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$viewerToken,
+            'Accept' => 'application/json',
+        ])->getJson("/api/v1/users/{$target->id}")
+            ->assertOk()
+            ->assertJsonPath('viewer.can_follow', true)
+            ->assertJsonPath('viewer.can_message', true)
+            ->assertJsonPath('viewer.message_reason', null);
+
+        DB::table('chat_user_blocks')->insert([
+            'blocker_user_id' => $viewer->id,
+            'blocked_user_id' => $target->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$viewerToken,
+            'Accept' => 'application/json',
+        ])->getJson("/api/v1/users/{$target->id}")
+            ->assertOk()
+            ->assertJsonPath('viewer.can_message', false)
+            ->assertJsonPath('viewer.message_reason', 'Você bloqueou este usuário no chat.');
+    }
+
+    public function test_private_profile_message_permission_requires_viewer_following_owner(): void
+    {
+        $owner = User::factory()->create([
+            'is_private' => true,
+        ]);
+        $viewer = User::factory()->create();
+
+        // Permite visualizar o perfil privado por regra de reciprocidade.
+        DB::table('user_follows')->insert([
+            'follower_user_id' => $owner->id,
+            'followed_user_id' => $viewer->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $viewerToken = auth('api')->login($viewer);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$viewerToken,
+            'Accept' => 'application/json',
+        ])->getJson("/api/v1/users/{$owner->id}")
+            ->assertOk()
+            ->assertJsonPath('viewer.can_message', false)
+            ->assertJsonPath('viewer.message_reason', 'Perfil privado: você precisa seguir este usuário para enviar mensagem.');
+
+        DB::table('user_follows')->insert([
+            'follower_user_id' => $viewer->id,
+            'followed_user_id' => $owner->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$viewerToken,
+            'Accept' => 'application/json',
+        ])->getJson("/api/v1/users/{$owner->id}")
+            ->assertOk()
+            ->assertJsonPath('viewer.can_message', true)
+            ->assertJsonPath('viewer.message_reason', null);
+    }
 }
