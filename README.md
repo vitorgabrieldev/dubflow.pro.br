@@ -74,6 +74,7 @@ Cada organizacao pode:
   - `docs/SECURITY.md`
   - `docs/TESTING.md`
   - `docs/DEPLOYMENT.md`
+  - `docs/PRODUCTION_DIGITALOCEAN.md`
   - `docs/DUBBING_ROADMAP.md`
 
 ## Requisitos locais

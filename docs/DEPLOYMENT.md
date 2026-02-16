@@ -1,5 +1,10 @@
 # Deploy Linux + GitHub Actions
 
+## Guia Completo de Produção (Servidor Zerado)
+
+- Sem Docker, com Apache + systemd + Next + Reverb:
+  - `docs/PRODUCTION_DIGITALOCEAN.md`
+
 ## Workflows
 - `ci.yml`: qualidade obrigatoria (backend + frontend + e2e).
 - `security.yml`: auditoria de dependencias e CodeQL.
