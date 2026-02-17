@@ -32,5 +32,14 @@ Route::get('/', function (Request $request) {
         }
     }
 
-    return redirect()->away("http://localhost:3000/{$resolved}");
+    $frontendBase = rtrim((string) config('app.frontend_url', 'http://localhost:3000'), '/');
+    if ($frontendBase === '') {
+        $frontendBase = 'http://localhost:3000';
+    }
+
+    if (! str_starts_with($frontendBase, 'http://') && ! str_starts_with($frontendBase, 'https://')) {
+        $frontendBase = 'https://'.$frontendBase;
+    }
+
+    return redirect()->away("{$frontendBase}/{$resolved}");
 });
