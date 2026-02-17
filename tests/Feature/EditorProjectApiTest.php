@@ -251,6 +251,164 @@ class EditorProjectApiTest extends TestCase
         Bus::assertNotDispatched(RenderEditorProjectJob::class);
     }
 
+    public function test_owner_can_rename_project_title(): void
+    {
+        $owner = User::factory()->create();
+        $organization = $this->createOrganization($owner, 'studio-h');
+        $this->attachMember($organization, $owner, 'owner');
+
+        $project = EditorProject::query()->create([
+            'organization_id' => $organization->id,
+            'owner_user_id' => $owner->id,
+            'title' => 'Projeto Nome Antigo',
+            'source_language' => 'ja',
+            'target_language' => 'pt-BR',
+            'status' => 'draft',
+            'timeline_json' => ['video_clips' => [], 'audio_clips' => []],
+            'storage_bytes' => 0,
+        ]);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($owner)))
+            ->patchJson("/api/v1/organizations/{$organization->slug}/editor-projects/{$project->id}", [
+                'title' => 'Projeto Nome Novo',
+            ])
+            ->assertOk()
+            ->assertJsonPath('project.title', 'Projeto Nome Novo');
+
+        $this->assertDatabaseHas('editor_projects', [
+            'id' => $project->id,
+            'title' => 'Projeto Nome Novo',
+        ]);
+    }
+
+    public function test_delete_project_requires_exact_confirmation_phrase(): void
+    {
+        $owner = User::factory()->create([
+            'name' => 'Alice Dub',
+            'stage_name' => 'Voz Alice',
+        ]);
+        $organization = $this->createOrganization($owner, 'studio-i');
+        $this->attachMember($organization, $owner, 'owner');
+
+        $project = EditorProject::query()->create([
+            'organization_id' => $organization->id,
+            'owner_user_id' => $owner->id,
+            'title' => 'Projeto Segredo',
+            'source_language' => 'ja',
+            'target_language' => 'pt-BR',
+            'status' => 'draft',
+            'timeline_json' => ['video_clips' => [], 'audio_clips' => []],
+            'storage_bytes' => 0,
+        ]);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($owner)))
+            ->deleteJson("/api/v1/organizations/{$organization->slug}/editor-projects/{$project->id}", [
+                'confirmation_phrase' => 'frase incorreta',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Frase de confirmação inválida. Copie exatamente a frase exigida.');
+
+        $this->assertDatabaseHas('editor_projects', [
+            'id' => $project->id,
+            'deleted_at' => null,
+        ]);
+    }
+
+    public function test_owner_can_delete_project_with_confirmation_phrase(): void
+    {
+        $owner = User::factory()->create([
+            'name' => 'Bruno Costa',
+            'stage_name' => null,
+        ]);
+        $organization = $this->createOrganization($owner, 'studio-j');
+        $this->attachMember($organization, $owner, 'owner');
+
+        $project = EditorProject::query()->create([
+            'organization_id' => $organization->id,
+            'owner_user_id' => $owner->id,
+            'title' => 'Projeto Final',
+            'source_language' => 'ja',
+            'target_language' => 'pt-BR',
+            'status' => 'draft',
+            'timeline_json' => ['video_clips' => [], 'audio_clips' => []],
+            'storage_bytes' => 0,
+        ]);
+
+        $expectedPhrase = 'Eu usuário Bruno Costa desejo deletar o projeto Projeto Final';
+
+        $this->withHeaders($this->authHeaders($this->issueToken($owner)))
+            ->deleteJson("/api/v1/organizations/{$organization->slug}/editor-projects/{$project->id}", [
+                'confirmation_phrase' => $expectedPhrase,
+            ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Projeto removido com sucesso.');
+
+        $this->assertSoftDeleted('editor_projects', [
+            'id' => $project->id,
+        ]);
+    }
+
+    public function test_authenticated_user_can_list_my_editor_projects_with_organization_data(): void
+    {
+        $owner = User::factory()->create([
+            'name' => 'Carlos Nunes',
+            'stage_name' => 'Cadu',
+        ]);
+        $otherUser = User::factory()->create();
+
+        $organizationA = $this->createOrganization($owner, 'studio-k');
+        $organizationB = $this->createOrganization($owner, 'studio-l');
+        $this->attachMember($organizationA, $owner, 'owner');
+        $this->attachMember($organizationB, $owner, 'owner');
+
+        EditorProject::query()->create([
+            'organization_id' => $organizationA->id,
+            'owner_user_id' => $owner->id,
+            'title' => 'Projeto A',
+            'source_language' => 'ja',
+            'target_language' => 'pt-BR',
+            'status' => 'draft',
+            'timeline_json' => ['video_clips' => [], 'audio_clips' => []],
+            'storage_bytes' => 0,
+        ]);
+        EditorProject::query()->create([
+            'organization_id' => $organizationB->id,
+            'owner_user_id' => $owner->id,
+            'title' => 'Projeto B',
+            'source_language' => 'ja',
+            'target_language' => 'pt-BR',
+            'status' => 'draft',
+            'timeline_json' => ['video_clips' => [], 'audio_clips' => []],
+            'storage_bytes' => 0,
+        ]);
+        EditorProject::query()->create([
+            'organization_id' => $organizationA->id,
+            'owner_user_id' => $otherUser->id,
+            'title' => 'Projeto de Outro Usuário',
+            'source_language' => 'ja',
+            'target_language' => 'pt-BR',
+            'status' => 'draft',
+            'timeline_json' => ['video_clips' => [], 'audio_clips' => []],
+            'storage_bytes' => 0,
+        ]);
+
+        $response = $this->withHeaders($this->authHeaders($this->issueToken($owner)))
+            ->getJson('/api/v1/editor-projects/mine?per_page=50')
+            ->assertOk();
+
+        $items = collect($response->json('data'));
+        $titles = $items->pluck('title')->all();
+
+        $this->assertContains('Projeto A', $titles);
+        $this->assertContains('Projeto B', $titles);
+        $this->assertNotContains('Projeto de Outro Usuário', $titles);
+
+        $firstItem = $items->first();
+        $this->assertIsArray($firstItem['organization'] ?? null);
+        $this->assertArrayHasKey('slug', $firstItem['organization'] ?? []);
+        $this->assertArrayHasKey('required_delete_phrase', $firstItem);
+    }
+
     private function createOrganization(User $owner, string $slug): Organization
     {
         return Organization::query()->create([

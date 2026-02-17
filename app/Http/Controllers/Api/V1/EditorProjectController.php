@@ -49,12 +49,49 @@ class EditorProjectController extends Controller
         $user = auth('api')->user();
         $this->ensureCanUseEditor($user, $organization);
 
+        $perPage = max(1, min(50, (int) $request->integer('per_page', 12)));
+
         $projects = EditorProject::query()
             ->where('organization_id', $organization->id)
             ->where('owner_user_id', $user->id)
             ->withCount(['assets', 'subtitles', 'comments', 'renders'])
             ->latest()
-            ->paginate((int) $request->integer('per_page', 12));
+            ->paginate($perPage);
+
+        $projects->setCollection(
+            $projects->getCollection()->map(
+                fn (EditorProject $project): array => $this->transformProjectSummary($project, $user)
+            )
+        );
+
+        return response()->json($projects);
+    }
+
+    public function mine(Request $request): JsonResponse
+    {
+        $user = auth('api')->user();
+        if (! $user) {
+            abort(401, 'Não autenticado.');
+        }
+
+        $perPage = max(1, min(50, (int) $request->integer('per_page', 30)));
+
+        $projects = EditorProject::query()
+            ->where('owner_user_id', $user->id)
+            ->whereHas('organization.members', fn ($builder) => $builder
+                ->where('user_id', $user->id)
+                ->where('status', 'active'))
+            ->with('organization:id,name,slug,avatar_path')
+            ->withCount(['assets', 'subtitles', 'comments', 'renders'])
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->paginate($perPage);
+
+        $projects->setCollection(
+            $projects->getCollection()->map(
+                fn (EditorProject $project): array => $this->transformProjectSummary($project, $user, true)
+            )
+        );
 
         return response()->json($projects);
     }
@@ -105,7 +142,7 @@ class EditorProjectController extends Controller
 
         return response()->json([
             'message' => 'Projeto de edição criado com sucesso.',
-            'project' => $this->transformProject($project->fresh(['organization', 'owner', 'assets', 'subtitles', 'comments.user', 'renders'])),
+            'project' => $this->transformProject($project->fresh(['organization', 'owner', 'assets', 'subtitles', 'comments.user', 'renders']), $user),
         ], 201);
     }
 
@@ -124,7 +161,7 @@ class EditorProjectController extends Controller
         ]);
 
         return response()->json([
-            'project' => $this->transformProject($editorProject),
+            'project' => $this->transformProject($editorProject, $user),
         ]);
     }
 
@@ -143,7 +180,11 @@ class EditorProjectController extends Controller
         $before = $editorProject->toArray();
 
         if (array_key_exists('title', $validated)) {
-            $editorProject->title = trim((string) $validated['title']);
+            $title = trim((string) $validated['title']);
+            if ($title === '') {
+                abort(422, 'Informe um título válido para o projeto.');
+            }
+            $editorProject->title = $title;
         }
         if (array_key_exists('description', $validated)) {
             $description = trim((string) ($validated['description'] ?? ''));
@@ -175,7 +216,7 @@ class EditorProjectController extends Controller
 
         return response()->json([
             'message' => 'Projeto atualizado.',
-            'project' => $this->transformProject($editorProject->fresh(['organization', 'owner', 'assets', 'subtitles', 'comments.user', 'renders'])),
+            'project' => $this->transformProject($editorProject->fresh(['organization', 'owner', 'assets', 'subtitles', 'comments.user', 'renders']), $user),
         ]);
     }
 
@@ -183,6 +224,15 @@ class EditorProjectController extends Controller
     {
         $user = auth('api')->user();
         $this->ensureProjectOwner($user, $organization, $editorProject);
+
+        $validated = $request->validate([
+            'confirmation_phrase' => ['required', 'string', 'max:500'],
+        ]);
+
+        $expectedPhrase = $this->buildProjectDeletionPhrase($user, $editorProject);
+        if (trim((string) $validated['confirmation_phrase']) !== $expectedPhrase) {
+            abort(422, 'Frase de confirmação inválida. Copie exatamente a frase exigida.');
+        }
 
         $before = $editorProject->toArray();
         $this->deleteProjectFiles($editorProject);
@@ -251,7 +301,7 @@ class EditorProjectController extends Controller
         return response()->json([
             'message' => 'Autosave concluído.',
             'autosaved_at' => optional($editorProject->autosaved_at)->toIso8601String(),
-            'project' => $this->transformProject($editorProject->fresh(['organization', 'owner', 'assets', 'subtitles', 'comments.user', 'renders'])),
+            'project' => $this->transformProject($editorProject->fresh(['organization', 'owner', 'assets', 'subtitles', 'comments.user', 'renders']), $user),
         ]);
     }
 
@@ -339,7 +389,7 @@ class EditorProjectController extends Controller
 
         return response()->json([
             'message' => 'Arquivos enviados com sucesso. Processando metadados...',
-            'project' => $this->transformProject($editorProject->fresh(['organization', 'owner', 'assets', 'subtitles', 'comments.user', 'renders'])),
+            'project' => $this->transformProject($editorProject->fresh(['organization', 'owner', 'assets', 'subtitles', 'comments.user', 'renders']), $user),
         ], 201);
     }
 
@@ -375,7 +425,7 @@ class EditorProjectController extends Controller
 
         return response()->json([
             'message' => 'Arquivo removido do projeto.',
-            'project' => $this->transformProject($editorProject->fresh(['organization', 'owner', 'assets', 'subtitles', 'comments.user', 'renders'])),
+            'project' => $this->transformProject($editorProject->fresh(['organization', 'owner', 'assets', 'subtitles', 'comments.user', 'renders']), $user),
         ]);
     }
 
@@ -748,7 +798,7 @@ class EditorProjectController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function transformProject(EditorProject $project): array
+    private function transformProject(EditorProject $project, ?User $viewer = null): array
     {
         return [
             'id' => $project->id,
@@ -765,6 +815,7 @@ class EditorProjectController extends Controller
             'autosaved_at' => optional($project->autosaved_at)->toIso8601String(),
             'rendered_at' => optional($project->rendered_at)->toIso8601String(),
             'source_assets_purged_at' => optional($project->source_assets_purged_at)->toIso8601String(),
+            'required_delete_phrase' => $viewer ? $this->buildProjectDeletionPhrase($viewer, $project) : null,
             'created_at' => optional($project->created_at)->toIso8601String(),
             'updated_at' => optional($project->updated_at)->toIso8601String(),
             'organization' => $project->relationLoaded('organization') ? [
@@ -793,6 +844,41 @@ class EditorProjectController extends Controller
                 ? $project->renders->map(fn (EditorProjectRender $render): array => $this->transformRender($render))->values()->all()
                 : [],
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function transformProjectSummary(EditorProject $project, User $viewer, bool $includeOrganization = false): array
+    {
+        return [
+            'id' => $project->id,
+            'organization_id' => $project->organization_id,
+            'owner_user_id' => $project->owner_user_id,
+            'title' => $project->title,
+            'status' => $project->status,
+            'required_delete_phrase' => $this->buildProjectDeletionPhrase($viewer, $project),
+            'assets_count' => (int) ($project->assets_count ?? 0),
+            'subtitles_count' => (int) ($project->subtitles_count ?? 0),
+            'comments_count' => (int) ($project->comments_count ?? 0),
+            'renders_count' => (int) ($project->renders_count ?? 0),
+            'created_at' => optional($project->created_at)->toIso8601String(),
+            'updated_at' => optional($project->updated_at)->toIso8601String(),
+            'organization' => $includeOrganization && $project->relationLoaded('organization') ? [
+                'id' => $project->organization?->id,
+                'name' => $project->organization?->name,
+                'slug' => $project->organization?->slug,
+                'avatar_path' => $project->organization?->avatar_path,
+            ] : null,
+        ];
+    }
+
+    private function buildProjectDeletionPhrase(User $user, EditorProject $project): string
+    {
+        $displayName = trim((string) ($user->stage_name ?: $user->name));
+        $projectTitle = trim((string) $project->title);
+
+        return sprintf('Eu usuário %s desejo deletar o projeto %s', $displayName, $projectTitle);
     }
 
     /**

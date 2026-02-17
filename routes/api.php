@@ -99,6 +99,7 @@ Route::prefix('v1')->group(function () {
         Route::patch('/organizations/{organization}/dubbing-tests/{dubbingTest}/submissions/{submission}/feedback', [DubbingTestController::class, 'saveRejectionFeedback']);
         Route::post('/organizations/{organization}/dubbing-tests/{dubbingTest}/conclude-selection', [DubbingTestController::class, 'concludeSelection']);
 
+        Route::get('/editor-projects/mine', [EditorProjectController::class, 'mine']);
         Route::get('/organizations/{organization}/editor-projects', [EditorProjectController::class, 'index']);
         Route::post('/organizations/{organization}/editor-projects', [EditorProjectController::class, 'store']);
         Route::get('/organizations/{organization}/editor-projects/{editorProject}', [EditorProjectController::class, 'show']);
