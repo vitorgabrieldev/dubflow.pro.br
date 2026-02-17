@@ -133,6 +133,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/conversations/{conversation}/messages', [ChatController::class, 'sendMessage']);
             Route::post('/conversations/{conversation}/read', [ChatController::class, 'markConversationRead']);
             Route::post('/conversations/{conversation}/typing', [ChatController::class, 'typing']);
+            Route::patch('/conversations/{conversation}/peer-alias', [ChatController::class, 'renameConversationPeer']);
             Route::patch('/messages/{message}', [ChatController::class, 'updateMessage']);
             Route::delete('/messages/{message}', [ChatController::class, 'destroyMessage']);
             Route::post('/users/{user}/block', [ChatController::class, 'blockUser']);

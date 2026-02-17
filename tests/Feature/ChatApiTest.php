@@ -434,6 +434,98 @@ class ChatApiTest extends TestCase
             ->assertJsonPath('message', 'Sinal de digitação ignorado.');
     }
 
+    public function test_participant_can_set_peer_alias_visible_only_for_themselves(): void
+    {
+        $firstUser = User::factory()->create();
+        $secondUser = User::factory()->create();
+
+        $conversation = $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+            ->postJson("/api/v1/chat/conversations/with/{$secondUser->id}")
+            ->assertOk()
+            ->json('conversation');
+
+        $conversationId = (int) ($conversation['id'] ?? 0);
+        $this->assertGreaterThan(0, $conversationId);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+            ->patchJson("/api/v1/chat/conversations/{$conversationId}/peer-alias", [
+                'peer_alias' => 'Meu namorado',
+            ])
+            ->assertOk()
+            ->assertJsonPath('peer_alias', 'Meu namorado');
+
+        $this->assertDatabaseHas('chat_conversation_participants', [
+            'conversation_id' => $conversationId,
+            'user_id' => $firstUser->id,
+            'peer_alias' => 'Meu namorado',
+        ]);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+            ->getJson('/api/v1/chat/conversations')
+            ->assertOk()
+            ->assertJsonPath('items.0.peer.custom_name', 'Meu namorado');
+
+        $this->withHeaders($this->authHeaders($this->issueToken($secondUser)))
+            ->getJson('/api/v1/chat/conversations')
+            ->assertOk()
+            ->assertJsonPath('items.0.peer.custom_name', null);
+    }
+
+    public function test_participant_can_clear_peer_alias(): void
+    {
+        $firstUser = User::factory()->create();
+        $secondUser = User::factory()->create();
+
+        $conversation = $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+            ->postJson("/api/v1/chat/conversations/with/{$secondUser->id}")
+            ->assertOk()
+            ->json('conversation');
+
+        $conversationId = (int) ($conversation['id'] ?? 0);
+        $this->assertGreaterThan(0, $conversationId);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+            ->patchJson("/api/v1/chat/conversations/{$conversationId}/peer-alias", [
+                'peer_alias' => 'Contato teste',
+            ])
+            ->assertOk();
+
+        $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+            ->patchJson("/api/v1/chat/conversations/{$conversationId}/peer-alias", [
+                'peer_alias' => '   ',
+            ])
+            ->assertOk()
+            ->assertJsonPath('peer_alias', null);
+
+        $this->assertDatabaseHas('chat_conversation_participants', [
+            'conversation_id' => $conversationId,
+            'user_id' => $firstUser->id,
+            'peer_alias' => null,
+        ]);
+    }
+
+    public function test_non_participant_cannot_rename_peer_alias(): void
+    {
+        $firstUser = User::factory()->create();
+        $secondUser = User::factory()->create();
+        $thirdUser = User::factory()->create();
+
+        $conversation = $this->withHeaders($this->authHeaders($this->issueToken($firstUser)))
+            ->postJson("/api/v1/chat/conversations/with/{$secondUser->id}")
+            ->assertOk()
+            ->json('conversation');
+
+        $conversationId = (int) ($conversation['id'] ?? 0);
+        $this->assertGreaterThan(0, $conversationId);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($thirdUser)))
+            ->patchJson("/api/v1/chat/conversations/{$conversationId}/peer-alias", [
+                'peer_alias' => 'Tentativa externa',
+            ])
+            ->assertForbidden()
+            ->assertJsonPath('message', 'Sem permissão para acessar esta conversa.');
+    }
+
     /**
      * @return array<string, string>
      */

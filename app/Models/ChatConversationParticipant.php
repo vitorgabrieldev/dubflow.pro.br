@@ -13,6 +13,7 @@ class ChatConversationParticipant extends Model
         'last_read_message_id',
         'hidden_at',
         'last_seen_at',
+        'peer_alias',
     ];
 
     protected function casts(): array

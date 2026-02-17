@@ -158,7 +158,10 @@ class ChatController extends Controller
 
                 return [
                     'id' => $conversation->id,
-                    'peer' => $this->transformUserPreview($peer),
+                    'peer' => array_merge(
+                        $this->transformUserPreview($peer),
+                        ['custom_name' => $this->normalizePeerAlias($participant->peer_alias)]
+                    ),
                     'last_message' => $lastMessage ? $this->transformMessage($lastMessage, $viewer->id) : null,
                     'unread_count' => (int) ($unreadByConversation[$conversation->id] ?? 0),
                     'is_blocked_by_me' => in_array($peer->id, $blockedByMe, true),
@@ -212,6 +215,7 @@ class ChatController extends Controller
                 'last_seen_at' => now(),
                 'updated_at' => now(),
             ]);
+        $participant = $this->ensureParticipant($viewer->id, $conversation);
 
         $conversation->load([
             'userOne:id,name,stage_name,username,avatar_path,is_private',
@@ -225,10 +229,38 @@ class ChatController extends Controller
         return response()->json([
             'conversation' => [
                 'id' => $conversation->id,
-                'peer' => $peer ? $this->transformUserPreview($peer) : null,
+                'peer' => $peer
+                    ? array_merge(
+                        $this->transformUserPreview($peer),
+                        ['custom_name' => $this->normalizePeerAlias($participant->peer_alias)]
+                    )
+                    : null,
                 'last_message' => $conversation->lastMessage ? $this->transformMessage($conversation->lastMessage, $viewer->id) : null,
                 'unread_count' => $this->unreadCount($conversation->id, $viewer->id),
             ],
+        ]);
+    }
+
+    public function renameConversationPeer(Request $request, ChatConversation $conversation): JsonResponse
+    {
+        $viewer = auth('api')->user();
+        $participant = $this->ensureParticipant($viewer->id, $conversation);
+
+        $validated = $request->validate([
+            'peer_alias' => ['nullable', 'string', 'max:80'],
+        ]);
+
+        $peerAlias = $this->normalizePeerAlias($validated['peer_alias'] ?? null);
+
+        $participant->forceFill([
+            'peer_alias' => $peerAlias,
+            'updated_at' => now(),
+        ])->save();
+
+        return response()->json([
+            'message' => 'Nome do contato atualizado.',
+            'conversation_id' => $conversation->id,
+            'peer_alias' => $peerAlias,
         ]);
     }
 
@@ -893,6 +925,17 @@ class ChatController extends Controller
         }
 
         return 'file';
+    }
+
+    private function normalizePeerAlias(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $normalized = trim($value);
+
+        return $normalized === '' ? null : $normalized;
     }
 
     private function broadcastSafely(object $event): void
