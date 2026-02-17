@@ -28,9 +28,14 @@ class OrganizationMemberController extends Controller
             abort(403, 'Sem permissao para visualizar membros desta comunidade.');
         }
 
+        $canManageOrganization = OrganizationAccess::canManageOrganization($user, $organization);
+        $userColumns = $canManageOrganization
+            ? 'user:id,name,username,avatar_path,email'
+            : 'user:id,name,username,avatar_path';
+
         $members = OrganizationMember::query()
             ->where('organization_id', $organization->id)
-            ->with('user:id,name,username,avatar_path,email')
+            ->with($userColumns)
             ->orderByDesc('created_at')
             ->paginate(30);
 

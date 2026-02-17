@@ -103,14 +103,16 @@ class OrganizationController extends Controller
             $query->orderByDesc('created_at');
         }
 
+        $perPage = max(1, min(50, (int) $request->integer('per_page', 12)));
+
         $cacheKey = sprintf(
             'organizations:index:%s:%s',
             $user?->id ?? 'guest',
             md5($request->fullUrl())
         );
 
-        $payload = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($query, $request, $user) {
-            $organizations = $query->paginate((int) $request->integer('per_page', 12));
+        $payload = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($query, $user, $perPage) {
+            $organizations = $query->paginate($perPage);
             $this->attachViewerState($organizations->getCollection(), $user?->id);
 
             return $organizations->toArray();
@@ -273,6 +275,8 @@ class OrganizationController extends Controller
     {
         $user = auth('api')->user();
 
+        $perPage = max(1, min(50, (int) $request->integer('per_page', 18)));
+
         $organizations = Organization::query()
             ->select([
                 'id',
@@ -292,7 +296,7 @@ class OrganizationController extends Controller
                 ->where('user_id', $user->id)
                 ->where('status', 'active'))
             ->orderByDesc('created_at')
-            ->paginate((int) $request->integer('per_page', 18));
+            ->paginate($perPage);
 
         $this->attachViewerState($organizations->getCollection(), $user->id);
 

@@ -29,8 +29,8 @@
 - convites de comunidade respeitam `max_uses`, `expires_at` e `revoked_at`.
 
 ## Índices Relevantes
-- organização: visibilidade + criação.
-- posts: visibilidade + publicação, organização + criação.
+- Comunidade: visibilidade + criação.
+- posts: visibilidade + publicação, Comunidade + criação.
 - convites: token + expiração.
 - comentários: post + criação.
 

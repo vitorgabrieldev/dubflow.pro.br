@@ -123,7 +123,7 @@ class OrganizationInviteController extends Controller
 
             if ($membership?->status === 'active') {
                 return response()->json([
-                    'message' => 'Você já é membro da organização.',
+                    'message' => 'Você já é membro da Comunidade.',
                 ]);
             }
 

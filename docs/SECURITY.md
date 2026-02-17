@@ -11,7 +11,7 @@
 ## Observabilidade de Segurança
 - logs de request com `X-Request-Id`.
 - trilha de auditoria em ações críticas:
-  - organização (criação, follow/unfollow, solicitação de entrada)
+  - Comunidade (criação, follow/unfollow, solicitação de entrada)
   - posts (criação, edição, remoção)
   - interações (like/unlike, comentários, colaboração)
   - convites de comunidade

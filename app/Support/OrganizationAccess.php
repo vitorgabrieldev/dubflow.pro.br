@@ -46,6 +46,11 @@ class OrganizationAccess
         return self::hasRole($user, $organization, ['owner', 'admin']);
     }
 
+    public static function canUseEditor(User $user, Organization $organization): bool
+    {
+        return self::hasRole($user, $organization, ['owner', 'admin', 'editor', 'member']);
+    }
+
     public static function canManagePost(User $user, DubbingPost $post): bool
     {
         return self::canEditPost($user, $post);

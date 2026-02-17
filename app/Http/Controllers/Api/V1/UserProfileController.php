@@ -63,7 +63,8 @@ class UserProfileController extends Controller
             $postsQuery->where('visibility', 'public')->whereNotNull('published_at');
         }
 
-        $posts = $postsQuery->paginate((int) $request->integer('per_page', 20));
+        $postsPerPage = max(1, min(50, (int) $request->integer('per_page', 20)));
+        $posts = $postsQuery->paginate($postsPerPage);
         PostViewerPermissions::attachToCollection($posts->getCollection(), $viewer);
         MediaAccess::signPostCollection($posts->getCollection());
 
@@ -180,6 +181,17 @@ class UserProfileController extends Controller
             })
             ->values();
 
+        $proposalContactPreferences = collect(is_array($user->proposal_contact_preferences) ? $user->proposal_contact_preferences : [])
+            ->filter(fn ($value): bool => is_string($value) && trim($value) !== '')
+            ->map(fn ($value): string => trim((string) $value))
+            ->values();
+
+        $proposalContactLinks = collect(is_array($user->proposal_contact_links) ? $user->proposal_contact_links : [])
+            ->only($proposalContactPreferences->all())
+            ->map(fn ($value): ?string => is_string($value) ? trim($value) : null)
+            ->filter(fn ($value): bool => is_string($value) && $value !== '')
+            ->all();
+
         return response()->json([
             'user' => [
                 'id' => $user->id,
@@ -201,8 +213,8 @@ class UserProfileController extends Controller
                 'weekly_availability' => $user->weekly_availability,
                 'state' => $user->state,
                 'city' => $user->city,
-                'proposal_contact_preferences' => $user->proposal_contact_preferences,
-                'proposal_contact_links' => $user->proposal_contact_links,
+                'proposal_contact_preferences' => $proposalContactPreferences->all(),
+                'proposal_contact_links' => $proposalContactLinks,
                 'social_links' => $user->social_links,
                 'profile_links' => $user->profile_links,
                 'tags' => $user->tags,

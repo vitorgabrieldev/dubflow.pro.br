@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AchievementDefinition;
 use App\Models\AchievementLevel;
+use App\Models\DubbingPost;
 use App\Models\Organization;
 use App\Models\OrganizationMember;
 use App\Models\User;
@@ -225,5 +226,84 @@ class UserProfileApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('communities.0.name', 'Studio Aurora')
             ->assertJsonPath('achievements.0.definition.title', 'Estrela da Voz');
+    }
+
+    public function test_public_profile_exposes_only_contact_links_selected_in_preferences(): void
+    {
+        $owner = User::factory()->create([
+            'is_private' => false,
+            'proposal_contact_preferences' => ['dm_plataforma', 'email'],
+            'proposal_contact_links' => [
+                'email' => 'contato@dubflow.dev',
+                'whatsapp' => '5543999999999',
+                'discord' => 'discord.gg/dubflow',
+            ],
+        ]);
+        $viewer = User::factory()->create();
+
+        $viewerToken = auth('api')->login($viewer);
+
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer '.$viewerToken,
+            'Accept' => 'application/json',
+        ])->getJson("/api/v1/users/{$owner->id}")
+            ->assertOk();
+
+        $response->assertJsonPath('user.proposal_contact_preferences.0', 'dm_plataforma');
+        $response->assertJsonPath('user.proposal_contact_preferences.1', 'email');
+        $response->assertJsonPath('user.proposal_contact_links.email', 'contato@dubflow.dev');
+        $response->assertJsonMissingPath('user.proposal_contact_links.whatsapp');
+        $response->assertJsonMissingPath('user.proposal_contact_links.discord');
+    }
+
+    public function test_user_profile_caps_posts_per_page_to_50(): void
+    {
+        $owner = User::factory()->create();
+
+        $organization = Organization::query()->create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Perfil Posts Cap',
+            'slug' => 'perfil-posts-cap',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::query()->create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'source' => 'owner_created',
+            'requested_by_user_id' => $owner->id,
+            'approved_by_user_id' => $owner->id,
+            'joined_at' => now(),
+            'approved_at' => now(),
+        ]);
+
+        for ($index = 1; $index <= 55; $index++) {
+            DubbingPost::query()->create([
+                'organization_id' => $organization->id,
+                'author_user_id' => $owner->id,
+                'title' => 'Post '.$index,
+                'media_path' => 'posts/post-'.$index.'.jpg',
+                'media_type' => 'image',
+                'media_size_bytes' => 1024,
+                'duration_seconds' => 0,
+                'visibility' => 'public',
+                'allow_comments' => true,
+                'language_code' => 'pt-BR',
+                'content_license' => 'all_rights_reserved',
+                'published_at' => now(),
+            ]);
+        }
+
+        $ownerToken = auth('api')->login($owner);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->getJson("/api/v1/users/{$owner->id}?per_page=999")
+            ->assertOk()
+            ->assertJsonPath('posts.per_page', 50)
+            ->assertJsonCount(50, 'posts.data');
     }
 }

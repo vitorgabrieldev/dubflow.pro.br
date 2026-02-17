@@ -226,6 +226,56 @@ class OrganizationApiTest extends TestCase
         $this->assertTrue(array_search('beta-hall', $sortedSlugs, true) < array_search('alpha-central', $sortedSlugs, true));
     }
 
+    public function test_organization_index_caps_per_page_to_50(): void
+    {
+        $owner = User::factory()->create();
+
+        for ($index = 1; $index <= 60; $index++) {
+            Organization::query()->create([
+                'owner_user_id' => $owner->id,
+                'name' => 'Cap Org '.$index,
+                'slug' => 'cap-org-'.$index,
+                'is_public' => true,
+            ]);
+        }
+
+        $this->getJson('/api/v1/organizations?discover_private=1&per_page=999')
+            ->assertOk()
+            ->assertJsonPath('per_page', 50)
+            ->assertJsonCount(50, 'data');
+    }
+
+    public function test_my_organizations_caps_per_page_to_50(): void
+    {
+        $owner = User::factory()->create();
+        $ownerToken = auth('api')->login($owner);
+
+        for ($index = 1; $index <= 60; $index++) {
+            $organization = Organization::query()->create([
+                'owner_user_id' => $owner->id,
+                'name' => 'My Cap Org '.$index,
+                'slug' => 'my-cap-org-'.$index,
+                'is_public' => true,
+            ]);
+
+            OrganizationMember::query()->create([
+                'organization_id' => $organization->id,
+                'user_id' => $owner->id,
+                'role' => 'owner',
+                'status' => 'active',
+                'joined_at' => now(),
+            ]);
+        }
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->getJson('/api/v1/my-organizations?per_page=999')
+            ->assertOk()
+            ->assertJsonPath('per_page', 50)
+            ->assertJsonCount(50, 'data');
+    }
+
     public function test_private_community_playlists_are_viewable_for_non_members(): void
     {
         $owner = User::factory()->create();
@@ -259,6 +309,62 @@ class OrganizationApiTest extends TestCase
         $this->getJson("/api/v1/organizations/{$organization->slug}/playlists/{$playlist->id}")
             ->assertOk()
             ->assertJsonPath('playlist.id', $playlist->id);
+    }
+
+    public function test_members_endpoint_hides_email_for_regular_members_and_shows_for_managers(): void
+    {
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Members Email Privacy',
+            'slug' => 'members-email-privacy',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $member->id,
+            'role' => 'member',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $memberToken = auth('api')->login($member);
+
+        $memberResponse = $this->withHeaders([
+            'Authorization' => 'Bearer '.$memberToken,
+            'Accept' => 'application/json',
+        ])->getJson("/api/v1/organizations/{$organization->slug}/members")
+            ->assertOk();
+
+        foreach ($memberResponse->json('data') as $row) {
+            $this->assertArrayNotHasKey('email', $row['user'] ?? []);
+        }
+
+        $ownerToken = auth('api')->login($owner);
+
+        $ownerResponse = $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->getJson("/api/v1/organizations/{$organization->slug}/members")
+            ->assertOk();
+
+        $ownerEmails = collect($ownerResponse->json('data'))
+            ->pluck('user.email')
+            ->filter()
+            ->values()
+            ->all();
+
+        $this->assertContains($member->email, $ownerEmails);
     }
 
     public function test_owner_can_create_invite_and_member_can_accept(): void

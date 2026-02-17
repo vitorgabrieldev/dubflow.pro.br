@@ -16,6 +16,11 @@ class MediaAccess
         'dubbing-thumbnails/',
         'dubbing-tests/',
         'chat-media/',
+        'editor-projects/',
+        'editor-renders/',
+        'editor-waveforms/',
+        'editor-frames/',
+        'editor-thumbnails/',
     ];
 
     public static function isProtectedPath(?string $path): bool
