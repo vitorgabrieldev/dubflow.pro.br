@@ -193,6 +193,10 @@ class AuthController extends Controller
             'city' => ['nullable', 'string', 'max:120'],
             'proposal_contact_preferences' => ['nullable', 'array', 'max:20'],
             'proposal_contact_preferences.*' => ['string', 'max:60'],
+            'proposal_contact_links' => ['nullable', 'array'],
+            'proposal_contact_links.email' => ['nullable', 'string', 'max:255'],
+            'proposal_contact_links.whatsapp' => ['nullable', 'string', 'max:255'],
+            'proposal_contact_links.discord' => ['nullable', 'string', 'max:120'],
             'tags' => ['nullable', 'array', 'max:50'],
             'tags.*' => ['string', 'max:60'],
             'social_links' => ['nullable', 'array', 'max:30'],
@@ -210,6 +214,14 @@ class AuthController extends Controller
         if (! ($validated['has_recording_equipment'] ?? false)) {
             $validated['recording_equipment'] = [];
             $validated['recording_equipment_other'] = null;
+        }
+
+        if (isset($validated['proposal_contact_links']) && is_array($validated['proposal_contact_links'])) {
+            $validated['proposal_contact_links'] = collect($validated['proposal_contact_links'])
+                ->map(fn ($value) => is_string($value) ? trim($value) : null)
+                ->filter(fn ($value) => is_string($value) && $value !== '')
+                ->only(['email', 'whatsapp', 'discord'])
+                ->all();
         }
 
         if ($request->hasFile('avatar')) {

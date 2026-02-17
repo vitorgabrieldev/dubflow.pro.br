@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\PostController;
 use App\Http\Controllers\Api\V1\PostInteractionController;
 use App\Http\Controllers\Api\V1\PublishOptionsController;
 use App\Http\Controllers\Api\V1\SearchController;
+use App\Http\Controllers\Api\V1\UnifiedSearchController;
 use App\Http\Controllers\Api\V1\UserProfileController;
 use Illuminate\Support\Facades\Route;
 
@@ -54,6 +55,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/dubbing-tests/{dubbingTest}', [DubbingTestController::class, 'show']);
 
     Route::get('/search', SearchController::class);
+    Route::get('/search/unified', UnifiedSearchController::class);
 
     Route::middleware(['auth:api', 'throttle:120,1'])->group(function () {
         Route::get('/my-organizations', [OrganizationController::class, 'myOrganizations']);

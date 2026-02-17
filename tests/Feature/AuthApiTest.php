@@ -77,6 +77,11 @@ class AuthApiTest extends TestCase
             'state' => 'São Paulo',
             'city' => 'Campinas',
             'proposal_contact_preferences' => ['dm_plataforma', 'email'],
+            'proposal_contact_links' => [
+                'email' => 'contato@dubflow.dev',
+                'whatsapp' => '+55 43 99999-9999',
+                'discord' => 'dubflow#1234',
+            ],
             'tags' => ['Anime', 'Série'],
             'social_links' => [
                 ['label' => 'Instagram', 'url' => 'https://instagram.com/dubflow'],
@@ -94,6 +99,7 @@ class AuthApiTest extends TestCase
             ->assertJsonPath('user.pronouns', 'ela/dela')
             ->assertJsonPath('user.state', 'São Paulo')
             ->assertJsonPath('user.city', 'Campinas')
+            ->assertJsonPath('user.proposal_contact_links.email', 'contato@dubflow.dev')
             ->assertJsonPath('user.has_recording_equipment', true);
         $this->assertDatabaseHas('users', [
             'id' => $user->id,

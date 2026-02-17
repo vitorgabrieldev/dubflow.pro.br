@@ -202,6 +202,7 @@ class UserProfileController extends Controller
                 'state' => $user->state,
                 'city' => $user->city,
                 'proposal_contact_preferences' => $user->proposal_contact_preferences,
+                'proposal_contact_links' => $user->proposal_contact_links,
                 'social_links' => $user->social_links,
                 'profile_links' => $user->profile_links,
                 'tags' => $user->tags,
