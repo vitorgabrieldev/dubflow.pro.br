@@ -119,6 +119,37 @@ class EditorProjectApiTest extends TestCase
         Bus::assertDispatched(ProcessEditorAssetJob::class);
     }
 
+    public function test_upload_assets_rejects_image_files(): void
+    {
+        Bus::fake();
+
+        $owner = User::factory()->create();
+        $organization = $this->createOrganization($owner, 'studio-d-image-block');
+        $this->attachMember($organization, $owner, 'owner');
+
+        $project = EditorProject::query()->create([
+            'organization_id' => $organization->id,
+            'owner_user_id' => $owner->id,
+            'title' => 'Projeto upload bloqueado imagem',
+            'source_language' => 'ja',
+            'target_language' => 'pt-BR',
+            'status' => 'draft',
+            'timeline_json' => ['video_clips' => [], 'audio_clips' => []],
+            'storage_bytes' => 0,
+        ]);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($owner)))
+            ->post("/api/v1/organizations/{$organization->slug}/editor-projects/{$project->id}/assets", [
+                'files' => [
+                    UploadedFile::fake()->image('poster.png'),
+                ],
+            ])
+            ->assertStatus(422);
+
+        $this->assertDatabaseCount('editor_project_assets', 0);
+        Bus::assertNotDispatched(ProcessEditorAssetJob::class);
+    }
+
     public function test_autosave_updates_timeline_and_subtitles(): void
     {
         $owner = User::factory()->create();
@@ -136,13 +167,24 @@ class EditorProjectApiTest extends TestCase
             'storage_bytes' => 0,
         ]);
 
+        $asset = $project->assets()->create([
+            'asset_type' => 'video',
+            'label' => 'timeline.mp4',
+            'path' => 'editor-projects/'.$project->id.'/assets/timeline.mp4',
+            'disk' => 'local',
+            'mime' => 'video/mp4',
+            'size_bytes' => 1024,
+            'duration_ms' => 30000,
+            'sort_order' => 1,
+        ]);
+
         $this->withHeaders($this->authHeaders($this->issueToken($owner)))
             ->postJson("/api/v1/organizations/{$organization->slug}/editor-projects/{$project->id}/autosave", [
                 'duration_ms' => 150000,
                 'timeline_json' => [
                     'video_clips' => [
                         [
-                            'asset_id' => 10,
+                            'asset_id' => $asset->id,
                             'source_in_ms' => 0,
                             'source_out_ms' => 10000,
                             'timeline_start_ms' => 0,
@@ -173,6 +215,71 @@ class EditorProjectApiTest extends TestCase
         $project->refresh();
         $this->assertSame(150000, (int) $project->duration_ms);
         $this->assertDatabaseCount('editor_project_subtitles', 1);
+    }
+
+    public function test_autosave_accepts_timeline_without_audio_clips_key(): void
+    {
+        $owner = User::factory()->create();
+        $organization = $this->createOrganization($owner, 'studio-e-audio-optional');
+        $this->attachMember($organization, $owner, 'owner');
+
+        $project = EditorProject::query()->create([
+            'organization_id' => $organization->id,
+            'owner_user_id' => $owner->id,
+            'title' => 'Projeto autosave sem audio_clips',
+            'source_language' => 'ja',
+            'target_language' => 'pt-BR',
+            'status' => 'draft',
+            'timeline_json' => ['video_clips' => [], 'audio_clips' => []],
+            'storage_bytes' => 0,
+        ]);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($owner)))
+            ->postJson("/api/v1/organizations/{$organization->slug}/editor-projects/{$project->id}/autosave", [
+                'duration_ms' => 9000,
+                'timeline_json' => [
+                    'video_clips' => [],
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('project.timeline_json.audio_clips', []);
+
+        $project->refresh();
+        $this->assertSame([], $project->timeline_json['audio_clips'] ?? null);
+    }
+
+    public function test_autosave_is_blocked_for_finalized_project(): void
+    {
+        $owner = User::factory()->create();
+        $organization = $this->createOrganization($owner, 'studio-e-finalized');
+        $this->attachMember($organization, $owner, 'owner');
+
+        $project = EditorProject::query()->create([
+            'organization_id' => $organization->id,
+            'owner_user_id' => $owner->id,
+            'title' => 'Projeto finalizado',
+            'source_language' => 'ja',
+            'target_language' => 'pt-BR',
+            'status' => 'rendered',
+            'timeline_json' => ['video_clips' => [], 'audio_clips' => []],
+            'storage_bytes' => 0,
+            'source_assets_purged_at' => now(),
+        ]);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($owner)))
+            ->postJson("/api/v1/organizations/{$organization->slug}/editor-projects/{$project->id}/autosave", [
+                'duration_ms' => 5000,
+                'timeline_json' => [
+                    'video_clips' => [],
+                    'audio_clips' => [],
+                    'subtitle_clips' => [],
+                ],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath(
+                'message',
+                'Este projeto já foi finalizado e os arquivos de origem foram removidos. Crie um novo projeto para continuar editando.'
+            );
     }
 
     public function test_queue_render_dispatches_render_job(): void
@@ -215,6 +322,96 @@ class EditorProjectApiTest extends TestCase
 
         $this->assertDatabaseCount('editor_project_renders', 1);
         Bus::assertDispatched(RenderEditorProjectJob::class);
+    }
+
+    public function test_queue_render_accepts_image_assets_in_workspace(): void
+    {
+        Bus::fake();
+
+        $owner = User::factory()->create();
+        $organization = $this->createOrganization($owner, 'studio-f-image');
+        $this->attachMember($organization, $owner, 'owner');
+
+        $project = EditorProject::query()->create([
+            'organization_id' => $organization->id,
+            'owner_user_id' => $owner->id,
+            'title' => 'Projeto render com imagem',
+            'source_language' => 'ja',
+            'target_language' => 'pt-BR',
+            'status' => 'draft',
+            'timeline_json' => ['video_clips' => [], 'audio_clips' => []],
+            'storage_bytes' => 1024,
+        ]);
+
+        $project->assets()->create([
+            'asset_type' => 'image',
+            'label' => 'frame.png',
+            'path' => 'editor-projects/'.$project->id.'/assets/frame.png',
+            'disk' => 'local',
+            'mime' => 'image/png',
+            'size_bytes' => 1024,
+            'duration_ms' => null,
+            'sort_order' => 1,
+        ]);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($owner)))
+            ->postJson("/api/v1/organizations/{$organization->slug}/editor-projects/{$project->id}/renders", [
+                'preset' => 'preview_720p',
+                'output_mode' => 'video_no_subtitles',
+            ])
+            ->assertStatus(202)
+            ->assertJsonPath('render.status', 'queued');
+
+        Bus::assertDispatched(RenderEditorProjectJob::class);
+    }
+
+    public function test_queue_render_blocks_duplicate_pending_render(): void
+    {
+        Bus::fake();
+
+        $owner = User::factory()->create();
+        $organization = $this->createOrganization($owner, 'studio-f-dup-render');
+        $this->attachMember($organization, $owner, 'owner');
+
+        $project = EditorProject::query()->create([
+            'organization_id' => $organization->id,
+            'owner_user_id' => $owner->id,
+            'title' => 'Projeto render pendente',
+            'source_language' => 'ja',
+            'target_language' => 'pt-BR',
+            'status' => 'rendering',
+            'timeline_json' => ['video_clips' => [], 'audio_clips' => []],
+            'storage_bytes' => 1024,
+        ]);
+
+        $project->assets()->create([
+            'asset_type' => 'video',
+            'label' => 'take-01.mp4',
+            'path' => 'editor-projects/'.$project->id.'/assets/take-01.mp4',
+            'disk' => 'local',
+            'mime' => 'video/mp4',
+            'size_bytes' => 1024,
+            'duration_ms' => 30000,
+            'sort_order' => 1,
+        ]);
+
+        $project->renders()->create([
+            'requested_by_user_id' => $owner->id,
+            'status' => 'queued',
+            'progress_percent' => 0,
+            'preset' => 'full_hd_1080p',
+            'output_mode' => 'video_with_soft_subtitles',
+        ]);
+
+        $this->withHeaders($this->authHeaders($this->issueToken($owner)))
+            ->postJson("/api/v1/organizations/{$organization->slug}/editor-projects/{$project->id}/renders", [
+                'preset' => 'full_hd_1080p',
+                'output_mode' => 'video_with_soft_subtitles',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Já existe uma renderização em andamento para este projeto. Aguarde finalizar para iniciar outra.');
+
+        Bus::assertNotDispatched(RenderEditorProjectJob::class);
     }
 
     public function test_queue_render_is_blocked_after_source_assets_are_purged(): void

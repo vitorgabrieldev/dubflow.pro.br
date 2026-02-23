@@ -27,9 +27,4 @@ return [
         'text/plain',
         'application/octet-stream',
     ],
-    'allowed_image_mimes' => [
-        'image/jpeg',
-        'image/png',
-        'image/webp',
-    ],
 ];

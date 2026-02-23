@@ -169,6 +169,7 @@ class EditorProjectController extends Controller
     {
         $user = auth('api')->user();
         $this->ensureProjectOwner($user, $organization, $editorProject);
+        $this->ensureProjectEditable($editorProject);
 
         $validated = $request->validate([
             'title' => ['sometimes', 'string', 'max:255'],
@@ -260,9 +261,23 @@ class EditorProjectController extends Controller
     {
         $user = auth('api')->user();
         $this->ensureProjectOwner($user, $organization, $editorProject);
+        $this->ensureProjectEditable($editorProject);
 
         $validated = $request->validate([
             'timeline_json' => ['required', 'array'],
+            'timeline_json.video_clips' => ['sometimes', 'array', 'max:2000'],
+            'timeline_json.video_clips.*.asset_id' => ['required_with:timeline_json.video_clips', 'integer', 'exists:editor_project_assets,id'],
+            'timeline_json.video_clips.*.source_in_ms' => ['required_with:timeline_json.video_clips', 'integer', 'min:0', 'max:21600000'],
+            'timeline_json.video_clips.*.source_out_ms' => ['required_with:timeline_json.video_clips', 'integer', 'min:1', 'max:21600000'],
+            'timeline_json.video_clips.*.timeline_start_ms' => ['required_with:timeline_json.video_clips', 'integer', 'min:0', 'max:21600000'],
+            'timeline_json.video_clips.*.volume_gain' => ['nullable', 'numeric', 'min:0', 'max:5'],
+            'timeline_json.audio_clips' => ['sometimes', 'array', 'max:2000'],
+            'timeline_json.audio_clips.*.asset_id' => ['required_with:timeline_json.audio_clips', 'integer', 'exists:editor_project_assets,id'],
+            'timeline_json.audio_clips.*.source_in_ms' => ['required_with:timeline_json.audio_clips', 'integer', 'min:0', 'max:21600000'],
+            'timeline_json.audio_clips.*.source_out_ms' => ['required_with:timeline_json.audio_clips', 'integer', 'min:1', 'max:21600000'],
+            'timeline_json.audio_clips.*.timeline_start_ms' => ['required_with:timeline_json.audio_clips', 'integer', 'min:0', 'max:21600000'],
+            'timeline_json.audio_clips.*.volume_gain' => ['nullable', 'numeric', 'min:0', 'max:5'],
+            'timeline_json.subtitle_clips' => ['nullable', 'array', 'max:2000'],
             'duration_ms' => ['nullable', 'integer', 'min:0', 'max:21600000'],
             'subtitles' => ['nullable', 'array'],
             'subtitles.*.id' => ['nullable', 'integer', 'exists:editor_project_subtitles,id'],
@@ -273,8 +288,17 @@ class EditorProjectController extends Controller
             'subtitles.*.style_json' => ['nullable', 'array'],
         ]);
 
+        $timelineInput = is_array($validated['timeline_json'] ?? null) ? $validated['timeline_json'] : [];
+        $normalizedTimeline = [
+            'video_clips' => is_array($timelineInput['video_clips'] ?? null) ? array_values($timelineInput['video_clips']) : [],
+            'audio_clips' => is_array($timelineInput['audio_clips'] ?? null) ? array_values($timelineInput['audio_clips']) : [],
+            'subtitle_clips' => is_array($timelineInput['subtitle_clips'] ?? null) ? array_values($timelineInput['subtitle_clips']) : [],
+        ];
+
+        $this->validateTimelinePayload($editorProject, $normalizedTimeline);
+
         $editorProject->forceFill([
-            'timeline_json' => $validated['timeline_json'],
+            'timeline_json' => $normalizedTimeline,
             'duration_ms' => $validated['duration_ms'] ?? $editorProject->duration_ms,
             'autosaved_at' => now(),
         ])->save();
@@ -309,12 +333,11 @@ class EditorProjectController extends Controller
     {
         $user = auth('api')->user();
         $this->ensureProjectOwner($user, $organization, $editorProject);
+        $this->ensureProjectEditable($editorProject);
 
         $allMimes = array_merge(
             config('editor.allowed_video_mimes', []),
-            config('editor.allowed_audio_mimes', []),
-            config('editor.allowed_subtitle_mimes', []),
-            config('editor.allowed_image_mimes', [])
+            config('editor.allowed_audio_mimes', [])
         );
 
         $validated = $request->validate([
@@ -397,6 +420,7 @@ class EditorProjectController extends Controller
     {
         $user = auth('api')->user();
         $this->ensureProjectOwner($user, $organization, $editorProject);
+        $this->ensureProjectEditable($editorProject);
         $this->ensureAssetBelongsToProject($asset, $editorProject);
 
         $paths = array_filter([$asset->path, $asset->waveform_path, $asset->thumbnail_path, $asset->preview_frame_path]);
@@ -433,6 +457,7 @@ class EditorProjectController extends Controller
     {
         $user = auth('api')->user();
         $this->ensureProjectOwner($user, $organization, $editorProject);
+        $this->ensureProjectEditable($editorProject);
 
         $validated = $request->validate([
             'id' => ['nullable', 'integer', 'exists:editor_project_subtitles,id'],
@@ -482,6 +507,7 @@ class EditorProjectController extends Controller
     {
         $user = auth('api')->user();
         $this->ensureProjectOwner($user, $organization, $editorProject);
+        $this->ensureProjectEditable($editorProject);
 
         if ((int) $subtitle->project_id !== (int) $editorProject->id) {
             abort(403, 'Legenda não pertence a este projeto.');
@@ -519,6 +545,7 @@ class EditorProjectController extends Controller
     {
         $user = auth('api')->user();
         $this->ensureProjectOwner($user, $organization, $editorProject);
+        $this->ensureProjectEditable($editorProject);
 
         $validated = $request->validate([
             'timestamp_ms' => ['required', 'integer', 'min:0', 'max:21600000'],
@@ -548,6 +575,7 @@ class EditorProjectController extends Controller
     {
         $user = auth('api')->user();
         $this->ensureProjectOwner($user, $organization, $editorProject);
+        $this->ensureProjectEditable($editorProject);
 
         if ((int) $comment->project_id !== (int) $editorProject->id) {
             abort(403, 'Comentário não pertence a este projeto.');
@@ -569,34 +597,53 @@ class EditorProjectController extends Controller
         $user = auth('api')->user();
         $this->ensureProjectOwner($user, $organization, $editorProject);
 
-        if ($editorProject->source_assets_purged_at !== null) {
-            abort(422, 'Este projeto já foi finalizado e os arquivos de origem foram removidos. Crie um novo projeto para nova renderização.');
-        }
-
-        if ($editorProject->status === 'rendering') {
-            abort(422, 'Este projeto já está em renderização.');
-        }
-
-        if ($editorProject->assets()->where('asset_type', 'video')->count() === 0) {
-            abort(422, 'Adicione ao menos um vídeo para renderizar.');
-        }
-
         $validated = $request->validate([
             'preset' => ['required', Rule::in(self::RENDER_PRESETS)],
             'output_mode' => ['required', Rule::in(self::OUTPUT_MODES)],
         ]);
 
-        $render = EditorProjectRender::query()->create([
-            'project_id' => $editorProject->id,
-            'requested_by_user_id' => $user->id,
-            'status' => 'queued',
-            'progress_percent' => 0,
-            'preset' => $validated['preset'],
-            'output_mode' => $validated['output_mode'],
-        ]);
+        [$editorProject, $render] = DB::transaction(function () use ($editorProject, $user, $validated): array {
+            /** @var EditorProject|null $lockedProject */
+            $lockedProject = EditorProject::query()
+                ->whereKey($editorProject->id)
+                ->lockForUpdate()
+                ->first();
 
-        $editorProject->status = 'rendering';
-        $editorProject->save();
+            if (! $lockedProject) {
+                abort(404);
+            }
+
+            if ($lockedProject->source_assets_purged_at !== null) {
+                abort(422, 'Este projeto já foi finalizado e os arquivos de origem foram removidos. Crie um novo projeto para nova renderização.');
+            }
+
+            $pendingRenderExists = EditorProjectRender::query()
+                ->where('project_id', $lockedProject->id)
+                ->whereIn('status', ['queued', 'processing'])
+                ->exists();
+
+            if ($pendingRenderExists || $lockedProject->status === 'rendering') {
+                abort(422, 'Já existe uma renderização em andamento para este projeto. Aguarde finalizar para iniciar outra.');
+            }
+
+            if ($lockedProject->assets()->whereIn('asset_type', ['video', 'image'])->count() === 0) {
+                abort(422, 'Adicione ao menos um vídeo ou imagem para renderizar.');
+            }
+
+            $createdRender = EditorProjectRender::query()->create([
+                'project_id' => $lockedProject->id,
+                'requested_by_user_id' => $user->id,
+                'status' => 'queued',
+                'progress_percent' => 0,
+                'preset' => $validated['preset'],
+                'output_mode' => $validated['output_mode'],
+            ]);
+
+            $lockedProject->status = 'rendering';
+            $lockedProject->save();
+
+            return [$lockedProject, $createdRender];
+        });
 
         $this->recordProjectEvent($editorProject->id, $user->id, 'render_queued', [
             'render_id' => $render->id,
@@ -690,6 +737,13 @@ class EditorProjectController extends Controller
         }
     }
 
+    private function ensureProjectEditable(EditorProject $project): void
+    {
+        if ($project->source_assets_purged_at !== null) {
+            abort(422, 'Este projeto já foi finalizado e os arquivos de origem foram removidos. Crie um novo projeto para continuar editando.');
+        }
+    }
+
     private function resolveAssetType(UploadedFile $file): string
     {
         $mime = strtolower((string) ($file->getMimeType() ?? ''));
@@ -712,6 +766,48 @@ class EditorProjectController extends Controller
         }
 
         return 'subtitle';
+    }
+
+    /**
+     * @param  array<string, mixed>  $timeline
+     */
+    private function validateTimelinePayload(EditorProject $project, array $timeline): void
+    {
+        $assetsById = $project->assets()
+            ->get(['id', 'asset_type'])
+            ->keyBy('id');
+
+        /** @var array<int, mixed> $videoClips */
+        $videoClips = is_array($timeline['video_clips'] ?? null) ? $timeline['video_clips'] : [];
+        /** @var array<int, mixed> $audioClips */
+        $audioClips = is_array($timeline['audio_clips'] ?? null) ? $timeline['audio_clips'] : [];
+
+        $validateTrack = function (array $clips, string $trackLabel, array $allowedTypes) use ($assetsById): void {
+            foreach ($clips as $index => $clip) {
+                if (! is_array($clip)) {
+                    abort(422, "Clipe inválido na faixa {$trackLabel}.");
+                }
+
+                $assetId = (int) ($clip['asset_id'] ?? 0);
+                $asset = $assetsById->get($assetId);
+                if (! $asset) {
+                    abort(422, "O arquivo do clipe #".($index + 1)." da faixa {$trackLabel} não pertence a este projeto.");
+                }
+
+                if (! in_array($asset->asset_type, $allowedTypes, true)) {
+                    abort(422, "Tipo de arquivo inválido para o clipe #".($index + 1)." da faixa {$trackLabel}.");
+                }
+
+                $sourceInMs = max(0, (int) ($clip['source_in_ms'] ?? 0));
+                $sourceOutMs = max(0, (int) ($clip['source_out_ms'] ?? 0));
+                if ($sourceOutMs <= $sourceInMs) {
+                    abort(422, "O clipe #".($index + 1)." da faixa {$trackLabel} precisa terminar após o início.");
+                }
+            }
+        };
+
+        $validateTrack($videoClips, 'de vídeo', ['video', 'image']);
+        $validateTrack($audioClips, 'de áudio', ['audio', 'video']);
     }
 
     /**

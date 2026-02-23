@@ -110,13 +110,16 @@ class RenderEditorProjectJob implements ShouldQueue
                 'finished_at' => now(),
             ])->save();
 
+            $this->purgeSourceAssets($project);
+
             $project->forceFill([
                 'status' => 'rendered',
                 'rendered_at' => now(),
                 'source_assets_purged_at' => now(),
+                'storage_bytes' => (int) EditorProjectAsset::query()
+                    ->where('project_id', $project->id)
+                    ->sum('size_bytes'),
             ])->save();
-
-            $this->purgeSourceAssets($project);
 
             $this->broadcastRender($project->id, $render);
 
@@ -208,7 +211,7 @@ class RenderEditorProjectJob implements ShouldQueue
         $cursorMs = 0;
         $clips = [];
 
-        foreach ($assets->where('asset_type', 'video')->sortBy('sort_order') as $asset) {
+        foreach ($assets->whereIn('asset_type', ['video', 'image'])->sortBy('sort_order') as $asset) {
             $duration = max(1000, (int) ($asset->duration_ms ?? 10000));
             $clips[] = [
                 'asset_id' => (int) $asset->id,
@@ -231,50 +234,109 @@ class RenderEditorProjectJob implements ShouldQueue
     {
         $assetById = $project->assets->keyBy('id');
         $output = [];
+        $cursorMs = 0;
+        $gapIndex = 0;
 
         foreach ($videoClips as $index => $clip) {
+            $clipStartMs = max(0, (int) ($clip['timeline_start_ms'] ?? 0));
+            $clipDurationMs = max(1000, (int) $clip['source_out_ms'] - (int) $clip['source_in_ms']);
+
+            if ($clipStartMs > $cursorMs) {
+                $gapDurationMs = $clipStartMs - $cursorMs;
+                $gapOut = Storage::disk('local')->path("{$tempBaseDir}/gap_clip_{$gapIndex}.mp4");
+                $this->createSilentBlackClip($gapOut, $gapDurationMs);
+                $output[] = $gapOut;
+                $cursorMs = $clipStartMs;
+                $gapIndex++;
+            }
+
             $asset = $assetById->get((int) $clip['asset_id']);
-            if (! $asset || $asset->asset_type !== 'video') {
+            if (! $asset || ! in_array($asset->asset_type, ['video', 'image'], true)) {
+                $missingOut = Storage::disk('local')->path("{$tempBaseDir}/missing_clip_{$index}.mp4");
+                $this->createSilentBlackClip($missingOut, $clipDurationMs);
+                $output[] = $missingOut;
+                $cursorMs += $clipDurationMs;
                 continue;
             }
 
             $inputPath = Storage::disk($asset->disk ?: 'local')->path($asset->path);
             if (! is_file($inputPath)) {
+                $missingOut = Storage::disk('local')->path("{$tempBaseDir}/missing_clip_{$index}.mp4");
+                $this->createSilentBlackClip($missingOut, $clipDurationMs);
+                $output[] = $missingOut;
+                $cursorMs += $clipDurationMs;
                 continue;
             }
 
             $out = Storage::disk('local')->path("{$tempBaseDir}/video_clip_{$index}.mp4");
             $sourceInSeconds = number_format(((int) $clip['source_in_ms']) / 1000, 3, '.', '');
             $sourceOutSeconds = number_format(((int) $clip['source_out_ms']) / 1000, 3, '.', '');
+            $clipDurationSeconds = number_format($clipDurationMs / 1000, 3, '.', '');
             $volume = number_format((float) $clip['volume_gain'], 3, '.', '');
 
-            $process = new Process([
-                (string) config('editor.ffmpeg_bin', 'ffmpeg'),
-                '-y',
-                '-ss',
-                $sourceInSeconds,
-                '-to',
-                $sourceOutSeconds,
-                '-i',
-                $inputPath,
-                '-vf',
-                'scale=trunc(iw/2)*2:trunc(ih/2)*2',
-                '-af',
-                "volume={$volume}",
-                '-c:v',
-                'libx264',
-                '-preset',
-                'veryfast',
-                '-crf',
-                '22',
-                '-c:a',
-                'aac',
-                '-b:a',
-                '192k',
-                $out,
-            ]);
+            if ($asset->asset_type === 'image') {
+                $process = new Process([
+                    (string) config('editor.ffmpeg_bin', 'ffmpeg'),
+                    '-y',
+                    '-loop',
+                    '1',
+                    '-i',
+                    $inputPath,
+                    '-f',
+                    'lavfi',
+                    '-i',
+                    'anullsrc=channel_layout=stereo:sample_rate=48000',
+                    '-t',
+                    $clipDurationSeconds,
+                    '-vf',
+                    'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+                    '-r',
+                    '30',
+                    '-c:v',
+                    'libx264',
+                    '-preset',
+                    'veryfast',
+                    '-crf',
+                    '22',
+                    '-pix_fmt',
+                    'yuv420p',
+                    '-c:a',
+                    'aac',
+                    '-b:a',
+                    '128k',
+                    '-shortest',
+                    $out,
+                ]);
+            } else {
+                $process = new Process([
+                    (string) config('editor.ffmpeg_bin', 'ffmpeg'),
+                    '-y',
+                    '-ss',
+                    $sourceInSeconds,
+                    '-to',
+                    $sourceOutSeconds,
+                    '-i',
+                    $inputPath,
+                    '-vf',
+                    'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+                    '-af',
+                    "volume={$volume}",
+                    '-c:v',
+                    'libx264',
+                    '-preset',
+                    'veryfast',
+                    '-crf',
+                    '22',
+                    '-c:a',
+                    'aac',
+                    '-b:a',
+                    '192k',
+                    $out,
+                ]);
+            }
             $this->runProcess($process);
             $output[] = $out;
+            $cursorMs = max($cursorMs, $clipStartMs + $clipDurationMs);
         }
 
         if ($output === []) {
@@ -282,6 +344,40 @@ class RenderEditorProjectJob implements ShouldQueue
         }
 
         return $output;
+    }
+
+    private function createSilentBlackClip(string $outPath, int $durationMs): void
+    {
+        $durationSeconds = number_format(max(1, $durationMs) / 1000, 3, '.', '');
+
+        $process = new Process([
+            (string) config('editor.ffmpeg_bin', 'ffmpeg'),
+            '-y',
+            '-f',
+            'lavfi',
+            '-i',
+            "color=c=black:s=1920x1080:r=30:d={$durationSeconds}",
+            '-f',
+            'lavfi',
+            '-i',
+            'anullsrc=channel_layout=stereo:sample_rate=48000',
+            '-shortest',
+            '-c:v',
+            'libx264',
+            '-preset',
+            'veryfast',
+            '-crf',
+            '22',
+            '-pix_fmt',
+            'yuv420p',
+            '-c:a',
+            'aac',
+            '-b:a',
+            '128k',
+            $outPath,
+        ]);
+
+        $this->runProcess($process);
     }
 
     /**
@@ -307,6 +403,10 @@ class RenderEditorProjectJob implements ShouldQueue
             '0',
             '-i',
             $concatPath,
+            '-map',
+            '0:v:0',
+            '-map',
+            '0:a?',
             '-c:v',
             'libx264',
             '-preset',
@@ -383,6 +483,7 @@ class RenderEditorProjectJob implements ShouldQueue
         }
 
         $output = Storage::disk('local')->path("{$tempBaseDir}/mixed_video.mp4");
+        $baseHasAudio = $this->hasAudioStream($baseVideoFile);
 
         $command = [
             (string) config('editor.ffmpeg_bin', 'ffmpeg'),
@@ -390,6 +491,17 @@ class RenderEditorProjectJob implements ShouldQueue
             '-i',
             $baseVideoFile,
         ];
+        $baseAudioTag = '[0:a]';
+        $overlayInputStartIndex = 1;
+
+        if (! $baseHasAudio) {
+            $command[] = '-f';
+            $command[] = 'lavfi';
+            $command[] = '-i';
+            $command[] = 'anullsrc=channel_layout=stereo:sample_rate=48000';
+            $baseAudioTag = '[1:a]';
+            $overlayInputStartIndex = 2;
+        }
 
         foreach ($audioInputs as $input) {
             $command[] = '-i';
@@ -400,14 +512,14 @@ class RenderEditorProjectJob implements ShouldQueue
         $overlayTags = [];
 
         foreach ($audioInputs as $index => $input) {
-            $ffIndex = $index + 1;
+            $ffIndex = $index + $overlayInputStartIndex;
             $delay = max(0, (int) $input['start_ms']);
             $tag = "ov{$ffIndex}";
             $filterParts[] = "[{$ffIndex}:a]adelay={$delay}|{$delay}[{$tag}]";
             $overlayTags[] = "[{$tag}]";
         }
 
-        $amixInputs = '[0:a]'.implode('', $overlayTags);
+        $amixInputs = $baseAudioTag.implode('', $overlayTags);
         $filterParts[] = "{$amixInputs}amix=inputs=".(count($audioInputs) + 1).":normalize=0[aout]";
 
         $command[] = '-filter_complex';
@@ -455,6 +567,28 @@ class RenderEditorProjectJob implements ShouldQueue
     private function finalizeOutput(string $inputVideoFile, ?string $subtitleFile, EditorProjectRender $render, string $outputAbsolutePath): void
     {
         if ($render->output_mode === 'audio_only') {
+            if (! $this->hasAudioStream($inputVideoFile)) {
+                $durationSeconds = $this->probeMediaDurationSeconds($inputVideoFile);
+                $process = new Process([
+                    (string) config('editor.ffmpeg_bin', 'ffmpeg'),
+                    '-y',
+                    '-f',
+                    'lavfi',
+                    '-i',
+                    'anullsrc=channel_layout=stereo:sample_rate=48000',
+                    '-t',
+                    number_format($durationSeconds, 3, '.', ''),
+                    '-c:a',
+                    'libmp3lame',
+                    '-b:a',
+                    '256k',
+                    $outputAbsolutePath,
+                ]);
+                $this->runProcess($process);
+
+                return;
+            }
+
             $process = new Process([
                 (string) config('editor.ffmpeg_bin', 'ffmpeg'),
                 '-y',
@@ -488,7 +622,7 @@ class RenderEditorProjectJob implements ShouldQueue
                 '-map',
                 '0:v:0',
                 '-map',
-                '0:a:0',
+                '0:a?',
                 '-map',
                 '1:0',
                 '-c:v',
@@ -520,6 +654,10 @@ class RenderEditorProjectJob implements ShouldQueue
                 $inputVideoFile,
                 '-vf',
                 $subtitleFilter,
+                '-map',
+                '0:v:0',
+                '-map',
+                '0:a?',
                 '-c:v',
                 'libx264',
                 '-preset',
@@ -544,6 +682,10 @@ class RenderEditorProjectJob implements ShouldQueue
             $inputVideoFile,
             '-vf',
             "scale=-2:{$presetArgs['height']}",
+            '-map',
+            '0:v:0',
+            '-map',
+            '0:a?',
             '-c:v',
             'libx264',
             '-preset',
@@ -617,7 +759,62 @@ class RenderEditorProjectJob implements ShouldQueue
             if ($paths !== []) {
                 Storage::disk($disk)->delete($paths);
             }
+
+            $asset->forceFill([
+                'waveform_path' => null,
+                'thumbnail_path' => null,
+                'preview_frame_path' => null,
+                'size_bytes' => 0,
+            ])->save();
         }
+    }
+
+    private function hasAudioStream(string $absoluteMediaPath): bool
+    {
+        $process = new Process([
+            (string) config('editor.ffprobe_bin', 'ffprobe'),
+            '-v',
+            'error',
+            '-select_streams',
+            'a',
+            '-show_entries',
+            'stream=index',
+            '-of',
+            'csv=p=0',
+            $absoluteMediaPath,
+        ]);
+        $process->setTimeout(30);
+        $process->run();
+
+        if (! $process->isSuccessful()) {
+            return false;
+        }
+
+        return trim($process->getOutput()) !== '';
+    }
+
+    private function probeMediaDurationSeconds(string $absoluteMediaPath): float
+    {
+        $process = new Process([
+            (string) config('editor.ffprobe_bin', 'ffprobe'),
+            '-v',
+            'error',
+            '-show_entries',
+            'format=duration',
+            '-of',
+            'default=noprint_wrappers=1:nokey=1',
+            $absoluteMediaPath,
+        ]);
+        $process->setTimeout(30);
+        $process->run();
+
+        if (! $process->isSuccessful()) {
+            return 1.0;
+        }
+
+        $duration = (float) trim($process->getOutput());
+
+        return $duration > 0 ? $duration : 1.0;
     }
 
     private function deleteDirectory(string $absoluteDirectoryPath): void
