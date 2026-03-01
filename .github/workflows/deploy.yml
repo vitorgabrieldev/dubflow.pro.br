@@ -125,6 +125,9 @@ jobs:
     needs: quality-gates
     if: ${{ always() && (needs.quality-gates.result == 'success' || needs.quality-gates.result == 'skipped') }}
     environment: ${{ github.event.inputs.target }}
+    env:
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
     steps:
       - name: Validate required deploy secrets
         env:
@@ -138,9 +141,6 @@ jobs:
           fi
 
       - name: Validate SSH auth secrets
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
         run: |
           if [[ -z "$DEPLOY_SSH_KEY" && -z "$DEPLOY_PASSWORD" ]]; then
             echo "::error::Configure DEPLOY_SSH_KEY ou DEPLOY_PASSWORD no Environment."
@@ -151,7 +151,7 @@ jobs:
         run: sleep 60
 
       - name: Deploy backend via SSH key
-        if: ${{ secrets.DEPLOY_SSH_KEY != '' }}
+        if: ${{ env.DEPLOY_SSH_KEY != '' }}
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -168,7 +168,7 @@ jobs:
             bash "${{ secrets.REPO_DIR }}/deploy/backend.sh"
 
       - name: Deploy backend via SSH password
-        if: ${{ secrets.DEPLOY_SSH_KEY == '' && secrets.DEPLOY_PASSWORD != '' }}
+        if: ${{ env.DEPLOY_SSH_KEY == '' && env.DEPLOY_PASSWORD != '' }}
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -189,6 +189,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: deploy-backend
     environment: ${{ github.event.inputs.target }}
+    env:
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
     steps:
       - name: Validate required deploy secrets
         env:
@@ -202,9 +205,6 @@ jobs:
           fi
 
       - name: Validate SSH auth secrets
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
         run: |
           if [[ -z "$DEPLOY_SSH_KEY" && -z "$DEPLOY_PASSWORD" ]]; then
             echo "::error::Configure DEPLOY_SSH_KEY ou DEPLOY_PASSWORD no Environment."
@@ -215,7 +215,7 @@ jobs:
         run: sleep 60
 
       - name: Deploy frontend via SSH key
-        if: ${{ secrets.DEPLOY_SSH_KEY != '' }}
+        if: ${{ env.DEPLOY_SSH_KEY != '' }}
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -233,7 +233,7 @@ jobs:
             bash "${{ secrets.REPO_DIR }}/deploy/frontend.sh"
 
       - name: Deploy frontend via SSH password
-        if: ${{ secrets.DEPLOY_SSH_KEY == '' && secrets.DEPLOY_PASSWORD != '' }}
+        if: ${{ env.DEPLOY_SSH_KEY == '' && env.DEPLOY_PASSWORD != '' }}
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
