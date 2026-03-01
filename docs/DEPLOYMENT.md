@@ -17,10 +17,15 @@
 ## Segredos Necessarios (GitHub Environments)
 - `DEPLOY_HOST`
 - `DEPLOY_USER`
-- `DEPLOY_SSH_KEY`
+- `DEPLOY_SSH_KEY` (recomendado) **ou** `DEPLOY_PASSWORD`
 - `REPO_DIR`
-- `FRONTEND_DIR`
-- `FRONTEND_PM2_APP`
+- `FRONTEND_DIR` (ex.: `/var/www/dubflow/frontend`)
+- `DEPLOY_GIT_REMOTE` (opcional, default: `origin`)
+- `FRONTEND_SERVICE` (opcional, default: `dubflow-next`)
+- `QUEUE_SERVICE` (opcional, default: `dubflow-queue`)
+- `REVERB_SERVICE` (opcional, default: `dubflow-reverb`)
+- `BACKEND_SERVICE` (opcional, se quiser reiniciar outro serviço backend)
+- `FRONTEND_PM2_APP` (opcional; usado apenas se não houver service systemd)
 - `SMOKE_HEALTH_URL`
 - `SMOKE_FRONTEND_URL`
 

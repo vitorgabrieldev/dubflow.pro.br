@@ -19,33 +19,86 @@ concurrency:
   group: deploy-${{ github.event.inputs.target }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   quality-gates:
     name: Quality Gates
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: studiodublagem_tests
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.deploy_ref }}
+
       - uses: shivammathur/setup-php@v2
         with:
           php-version: "8.3"
+          coverage: pcov
           tools: composer:v2
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Install dependencies
         run: |
           composer install --no-interaction --prefer-dist
           npm --prefix frontend ci
+
+      - name: Prepare backend testing env
+        run: |
+          cp .env.testing.example .env.testing
+          sed -i 's/^DB_HOST=.*/DB_HOST=127.0.0.1/' .env.testing
+          sed -i 's/^DB_PORT=.*/DB_PORT=3306/' .env.testing
+          sed -i 's/^DB_USERNAME=.*/DB_USERNAME=root/' .env.testing
+          sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=/' .env.testing
+          php artisan key:generate --env=testing --force
+          php artisan jwt:secret --force --env=testing
+
       - name: Run backend tests
-        run: php artisan test
+        run: php artisan test --env=testing --parallel --coverage-text
+
       - name: Run frontend lint + build
         run: |
           npm --prefix frontend run lint
           npm --prefix frontend run build
+
       - name: Install Playwright browser
         run: npx --prefix frontend playwright install --with-deps chromium
+
+      - name: Prepare e2e testing database
+        run: php artisan migrate:fresh --seed --env=testing
+
       - name: Run frontend e2e smoke
-        run: npm --prefix frontend run test:e2e
+        run: |
+          unset CI
+          export E2E_BACKEND_URL="http://127.0.0.1:18000"
+          export E2E_API_BASE_URL="http://127.0.0.1:18000/api/v1"
+          export INTERNAL_API_URL="http://127.0.0.1:18000/api/v1"
+          export NEXT_PUBLIC_API_URL="http://127.0.0.1:18000/api/v1"
+          export E2E_DB_CONNECTION="mysql"
+          export E2E_DB_HOST="127.0.0.1"
+          export E2E_DB_PORT="3306"
+          export E2E_DB_DATABASE="studiodublagem_tests"
+          export E2E_DB_USERNAME="root"
+          export E2E_DB_PASSWORD=""
+          npm --prefix frontend run test:e2e
 
   deploy-backend:
     name: Deploy Backend
@@ -53,10 +106,32 @@ jobs:
     needs: quality-gates
     environment: ${{ github.event.inputs.target }}
     steps:
+      - name: Validate required deploy secrets
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          REPO_DIR: ${{ secrets.REPO_DIR }}
+        run: |
+          if [[ -z "$DEPLOY_HOST" || -z "$DEPLOY_USER" || -z "$REPO_DIR" ]]; then
+            echo "::error::Configure DEPLOY_HOST, DEPLOY_USER e REPO_DIR no Environment."
+            exit 1
+          fi
+
+      - name: Validate SSH auth secrets
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+        run: |
+          if [[ -z "$DEPLOY_SSH_KEY" && -z "$DEPLOY_PASSWORD" ]]; then
+            echo "::error::Configure DEPLOY_SSH_KEY ou DEPLOY_PASSWORD no Environment."
+            exit 1
+          fi
+
       - name: Delay before backend deploy
         run: sleep 60
 
-      - name: Deploy backend via SSH
+      - name: Deploy backend via SSH key
+        if: ${{ secrets.DEPLOY_SSH_KEY != '' }}
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -66,6 +141,27 @@ jobs:
           script: |
             export DEPLOY_REF="${{ github.event.inputs.deploy_ref }}"
             export APP_DIR="${{ secrets.REPO_DIR }}"
+            export REPO_REMOTE="${{ secrets.DEPLOY_GIT_REMOTE }}"
+            export QUEUE_SERVICE="${{ secrets.QUEUE_SERVICE }}"
+            export REVERB_SERVICE="${{ secrets.REVERB_SERVICE }}"
+            export BACKEND_SERVICE="${{ secrets.BACKEND_SERVICE }}"
+            bash "${{ secrets.REPO_DIR }}/deploy/backend.sh"
+
+      - name: Deploy backend via SSH password
+        if: ${{ secrets.DEPLOY_SSH_KEY == '' && secrets.DEPLOY_PASSWORD != '' }}
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script_stop: true
+          script: |
+            export DEPLOY_REF="${{ github.event.inputs.deploy_ref }}"
+            export APP_DIR="${{ secrets.REPO_DIR }}"
+            export REPO_REMOTE="${{ secrets.DEPLOY_GIT_REMOTE }}"
+            export QUEUE_SERVICE="${{ secrets.QUEUE_SERVICE }}"
+            export REVERB_SERVICE="${{ secrets.REVERB_SERVICE }}"
+            export BACKEND_SERVICE="${{ secrets.BACKEND_SERVICE }}"
             bash "${{ secrets.REPO_DIR }}/deploy/backend.sh"
 
   deploy-frontend:
@@ -74,10 +170,32 @@ jobs:
     needs: deploy-backend
     environment: ${{ github.event.inputs.target }}
     steps:
+      - name: Validate required deploy secrets
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          REPO_DIR: ${{ secrets.REPO_DIR }}
+        run: |
+          if [[ -z "$DEPLOY_HOST" || -z "$DEPLOY_USER" || -z "$REPO_DIR" ]]; then
+            echo "::error::Configure DEPLOY_HOST, DEPLOY_USER e REPO_DIR no Environment."
+            exit 1
+          fi
+
+      - name: Validate SSH auth secrets
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+        run: |
+          if [[ -z "$DEPLOY_SSH_KEY" && -z "$DEPLOY_PASSWORD" ]]; then
+            echo "::error::Configure DEPLOY_SSH_KEY ou DEPLOY_PASSWORD no Environment."
+            exit 1
+          fi
+
       - name: Delay before frontend deploy
         run: sleep 60
 
-      - name: Deploy frontend via SSH
+      - name: Deploy frontend via SSH key
+        if: ${{ secrets.DEPLOY_SSH_KEY != '' }}
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -88,7 +206,28 @@ jobs:
             export DEPLOY_REF="${{ github.event.inputs.deploy_ref }}"
             export REPO_DIR="${{ secrets.REPO_DIR }}"
             export FRONTEND_DIR="${{ secrets.FRONTEND_DIR }}"
+            export REPO_REMOTE="${{ secrets.DEPLOY_GIT_REMOTE }}"
+            export FRONTEND_SERVICE="${{ secrets.FRONTEND_SERVICE }}"
             export PM2_APP="${{ secrets.FRONTEND_PM2_APP }}"
+            export SKIP_GIT_SYNC=1
+            bash "${{ secrets.REPO_DIR }}/deploy/frontend.sh"
+
+      - name: Deploy frontend via SSH password
+        if: ${{ secrets.DEPLOY_SSH_KEY == '' && secrets.DEPLOY_PASSWORD != '' }}
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script_stop: true
+          script: |
+            export DEPLOY_REF="${{ github.event.inputs.deploy_ref }}"
+            export REPO_DIR="${{ secrets.REPO_DIR }}"
+            export FRONTEND_DIR="${{ secrets.FRONTEND_DIR }}"
+            export REPO_REMOTE="${{ secrets.DEPLOY_GIT_REMOTE }}"
+            export FRONTEND_SERVICE="${{ secrets.FRONTEND_SERVICE }}"
+            export PM2_APP="${{ secrets.FRONTEND_PM2_APP }}"
+            export SKIP_GIT_SYNC=1
             bash "${{ secrets.REPO_DIR }}/deploy/frontend.sh"
 
   smoke:
