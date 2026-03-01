@@ -58,7 +58,7 @@ jobs:
           php artisan jwt:secret --force --env=testing
 
       - name: Run backend tests
-        run: php artisan test --env=testing --parallel --coverage-text
+        run: php artisan test --env=testing --coverage-text
 
   frontend-quality:
     name: Frontend Lint + Build
@@ -90,12 +90,47 @@ jobs:
     name: Frontend E2E Smoke
     runs-on: ubuntu-latest
     needs: frontend-quality
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: studiodublagem_tests
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
     defaults:
       run:
         working-directory: frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          tools: composer:v2
+
+      - name: Install PHP dependencies
+        working-directory: .
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Prepare backend testing env
+        working-directory: .
+        run: |
+          cp .env.testing.example .env.testing
+          sed -i 's/^DB_HOST=.*/DB_HOST=127.0.0.1/' .env.testing
+          sed -i 's/^DB_PORT=.*/DB_PORT=3306/' .env.testing
+          sed -i 's/^DB_USERNAME=.*/DB_USERNAME=root/' .env.testing
+          sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=/' .env.testing
+          php artisan key:generate --env=testing --force
+          php artisan jwt:secret --force --env=testing
+          php artisan migrate:fresh --seed --env=testing
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -111,4 +146,16 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run e2e smoke tests
-        run: npm run test:e2e
+        run: |
+          unset CI
+          export E2E_BACKEND_URL="http://127.0.0.1:18000"
+          export E2E_API_BASE_URL="http://127.0.0.1:18000/api/v1"
+          export INTERNAL_API_URL="http://127.0.0.1:18000/api/v1"
+          export NEXT_PUBLIC_API_URL="http://127.0.0.1:18000/api/v1"
+          export E2E_DB_CONNECTION="mysql"
+          export E2E_DB_HOST="127.0.0.1"
+          export E2E_DB_PORT="3306"
+          export E2E_DB_DATABASE="studiodublagem_tests"
+          export E2E_DB_USERNAME="root"
+          export E2E_DB_PASSWORD=""
+          npm run test:e2e

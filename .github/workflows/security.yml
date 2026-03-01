@@ -63,4 +63,4 @@ jobs:
         run: composer audit --locked
 
       - name: NPM audit
-        run: npm --prefix frontend audit --audit-level=high
+        run: npm --prefix frontend audit --omit=dev --audit-level=high

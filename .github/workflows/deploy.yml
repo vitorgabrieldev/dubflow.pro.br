@@ -72,7 +72,7 @@ jobs:
           php artisan jwt:secret --force --env=testing
 
       - name: Run backend tests
-        run: php artisan test --env=testing --parallel --coverage-text
+        run: php artisan test --env=testing --coverage-text
 
       - name: Run frontend lint + build
         run: |
