@@ -81,10 +81,6 @@ class Organization extends Model
         return $this->hasMany(DubbingTest::class);
     }
 
-    public function editorProjects(): HasMany
-    {
-        return $this->hasMany(EditorProject::class);
-    }
 
     public function recalculateVerification(): void
     {

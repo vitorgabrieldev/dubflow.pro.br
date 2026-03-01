@@ -209,10 +209,6 @@ class User extends Authenticatable implements JWTSubject
         return $this->hasMany(ChatUserBlock::class, 'blocked_user_id');
     }
 
-    public function editorProjects(): HasMany
-    {
-        return $this->hasMany(EditorProject::class, 'owner_user_id');
-    }
 
     public function getJWTIdentifier(): mixed
     {

@@ -5,7 +5,6 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\DubbingTestController;
-use App\Http\Controllers\Api\V1\EditorProjectController;
 use App\Http\Controllers\Api\V1\MediaController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OrganizationController;
@@ -99,23 +98,6 @@ Route::prefix('v1')->group(function () {
         Route::patch('/organizations/{organization}/dubbing-tests/{dubbingTest}/submissions/{submission}/feedback', [DubbingTestController::class, 'saveRejectionFeedback']);
         Route::post('/organizations/{organization}/dubbing-tests/{dubbingTest}/conclude-selection', [DubbingTestController::class, 'concludeSelection']);
 
-        Route::get('/editor-projects/mine', [EditorProjectController::class, 'mine']);
-        Route::get('/organizations/{organization}/editor-projects', [EditorProjectController::class, 'index']);
-        Route::post('/organizations/{organization}/editor-projects', [EditorProjectController::class, 'store']);
-        Route::get('/organizations/{organization}/editor-projects/{editorProject}', [EditorProjectController::class, 'show']);
-        Route::patch('/organizations/{organization}/editor-projects/{editorProject}', [EditorProjectController::class, 'update']);
-        Route::delete('/organizations/{organization}/editor-projects/{editorProject}', [EditorProjectController::class, 'destroy']);
-        Route::post('/organizations/{organization}/editor-projects/{editorProject}/autosave', [EditorProjectController::class, 'autosave']);
-        Route::post('/organizations/{organization}/editor-projects/{editorProject}/assets', [EditorProjectController::class, 'uploadAssets']);
-        Route::delete('/organizations/{organization}/editor-projects/{editorProject}/assets/{asset}', [EditorProjectController::class, 'destroyAsset']);
-        Route::post('/organizations/{organization}/editor-projects/{editorProject}/subtitles', [EditorProjectController::class, 'upsertSubtitle']);
-        Route::delete('/organizations/{organization}/editor-projects/{editorProject}/subtitles/{subtitle}', [EditorProjectController::class, 'destroySubtitle']);
-        Route::get('/organizations/{organization}/editor-projects/{editorProject}/comments', [EditorProjectController::class, 'comments']);
-        Route::post('/organizations/{organization}/editor-projects/{editorProject}/comments', [EditorProjectController::class, 'storeComment']);
-        Route::delete('/organizations/{organization}/editor-projects/{editorProject}/comments/{comment}', [EditorProjectController::class, 'destroyComment']);
-        Route::post('/organizations/{organization}/editor-projects/{editorProject}/renders', [EditorProjectController::class, 'queueRender']);
-        Route::get('/organizations/{organization}/editor-projects/{editorProject}/renders', [EditorProjectController::class, 'renders']);
-        Route::get('/organizations/{organization}/editor-projects/{editorProject}/renders/{render}', [EditorProjectController::class, 'showRender']);
 
         Route::post('/dubbing-tests/{dubbingTest}/submissions', [DubbingTestController::class, 'submit']);
         Route::get('/dubbing-tests/{dubbingTest}/my-submissions', [DubbingTestController::class, 'mySubmissions']);
