@@ -88,12 +88,12 @@ jobs:
             const alreadyQueued = deployRunsResponse.data.workflow_runs.some(
               (run) => run.head_sha === deployRef && ["queued", "in_progress", "waiting", "requested", "pending"].includes(run.status)
             );
-            const alreadyCompleted = deployRunsResponse.data.workflow_runs.some(
-              (run) => run.head_sha === deployRef && run.status === "completed"
+            const alreadySuccessful = deployRunsResponse.data.workflow_runs.some(
+              (run) => run.head_sha === deployRef && run.status === "completed" && run.conclusion === "success"
             );
 
-            if (alreadyQueued || alreadyCompleted) {
-              core.notice(`Deploy ja existe para ${deployRef}. Pulando disparo.`);
+            if (alreadyQueued || alreadySuccessful) {
+              core.notice(`Deploy ja esta em andamento ou ja concluiu com sucesso para ${deployRef}. Pulando disparo.`);
               return;
             }
 

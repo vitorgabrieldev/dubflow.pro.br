@@ -51,6 +51,12 @@
    - deploy frontend
    - smoke test
 
+## Bootstrap Inicial do Servidor (obrigatorio 1x)
+- O deploy remoto assume que `REPO_DIR` ja e um repositorio Git com os arquivos do projeto.
+- Exemplo:
+  - `mkdir -p /var/www/dubflow`
+  - `git clone https://github.com/vitorgabrieldev/dubflow.pro.br.git /var/www/dubflow`
+
 ## Auto Deploy (main)
 - O workflow `auto-deploy.yml` monitora conclusao dos workflows `CI` e `Security`.
 - Quando ambos estao `success` para o mesmo commit na `main`, ele espera 60 segundos e dispara o `deploy.yml`.
