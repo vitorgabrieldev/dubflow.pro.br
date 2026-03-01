@@ -1,0 +1,18 @@
+<svg width="720" height="440" viewBox="0 0 720 440" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="720" y2="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7E22CE"/>
+      <stop offset="1" stop-color="#A855F7"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="440" rx="36" fill="url(#bg)"/>
+  <circle cx="590" cy="92" r="120" fill="white" fill-opacity="0.12"/>
+  <circle cx="160" cy="390" r="160" fill="white" fill-opacity="0.10"/>
+  <rect x="50" y="42" width="150" height="34" rx="17" fill="white" fill-opacity="0.22"/>
+  <rect x="58" y="52" width="134" height="14" rx="7" fill="white" fill-opacity="0.45"/>
+  <path d="M260 322C260 262.905 307.905 215 367 215H387C446.095 215 494 262.905 494 322V362H260V322Z" fill="white" fill-opacity="0.93"/>
+  <circle cx="376" cy="166" r="66" fill="white" fill-opacity="0.93"/>
+  <rect x="82" y="340" width="180" height="30" rx="15" fill="#5B21B6" fill-opacity="0.72"/>
+  <rect x="460" y="340" width="180" height="30" rx="15" fill="#5B21B6" fill-opacity="0.72"/>
+  <text x="72" y="404" fill="white" fill-opacity="0.96" font-size="48" font-family="Arial, Helvetica, sans-serif" font-weight="700">FILMES</text>
+</svg>
