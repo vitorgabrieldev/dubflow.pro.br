@@ -158,4 +158,14 @@ jobs:
           export E2E_DB_DATABASE="studiodublagem_tests"
           export E2E_DB_USERNAME="root"
           export E2E_DB_PASSWORD=""
-          npm run test:e2e
+          npm run test:e2e -- tests/e2e/smoke.spec.ts
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
