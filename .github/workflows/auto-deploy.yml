@@ -1,0 +1,112 @@
+name: Auto Deploy
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Security
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: auto-deploy-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  schedule-deploy:
+    if: ${{ github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required validations
+        id: checks
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = context.payload.workflow_run.head_sha;
+            const branch = context.payload.workflow_run.head_branch;
+            const requiredWorkflows = ["CI", "Security"];
+
+            const runsResponse = await github.rest.actions.listWorkflowRunsForRepo({
+              owner,
+              repo,
+              branch,
+              event: "push",
+              per_page: 100,
+            });
+
+            const conclusions = {};
+            for (const workflowName of requiredWorkflows) {
+              const run = runsResponse.data.workflow_runs.find(
+                (candidate) => candidate.name === workflowName && candidate.head_sha === sha
+              );
+              conclusions[workflowName] = run?.conclusion ?? "missing";
+            }
+
+            const allSuccessful = requiredWorkflows.every((workflowName) => conclusions[workflowName] === "success");
+            if (!allSuccessful) {
+              core.notice(
+                `Aguardando validacoes para ${sha}. Estado atual: ${JSON.stringify(conclusions)}`
+              );
+              core.setOutput("ready", "false");
+              return;
+            }
+
+            core.info(`Todas as validacoes passaram para ${sha}.`);
+            core.setOutput("ready", "true");
+            core.setOutput("deploy_ref", sha);
+
+      - name: Wait 1 minute before deployment
+        if: ${{ steps.checks.outputs.ready == 'true' }}
+        run: sleep 60
+
+      - name: Trigger deploy workflow
+        if: ${{ steps.checks.outputs.ready == 'true' }}
+        uses: actions/github-script@v7
+        env:
+          AUTO_DEPLOY_TARGET: ${{ vars.AUTO_DEPLOY_TARGET }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const deployRef = `${{ steps.checks.outputs.deploy_ref }}`;
+            const deployTarget = process.env.AUTO_DEPLOY_TARGET || "production";
+
+            const deployRunsResponse = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: "deploy.yml",
+              branch: "main",
+              per_page: 50,
+            });
+
+            const alreadyQueued = deployRunsResponse.data.workflow_runs.some(
+              (run) => run.head_sha === deployRef && ["queued", "in_progress", "waiting", "requested", "pending"].includes(run.status)
+            );
+            const alreadyCompleted = deployRunsResponse.data.workflow_runs.some(
+              (run) => run.head_sha === deployRef && run.status === "completed"
+            );
+
+            if (alreadyQueued || alreadyCompleted) {
+              core.notice(`Deploy ja existe para ${deployRef}. Pulando disparo.`);
+              return;
+            }
+
+            await github.rest.actions.createWorkflowDispatch({
+              owner,
+              repo,
+              workflow_id: "deploy.yml",
+              ref: "main",
+              inputs: {
+                deploy_ref: deployRef,
+                target: deployTarget,
+                skip_quality_gates: "true",
+              },
+            });
+
+            core.notice(`Deploy disparado para ${deployRef} em target='${deployTarget}'.`);

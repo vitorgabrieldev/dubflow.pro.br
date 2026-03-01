@@ -14,6 +14,14 @@ on:
         options:
           - staging
           - production
+      skip_quality_gates:
+        description: "Pular quality gates (usar quando CI+Security ja passaram)"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 concurrency:
   group: deploy-${{ github.event.inputs.target }}
@@ -24,6 +32,7 @@ permissions:
 
 jobs:
   quality-gates:
+    if: ${{ github.event.inputs.skip_quality_gates != 'true' }}
     name: Quality Gates
     runs-on: ubuntu-latest
     services:
@@ -114,6 +123,7 @@ jobs:
     name: Deploy Backend
     runs-on: ubuntu-latest
     needs: quality-gates
+    if: ${{ always() && (needs.quality-gates.result == 'success' || needs.quality-gates.result == 'skipped') }}
     environment: ${{ github.event.inputs.target }}
     steps:
       - name: Validate required deploy secrets

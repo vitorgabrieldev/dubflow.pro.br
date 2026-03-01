@@ -9,6 +9,7 @@
 - `ci.yml`: qualidade obrigatoria (backend + frontend + e2e).
 - `security.yml`: auditoria de dependencias e CodeQL.
 - `deploy.yml`: deploy manual com gates, delay e smoke test.
+- `auto-deploy.yml`: dispara deploy automatico quando `CI` + `Security` passam na `main` (aguarda 1 minuto).
 
 ## Scripts de Deploy
 - Backend: `deploy/backend.sh`
@@ -29,6 +30,9 @@
 - `SMOKE_HEALTH_URL`
 - `SMOKE_FRONTEND_URL`
 
+## Variaveis de Repositorio (opcional)
+- `AUTO_DEPLOY_TARGET` (`production` por padrao; pode usar `staging`)
+
 ## Protecoes Recomendadas no GitHub
 - Environments separados: `staging` e `production`.
 - Required reviewers para `production`.
@@ -46,6 +50,14 @@
    - delay
    - deploy frontend
    - smoke test
+
+## Auto Deploy (main)
+- O workflow `auto-deploy.yml` monitora conclusao dos workflows `CI` e `Security`.
+- Quando ambos estao `success` para o mesmo commit na `main`, ele espera 60 segundos e dispara o `deploy.yml`.
+- O disparo automatico usa:
+  - `deploy_ref=<sha do commit>`
+  - `target=AUTO_DEPLOY_TARGET` (ou `production` se nao configurado)
+  - `skip_quality_gates=true` (evita rerodar toda a validacao)
 
 ## Rollback
 - Reexecutar `deploy.yml` apontando `deploy_ref` para commit/tag anterior.
