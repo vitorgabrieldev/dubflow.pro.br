@@ -43,9 +43,8 @@ npm run dev
 - Lint: `npm run lint`
 - E2E: `npm run test:e2e`
 
-Validacao completa do projeto (backend + frontend + e2e) na raiz:
+Validacao completa da aplicacao (backend + frontend + e2e) na raiz:
 
 ```bash
 ./scripts/test-all-local.sh
 ```
-
