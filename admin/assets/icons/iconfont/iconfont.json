@@ -1,0 +1,65 @@
+{
+  "id": "1490116",
+  "name": "admin",
+  "font_family": "iconfont",
+  "css_prefix_text": "",
+  "description": "",
+  "glyphs": [
+    {
+      "icon_id": "11594509",
+      "name": "calendar",
+      "font_class": "calendar",
+      "unicode": "e604",
+      "unicode_decimal": 58884
+    },
+    {
+      "icon_id": "11594510",
+      "name": "send",
+      "font_class": "send",
+      "unicode": "e605",
+      "unicode_decimal": 58885
+    },
+    {
+      "icon_id": "11594511",
+      "name": "created-at",
+      "font_class": "created-at",
+      "unicode": "e606",
+      "unicode_decimal": 58886
+    },
+    {
+      "icon_id": "11757035",
+      "name": "surveys-completed",
+      "font_class": "surveys-completed",
+      "unicode": "e607",
+      "unicode_decimal": 58887
+    },
+    {
+      "icon_id": "11757048",
+      "name": "surveys-scheduled",
+      "font_class": "surveys-scheduled",
+      "unicode": "e60a",
+      "unicode_decimal": 58890
+    },
+    {
+      "icon_id": "11757051",
+      "name": "properties",
+      "font_class": "properties",
+      "unicode": "e60b",
+      "unicode_decimal": 58891
+    },
+    {
+      "icon_id": "11821754",
+      "name": "survey-input",
+      "font_class": "survey-input",
+      "unicode": "e60c",
+      "unicode_decimal": 58892
+    },
+    {
+      "icon_id": "11821755",
+      "name": "survey-output",
+      "font_class": "survey-output",
+      "unicode": "e60d",
+      "unicode_decimal": 58893
+    }
+  ]
+}

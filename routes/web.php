@@ -3,6 +3,38 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/admin/{path?}', function (Request $request, ?string $path = null) {
+    $adminFrontend = rtrim((string) config('app.admin_frontend_url', 'http://127.0.0.1:5174/admin'), '/');
+
+    if (app()->environment('local')) {
+        if ($adminFrontend === '') {
+            abort(500, 'ADMIN_FRONTEND_URL não configurada.');
+        }
+
+        if (! str_starts_with($adminFrontend, 'http://') && ! str_starts_with($adminFrontend, 'https://')) {
+            $adminFrontend = 'http://'.$adminFrontend;
+        }
+
+        $target = $adminFrontend;
+        $normalizedPath = trim((string) $path, '/');
+        if ($normalizedPath !== '') {
+            $target .= '/'.$normalizedPath;
+        }
+
+        $query = $request->getQueryString();
+        if ($query) {
+            $target .= '?'.$query;
+        }
+
+        return redirect()->away($target);
+    }
+
+    $indexFile = public_path('admin/index.html');
+    abort_unless(is_file($indexFile), 404);
+
+    return response()->file($indexFile);
+})->where('path', '.*');
+
 Route::get('/', function (Request $request) {
     $supported = ['pt-BR', 'en', 'es', 'ja', 'fr'];
     $normalized = array_combine(

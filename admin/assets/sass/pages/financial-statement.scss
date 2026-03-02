@@ -1,0 +1,65 @@
+@import "./../vars";
+@import "./../mixins/media";
+
+.financial-statement-summary {
+	margin-bottom:30px;
+	background:#fff;
+	box-shadow:$shadow;
+	border-radius:$border-radius;
+	@include mobile_up {
+		display:flex;
+		align-items:center;
+	}
+	> div {
+		padding:10px;
+		@include mobile {
+			text-align:center;
+		}
+		@include mobile_up {
+			flex:1;
+		}
+		& + div {
+			@include mobile {
+				border-top:1px solid #ccc;
+			}
+			@include mobile_up {
+				border-left:1px solid #ccc;
+			}
+		}
+		> span {
+			display:block;
+		}
+	}
+}
+
+.financial-statement-list {
+	> div {
+		+ div {
+			margin-top:30px;
+		}
+		> header {
+			display:flex;
+			align-items:center;
+			justify-content:space-between;
+			padding:10px;
+			margin-bottom:10px;
+			background:#fff;
+			box-shadow:$shadow;
+			border-radius:$border-radius;
+			h3 {
+				margin-bottom:0;
+			}
+		}
+		.list-items {
+			.list-items-item {
+				display:flex;
+				align-items:center;
+				justify-content:space-between;
+				padding:8px 10px;
+				+ .list-items-item {
+					border-top:1px solid #ccc;
+				}
+			}
+		}
+	}
+}

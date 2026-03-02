@@ -1,0 +1,29 @@
+@import '../vars';
+@import '../mixins/media';
+
+.template-login {
+
+	/* ============================================================================
+		Content
+	============================================================================ */
+	.site-content {
+		display:flex;
+		flex-direction:column;
+		align-items:center;
+		justify-content:center;
+		padding:30px 20px;
+		.site-content-logo {
+			margin-bottom:40px;
+			img {
+				// height:40px;
+			}
+		}
+		.site-content-inner {
+			width:100%;
+			max-width:350px;
+			.page-content {
+			}
+		}
+	}
+
+}

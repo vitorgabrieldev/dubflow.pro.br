@@ -1,0 +1,5 @@
+export default {
+	SIDER_TOGGLE: "GENERAL_SIDER_TOGGLE",
+
+	LIST_TYPE: "GENERAL_LIST_TYPE",
+};

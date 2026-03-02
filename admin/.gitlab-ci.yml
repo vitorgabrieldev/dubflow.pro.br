@@ -1,0 +1,123 @@
+stages:
+  # prod
+  - build
+  - deploy
+  # homologation
+  - build_homologacao
+  - deploy_homologacao
+
+# production
+build:
+  stage: build
+  only:
+    - main
+  image: ubuntu
+  cache:
+    key: build-cache
+    paths:
+      - node_modules/
+      - .npmrc
+    policy: push
+  before_script:
+    - apt update
+    - apt install -y curl
+    # Install NVM
+    - curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
+    - 'export NVM_DIR="$HOME/.nvm"'
+    - '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"'
+    - '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"'
+    # Install node
+    - nvm install 16.14.2
+    # Install common plugins
+    - npm install -g yarn
+  script:
+    # Install and build dependencies
+    - yarn install
+    - yarn run prod
+    # Move production files to build folder
+    - mkdir build
+    - mv -v css build
+    - mv -v fonts build
+    - mv -v images build
+    - mv -v js build
+    - mv -v .htaccess build
+    - mv -v index.php build
+    - mv -v mix-manifest.json build
+    # Compress build folder
+    - tar -zcf build.tar.gz build
+  artifacts:
+    paths:
+      - build.tar.gz
+
+deploy:
+  stage: deploy
+  only:
+    - main
+  image: ubuntu
+  before_script:
+    - apt update
+    - apt install -y sshpass
+  script:
+    - export SSHPASS="$SSH_PASS"
+    # Upload compressed file
+    - sshpass -e scp -o StrictHostKeyChecking=no build.tar.gz $SSH_USER@$SSH_HOST:$FOLDER
+    # Uncompress
+    - sshpass -e ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "cd $FOLDER && tar -xf build.tar.gz --strip-components=1; rm -rf build.tar.gz"
+
+#homologation
+build_homologacao:
+  stage: build_homologacao
+  only:
+    - homologation
+  image: ubuntu
+  cache:
+    key: build-cache
+    paths:
+      - node_modules/
+      - .npmrc
+    policy: push
+  before_script:
+    - apt update
+    - apt install -y curl
+    # Install NVM
+    - curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
+    - 'export NVM_DIR="$HOME/.nvm"'
+    - '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"'
+    - '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"'
+    # Install node
+    - nvm install 16.14.2
+    # Install common plugins
+    - npm install -g yarn
+  script:
+    # Install and build dependencies
+    - yarn install
+    - yarn run homolog
+    # Move homologation files to build folder
+    - mkdir build
+    - mv -v css build
+    - mv -v fonts build
+    - mv -v images build
+    - mv -v js build
+    - mv -v .htaccess build
+    - mv -v index.php build
+    - mv -v mix-manifest.json build
+    # Compress build folder
+    - tar -zcf build.tar.gz build
+  artifacts:
+    paths:
+      - build.tar.gz
+
+deploy_homologacao:
+  stage: deploy_homologacao
+  only:
+    - homologation
+  image: ubuntu
+  before_script:
+    - apt update
+    - apt install -y sshpass
+  script:
+    - export SSHPASS="$SSH_PASS_HOMOLOG"
+    # Upload compressed file
+    - sshpass -e scp -o StrictHostKeyChecking=no build.tar.gz $SSH_USER_HOMOLOG@$SSH_HOST_HOMOLOG:$FOLDER_HOMOLOG
+    # Uncompress
+    - sshpass -e ssh -o StrictHostKeyChecking=no $SSH_USER_HOMOLOG@$SSH_HOST_HOMOLOG "cd $FOLDER_HOMOLOG && tar -xf build.tar.gz --strip-components=1; rm -rf build.tar.gz"

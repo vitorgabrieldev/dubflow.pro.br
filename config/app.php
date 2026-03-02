@@ -54,6 +54,7 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
     'frontend_url' => rtrim((string) env('APP_FRONTEND_URL', env('FRONTEND_URL', 'http://localhost:3000')), '/'),
+    'admin_frontend_url' => rtrim((string) env('ADMIN_FRONTEND_URL', 'http://127.0.0.1:5174/admin'), '/'),
 
     /*
     |--------------------------------------------------------------------------

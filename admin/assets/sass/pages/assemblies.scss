@@ -1,0 +1,86 @@
+@import "./../vars";
+@import "./../mixins/media";
+
+.polls-list-options {
+	margin-bottom:20px;
+	.polls-list-options-item {
+		position:relative;
+		padding-right:115px;
+		+ .polls-list-options-item {
+			margin-top:10px;
+		}
+		.btn-order {
+			position:absolute;
+			top:50%;
+			padding:0;
+			min-width:30px;
+			width:30px;
+			height:30px;
+			transform:translateY(-50%);
+			&.btn-up {
+				right:79px;
+			}
+			&.btn-down {
+				right:42px;
+			}
+		}
+		.btn-del {
+			position:absolute;
+			top:50%;
+			right:5px;
+			padding:0;
+			min-width:30px;
+			width:30px;
+			height:30px;
+			color:#fff;
+			border-color:#f00;
+			background:#f00;
+			transform:translateY(-50%);
+			@include mobile {
+				right:5px;
+			}
+		}
+	}
+}
+
+.polls-result-export {
+	margin-bottom:20px;
+	border-radius:20px;
+}
+.polls-result {
+	.polls-result-item {
+		margin-bottom:20px;
+		h3 {
+		}
+		.ant-collapse {
+			.ant-collapse-item {
+				.ant-collapse-header {
+					.ant-collapse-header-text {
+						span {
+							display:inline-block;
+							padding:2px 0;
+							margin-right:5px;
+							width:60px;
+							font-size:13px;
+							color:#fff;
+							background:#4d4d4d;
+							border-radius:4px;
+							text-align:center;
+						}
+					}
+				}
+				.ant-collapse-content {
+					.ant-collapse-content-box {
+						.polls-result-option-votes {
+							> div {
+								+ div {
+									margin-top:5px;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

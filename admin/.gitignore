@@ -1,0 +1,14 @@
+# General
+.idea
+/hot
+/node_modules
+
+# Assets generated
+/css/*
+/fonts/*
+/images/*
+/js/*
+mix-manifest.json
+/.env
+
+/.vscode

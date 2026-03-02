@@ -17,6 +17,7 @@ Guia técnico central do DubFlow.
 - Docker e Render: [`DOCKER_RENDER.md`](DOCKER_RENDER.md)
 - Roadmap funcional: [`DUBBING_ROADMAP.md`](DUBBING_ROADMAP.md)
 - Backlog de evolução: [`AJUSTES.md`](AJUSTES.md)
+- Planejamento de assinaturas: [`ASSINATURAS.md`](ASSINATURAS.md)
 
 ## Stack da aplicação
 

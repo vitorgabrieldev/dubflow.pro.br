@@ -120,11 +120,56 @@ Data da atualizacao: 2026-03-02
   Resultado esperado: menos surpresa em producao e UX mais consistente.
   Status: backlog
 
+## Governança e Compliance
+
+- [ ] GC-001 - Camada jurídica/documental
+  Objetivo: estabelecer base jurídica clara e auditável para uso da aplicação.
+  Entregáveis: Termos de Uso, Política de Privacidade e Política de Conteúdo.
+  Entregáveis: versionamento dos termos com histórico de publicação.
+  Entregáveis: aceite registrado por usuário (timestamp, IP e versão dos termos).
+  Resultado esperado: conformidade, rastreabilidade e menor risco jurídico.
+  Status: backlog
+
+- [ ] GC-002 - Camada de produto/operação para moderação
+  Objetivo: garantir governança contínua de conteúdo e resposta operacional.
+  Entregáveis: botão de denúncia em post, comentário e perfil.
+  Entregáveis: fluxo de takedown (triagem, decisão, prazo e histórico).
+  Entregáveis: política de reincidência (strikes, suspensão e banimento).
+  Entregáveis: canal de contestação (appeal) com rastreamento de decisão.
+  Resultado esperado: moderação consistente, previsível e defensável.
+  Status: backlog
+
+- [ ] GC-003 - Painel de gestão completo (todos os módulos)
+  Objetivo: centralizar operação, compliance, moderação e governança da aplicação em uma única interface administrativa.
+  Entregáveis: painéis por módulo com permissões por papel, trilha de auditoria e ações em lote.
+  Resultado esperado: controle operacional ponta a ponta, com menor risco jurídico e maior velocidade de decisão.
+  Status: backlog
+
+### Painel de gestão - descrição de todos os módulos
+
+| Módulo | Descrição | Funções principais |
+| --- | --- | --- |
+| Módulo 01 - Visão geral operacional | Centro de monitoramento diário da aplicação. | KPIs de usuários/conteúdo, alertas críticos, fila de pendências, atalhos de ação. |
+| Módulo 02 - Usuários e contas | Gestão completa do ciclo de vida do usuário. | Busca avançada, bloqueio/desbloqueio, suspensão temporária, reset de acesso, histórico de ações. |
+| Módulo 03 - Organizações e membros | Administração das comunidades e seus papéis. | Ativar/inativar organização, revisar ownership, ajustar papéis, validar denúncias entre membros. |
+| Módulo 04 - Conteúdo (posts, playlists e mídia) | Curadoria e governança editorial do conteúdo publicado. | Revisar/publicar/ocultar conteúdo, remoção administrativa, análise de metadados, histórico de alterações. |
+| Módulo 05 - Comentários e interações | Controle de conversas e comportamento social. | Moderação de comentários, remoção de abuso, bloqueio por thread, ações em massa por evento. |
+| Módulo 06 - Oportunidades e inscrições | Gestão de vagas/testes e processos seletivos internos. | Revisar oportunidades, congelar inscrições, auditar resultado, encerrar fluxo com justificativa. |
+| Módulo 07 - Denúncias e takedown | Fluxo formal de denúncia e retirada de conteúdo. | Fila com prioridade, triagem, decisão, prazo SLA, motivo padronizado, evidência e histórico. |
+| Módulo 08 - Reincidência e sanções | Aplicação de política progressiva de disciplina. | Gestão de strikes, suspensão, banimento, validade da sanção, reincidência por janela de tempo. |
+| Módulo 09 - Contestação (appeal) | Revisão de decisões de moderação e sanção. | Abrir/receber contestação, revisão por responsável, decisão final, registro de justificativa e prazo. |
+| Módulo 10 - Jurídico/documental | Governança de políticas e aceites legais. | Criar/versionar/publicar Termos/Privacidade/Conteúdo, forçar reaceite, consulta por versão aceita. |
+| Módulo 11 - Comunicação e notificações | Governança da comunicação transacional e operacional. | Templates, campanhas de notificação interna, e-mail transacional, pausas por categoria. |
+| Módulo 12 - Segurança e auditoria | Controle de risco, acesso e rastreabilidade. | Logs de auditoria, trilha de ações administrativas, sessões ativas, eventos de segurança. |
+| Módulo 13 - Suporte e atendimento | Operação de suporte ao usuário final. | Abertura e gestão de tickets, categorização, SLA de resposta, vínculo com usuário e conteúdo. |
+| Módulo 14 - Métricas e relatórios | Camada analítica para decisão de produto e operação. | Relatórios por período, coortes, exportação CSV, painéis de retenção, abuso e performance. |
+| Módulo 15 - Configurações e integrações | Parâmetros globais e integrações externas da aplicação. | Feature flags, limites de upload, políticas de retenção, integrações (e-mail, storage, observabilidade). |
+
 ## Ordem sugerida de execucao
 
 - Fase 1: BE-001, BE-003, FE-001, FE-002, DO-001, DO-003
-- Fase 2: BE-002, BE-004, FE-003, FE-006, DO-002, DO-006
-- Fase 3: BE-005, BE-006, FE-004, FE-005, DO-004, DO-005
+- Fase 2: BE-002, BE-004, FE-003, FE-006, DO-002, DO-006, GC-001
+- Fase 3: BE-005, BE-006, FE-004, FE-005, DO-004, DO-005, GC-002, GC-003
 
 ## Modelo para novos itens
 
