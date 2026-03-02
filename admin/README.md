@@ -1,11 +1,15 @@
-# Admin DubFlow (Vite + React)
+# Admin DubFlow (Legacy App Migrado para Vite)
 
-Painel administrativo em JavaScript (JS/JSX), atualizado para stack moderna.
+Este diretório mantém o painel administrativo legado (com login e rotas existentes),
+agora compilado e servido com Vite.
 
-## Requisitos
+## Stack
 
-- Node `20+`
-- npm `10+`
+- React 18 (JS/JSX)
+- React Router 5
+- Redux + Redux Persist
+- Ant Design 4
+- Vite 7
 
 ## Scripts
 
@@ -16,13 +20,12 @@ npm run build
 npm run preview
 ```
 
-## Portas
+## Endpoints locais
 
 - Dev server: `http://127.0.0.1:5174/admin/`
-- Preview: `http://127.0.0.1:4174/admin/`
+- Backend Laravel: `http://127.0.0.1:8000/admin`
 
-## Integração com o backend Laravel
+## Integração com Laravel
 
-- Build de produção em: `public/admin`
-- Rota backend: `/admin`
-- Em ambiente local, `/admin` redireciona para `ADMIN_FRONTEND_URL` (default `http://127.0.0.1:5174/admin`)
+- Build gera arquivos em `public/admin`.
+- Em `APP_ENV=local`, a rota `/admin` redireciona para `ADMIN_FRONTEND_URL`.

@@ -1,5 +1,5 @@
 import React, { Component } from "react";
-import ReactDOM from "react-dom";
+import { createRoot } from "react-dom/client";
 import { Provider } from "react-redux";
 import { PersistGate } from "redux-persist/lib/integration/react";
 
@@ -19,4 +19,8 @@ class App extends Component {
 	}
 }
 
-ReactDOM.render(<App />, document.getElementById("root"));
+const rootElement = document.getElementById("root");
+if (rootElement) {
+	const root = createRoot(rootElement);
+	root.render(<App />);
+}

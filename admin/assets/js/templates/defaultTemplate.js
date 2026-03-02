@@ -63,7 +63,7 @@ class DefaultTemplate extends Component {
 						visible={!siderCollapsed}
 						className="template-default-ant-drawer site-menu">
 						<div className="logo">
-							<img src="images/logos/logo-white.svg" width={160} alt="" />
+							<img src="/admin/images/logos/logo-white.svg" width={160} alt="" />
 						</div>
 						<MainNavigation
 							onClick={this.toggle}
@@ -79,9 +79,9 @@ class DefaultTemplate extends Component {
                         width={265}
 						collapsedWidth={80}
 						className="site-menu">
-						<div className="logo" >
-							<img src="images/logos/logo-white.svg" width={160} alt="" />
-							<img src="images/logos/logo-white.svg" width={90} className="logo-icon" alt="" />
+							<div className="logo" >
+								<img src="/admin/images/logos/logo-white.svg" width={160} alt="" />
+								<img src="/admin/images/logos/logo-white.svg" width={90} className="logo-icon" alt="" />
 						</div>
 						<MainNavigation />
 					</Sider>

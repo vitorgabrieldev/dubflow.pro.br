@@ -20,6 +20,15 @@ import LoginTemplate from "./../../templates/loginTemplate";
 import Error404 from "./../../screens/Error404";
 
 class Main extends Component {
+	getRouterBaseName = () => {
+		if( typeof window !== "undefined" && window.location.pathname.startsWith("/admin") )
+		{
+			return "/admin";
+		}
+
+		return "/";
+	};
+
 	componentDidMount() {
 		if( this.props.isAuthenticated )
 		{
@@ -31,7 +40,7 @@ class Main extends Component {
 	render() {
 		return (
 			<ConfigProvider locale={pt_BR}>
-				<BrowserRouter>
+				<BrowserRouter basename={this.getRouterBaseName()}>
 					<Switch>
 						{PRIVATE_ROUTES.map((route, key) => (
 							<Route exact={route.exact} path={route.path} key={key} render={(props) => (

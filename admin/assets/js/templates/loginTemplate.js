@@ -9,8 +9,8 @@ class loginTemplate extends Component {
 		return (
 			<Layout className="template-login">
 				<Content className="site-content">
-					<div className="site-content-logo">
-						<img src="images/logos/logo.svg" width={200} height={300} alt="" />
+				<div className="site-content-logo">
+					<img src="/admin/images/logos/logo.svg" width={200} height={300} alt="" />
 					</div>
 					<QueueAnim className="site-content-inner">
 						{this.props.children}

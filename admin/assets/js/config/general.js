@@ -1,12 +1,10 @@
-require("dotenv").config();
-
 import { browserName, osName } from "./../helpers/client";
 
 // -----------------------------------------------------------------------------
 // General
 // -----------------------------------------------------------------------------
-export const IS_DEBUG = process.env.NODE_ENV === "development";
-export const ENV = process.env.NODE_ENV;
+export const ENV = import.meta.env.MODE || "development";
+export const IS_DEBUG = ENV === "development";
 
 export const CLIENT_DATA = {
 	os_name: osName(),
@@ -16,18 +14,15 @@ export const CLIENT_DATA = {
 // -----------------------------------------------------------------------------
 // API
 // -----------------------------------------------------------------------------
-const ENV_HOSTS = {
-	development: "homologacao.clickweb.com.br:8478",
-	homologation: "homologacao.clickweb.com.br:8478",
-	production: "homologacao.clickweb.com.br:8478",
-};
+const DEFAULT_API_BASE_URL = "https://homologacao.clickweb.com.br:8478/api/v1/admin";
+const DEFAULT_SOCKET_URL = "homologacao.clickweb.com.br:8478";
+const DEFAULT_SOCKET_AUTH = "https://homologacao.clickweb.com.br:8478/broadcasting/auth";
 
-const HOST = ENV_HOSTS[ENV] || ENV_HOSTS.development;
-const buildHttpsUrl = (path) => `https://${HOST}${path}`;
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, "");
 
-export const API_URL = buildHttpsUrl("/api/v1/admin/");
-export const SOCKET_URL = HOST;
-export const SOCKET_AUTH = buildHttpsUrl("/broadcasting/auth");
+export const API_URL = `${API_BASE_URL}/`;
+export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || DEFAULT_SOCKET_URL;
+export const SOCKET_AUTH = import.meta.env.VITE_SOCKET_AUTH || DEFAULT_SOCKET_AUTH;
 
 export const SOCKET_PORT = 6001;
 export const SOCKET_KEY = "taWt5tcUfW2xjz9jl454AjregzIaPRnY";

@@ -11,7 +11,7 @@ class Error404 extends Component {
 		<QueueAnim className="site-content-inner page-404">
 			<div className="page-content" key="1">
 				<figure className="icon">
-					<img src="images/404.svg" />
+					<img src="/admin/images/404.svg" />
 				</figure>
 				<h1>Página não encontrada!</h1>
 				<p>O conteúdo que você solicitou não foi encontrado em nossos servidores.</p>

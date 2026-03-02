@@ -9,7 +9,7 @@ import {
 	generalRedurcer,
 } from "./../reducers";
 
-const IS_DEBUG = process.env.NODE_ENV === 'development';
+const IS_DEBUG = import.meta.env.DEV;
 
 const persistConfig = {
 	key      : "root",
