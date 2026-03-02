@@ -1,13 +1,13 @@
 # DubFlow Frontend
 
-Frontend web do DubFlow (Next.js App Router).
+Aplicação frontend do DubFlow (Next.js App Router).
 
-## Versao atual
+## Versão
 
-- `1.0.0` (primeira versao estavel)
-- Arquivos de versao: `VERSION` e `CHANGELOG.md`
+- `1.0.0` (primeira versão estável)
+- Arquivos de versão: `VERSION` e `CHANGELOG.md`
 
-## Padrao local oficial
+## Padrão local oficial
 
 - Frontend: `http://localhost:3000`
 - API (backend Laravel): `http://127.0.0.1:8000/api/v1`
@@ -17,7 +17,7 @@ Frontend web do DubFlow (Next.js App Router).
 - Node `22+`
 - npm `10+`
 
-## Setup
+## Configuração
 
 ```bash
 nvm use 22
@@ -31,7 +31,7 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:8000/api/v1
 INTERNAL_API_URL=http://127.0.0.1:8000/api/v1
 ```
 
-Rodar local:
+Execução local:
 
 ```bash
 npm run dev
@@ -43,7 +43,7 @@ npm run dev
 - Lint: `npm run lint`
 - E2E: `npm run test:e2e`
 
-Validacao completa da aplicacao (backend + frontend + e2e) na raiz:
+Validação completa da aplicação (backend + frontend + e2e) na raiz:
 
 ```bash
 ./scripts/test-all-local.sh
