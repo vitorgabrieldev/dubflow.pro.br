@@ -233,6 +233,7 @@ class OrganizationController extends Controller
             $viewer['is_following'] = OrganizationFollow::query()
                 ->where('organization_id', $organization->id)
                 ->where('user_id', $user->id)
+                ->where('is_active', true)
                 ->exists();
 
             $activeRole = OrganizationMember::query()
@@ -342,10 +343,12 @@ class OrganizationController extends Controller
     {
         $user = auth('api')->user();
 
-        OrganizationFollow::query()->firstOrCreate([
+        $follow = OrganizationFollow::query()->firstOrNew([
             'organization_id' => $organization->id,
             'user_id' => $user->id,
         ]);
+        $follow->is_active = true;
+        $follow->save();
 
         if ($organization->owner_user_id !== $user->id && $organization->owner) {
             $organization->owner->notify(new OrganizationFollowed($organization, $user));
@@ -368,7 +371,7 @@ class OrganizationController extends Controller
         OrganizationFollow::query()
             ->where('organization_id', $organization->id)
             ->where('user_id', $user->id)
-            ->delete();
+            ->update(['is_active' => false]);
 
         $organization->recalculateVerification();
 
@@ -478,6 +481,7 @@ class OrganizationController extends Controller
         $followed = OrganizationFollow::query()
             ->whereIn('organization_id', $organizationIds)
             ->where('user_id', $userId)
+            ->where('is_active', true)
             ->pluck('organization_id')
             ->flip();
 

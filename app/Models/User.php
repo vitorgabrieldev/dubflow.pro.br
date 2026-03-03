@@ -126,7 +126,9 @@ class User extends Authenticatable implements JWTSubject
 
     public function followedOrganizations(): BelongsToMany
     {
-        return $this->belongsToMany(Organization::class, 'organization_follows')->withTimestamps();
+        return $this->belongsToMany(Organization::class, 'organization_follows')
+            ->wherePivot('is_active', true)
+            ->withTimestamps();
     }
 
     public function followingUsers(): BelongsToMany

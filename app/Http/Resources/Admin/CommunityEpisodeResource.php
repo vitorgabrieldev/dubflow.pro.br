@@ -11,6 +11,7 @@ class CommunityEpisodeResource extends JsonResource
     {
         $author = $this->whenLoaded('author');
         $playlist = $this->whenLoaded('playlist');
+        $season = $this->whenLoaded('season');
 
         $isActive = $this->visibility === 'public' && $this->published_at !== null;
 
@@ -37,6 +38,13 @@ class CommunityEpisodeResource extends JsonResource
                 'uuid' => (string) $playlist->id,
                 'title' => $playlist->title,
                 'slug' => $playlist->slug,
+                'work_title' => $playlist->work_title,
+            ] : null,
+            'season' => $season ? [
+                'id' => $season->id,
+                'uuid' => (string) $season->id,
+                'season_number' => $season->season_number,
+                'title' => $season->title,
             ] : null,
         ];
     }
