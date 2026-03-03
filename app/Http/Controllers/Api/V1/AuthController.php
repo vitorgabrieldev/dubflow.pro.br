@@ -308,7 +308,7 @@ class AuthController extends Controller
                 ->where('notifiable_id', $user->id)
                 ->delete();
 
-            $user->delete();
+            $user->forceDelete();
         });
 
         auth('api')->logout();

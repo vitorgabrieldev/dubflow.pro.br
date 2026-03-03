@@ -272,7 +272,7 @@ class PlaylistController extends Controller
             abort(422, 'Remova todos os episódios desta playlist antes de excluí-la.');
         }
 
-        $playlist->delete();
+        $playlist->forceDelete();
         $organization->recalculateVerification();
 
         return response()->json(['message' => 'Playlist removida com sucesso.']);
