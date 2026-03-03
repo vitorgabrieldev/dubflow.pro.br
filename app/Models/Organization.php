@@ -67,12 +67,14 @@ class Organization extends Model
 
     public function follows(): HasMany
     {
-        return $this->hasMany(OrganizationFollow::class);
+        return $this->hasMany(OrganizationFollow::class)->where('is_active', true);
     }
 
     public function followers(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'organization_follows')->withTimestamps();
+        return $this->belongsToMany(User::class, 'organization_follows')
+            ->wherePivot('is_active', true)
+            ->withTimestamps();
     }
 
     public function invites(): HasMany

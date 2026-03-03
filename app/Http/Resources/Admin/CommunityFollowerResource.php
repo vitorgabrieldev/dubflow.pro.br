@@ -14,6 +14,7 @@ class CommunityFollowerResource extends JsonResource
         return [
             'id' => $this->id,
             'uuid' => (string) $this->id,
+            'is_active' => (bool) ($this->is_active ?? true),
             'followed_at' => $this->created_at?->toAtomString(),
             'created_at' => $this->created_at?->toAtomString(),
             'updated_at' => $this->updated_at?->toAtomString(),

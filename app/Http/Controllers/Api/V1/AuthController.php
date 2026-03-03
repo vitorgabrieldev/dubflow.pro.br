@@ -308,7 +308,7 @@ class AuthController extends Controller
                 ->where('notifiable_id', $user->id)
                 ->delete();
 
-            $user->delete();
+            $user->forceDelete();
         });
 
         auth('api')->logout();
@@ -378,7 +378,10 @@ class AuthController extends Controller
             [
                 'key' => 'organization_follows',
                 'label' => 'Comunidades seguidas',
-                'count' => OrganizationFollow::query()->where('user_id', $user->id)->count(),
+                'count' => OrganizationFollow::query()
+                    ->where('user_id', $user->id)
+                    ->where('is_active', true)
+                    ->count(),
             ],
             [
                 'key' => 'organization_invites_created',

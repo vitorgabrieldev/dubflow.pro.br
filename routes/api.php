@@ -103,7 +103,9 @@ Route::prefix('v1')->group(function () {
             Route::post('/communities/{communityId}/restore', [AdminCommunitiesController::class, 'restore'])->middleware('permission:communities.delete');
             Route::get('/communities/{communityId}/followers', [AdminCommunitiesController::class, 'followers'])->middleware('permission:communities.show');
             Route::post('/communities/{communityId}/followers', [AdminCommunitiesController::class, 'addFollower'])->middleware('permission:communities.edit');
+            Route::post('/communities/{communityId}/followers/{userUuid}/status', [AdminCommunitiesController::class, 'updateFollowerStatus'])->middleware('permission:communities.edit');
             Route::delete('/communities/{communityId}/followers/{userUuid}', [AdminCommunitiesController::class, 'removeFollower'])->middleware('permission:communities.edit');
+            Route::get('/communities/{communityId}/episode-filters', [AdminCommunitiesController::class, 'episodeFilters'])->middleware('permission:communities.show');
             Route::get('/communities/{communityId}/episodes', [AdminCommunitiesController::class, 'episodes'])->middleware('permission:communities.show');
             Route::post('/communities/{communityId}/episodes/{episodeId}/status', [AdminCommunitiesController::class, 'updateEpisodeStatus'])->middleware('permission:communities.edit');
             Route::get('/communities/{communityId}/collaborators', [AdminCommunitiesController::class, 'collaborators'])->middleware('permission:communities.show');

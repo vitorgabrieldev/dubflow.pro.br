@@ -33,6 +33,24 @@ const collaboratorsOrders = [
 	{label: "Nome Z|A", field: "name", sort: "desc"},
 ];
 
+const PLATFORM_BASE_URL = "https://startup.dev.br";
+
+const collaboratorRoleLabel = (role) => {
+	if( role === "owner" ) return "Dono";
+	if( role === "admin" ) return "Colaborador";
+	if( role === "editor" ) return "Dublador";
+	if( role === "member" ) return "Usuário";
+	return role || "-";
+};
+
+const collaboratorStatusLabel = (status) => {
+	if( status === "active" ) return "Ativo";
+	if( status === "pending" ) return "Pendente";
+	if( status === "rejected" ) return "Rejeitado";
+	if( status === "banned" ) return "Inativo";
+	return status || "-";
+};
+
 class Show extends Component {
 	static propTypes = {
 		visible: PropTypes.bool.isRequired,
@@ -59,7 +77,8 @@ class Show extends Component {
 				orderBySort : followersDefaultOrder.sort,
 				search      : "",
 				filters     : {
-					is_active: null,
+					is_active           : null,
+					membership_is_active: null,
 				},
 			},
 			episodes: {
@@ -70,7 +89,9 @@ class Show extends Component {
 				orderBySort : episodesDefaultOrder.sort,
 				search      : "",
 				filters     : {
-					visibility: null,
+					visibility : null,
+					playlist_id: null,
+					season_id  : null,
 				},
 			},
 			collaborators: {
@@ -82,9 +103,12 @@ class Show extends Component {
 				search      : "",
 				filters     : {
 					role  : null,
-					status: "active",
+					status: null,
 				},
 			},
+			episodesFilterLoading: false,
+			episodePlaylistOptions: [],
+			episodeSeasonOptions: [],
 			addFollowerModalVisible: false,
 			addFollowerSending     : false,
 			followerCandidatesLoading: false,
@@ -118,9 +142,13 @@ class Show extends Component {
 				data: [],
 				pagination: {...defaultPagination, pageSize: this.state.collaborators.pagination.pageSize},
 			},
+			episodesFilterLoading: false,
+			episodePlaylistOptions: [],
+			episodeSeasonOptions: [],
 		}, () => {
 			this.refreshCommunity()
 			.finally(() => {
+				this.fetchEpisodeFilterOptions();
 				this.fetchFollowers(true);
 				this.fetchEpisodes(true);
 				this.fetchCollaborators(true);
@@ -143,6 +171,60 @@ class Show extends Component {
 
 	onTabChange = (activeTab) => this.setState({activeTab});
 
+	formatExternalUrl = (url) => {
+		const value = String(url || "").trim();
+		if( !value ) return "";
+		if( /^https?:\/\//i.test(value) ) return value;
+		return `https://${value}`;
+	};
+
+	renderExternalLink = (url) => {
+		const href = this.formatExternalUrl(url);
+		if( !href ) return "-";
+
+		return (
+			<a href={href} target="_blank" rel="noopener noreferrer">
+				{href}
+				<i className="fal fa-external-link-alt" style={{marginLeft: 8}} />
+			</a>
+		);
+	};
+
+	buildCommunityPublicUrl = (slug) => {
+		if( !slug ) return "";
+		return `${PLATFORM_BASE_URL}/pt-BR/organizations/${slug}`;
+	};
+
+	buildEpisodePublicUrl = (episodeUuid) => {
+		if( !episodeUuid ) return "";
+		return `${PLATFORM_BASE_URL}/pt-BR/post/${episodeUuid}`;
+	};
+
+	fetchEpisodeFilterOptions = (playlistId = null) => {
+		this.setState({episodesFilterLoading: true});
+
+		return communitiesService.getEpisodeFilters({
+			uuid      : this.state.uuid,
+			playlist_id: playlistId,
+		})
+		.then((response) => {
+			const payload = response.data?.data || {};
+
+			this.setState({
+				episodesFilterLoading: false,
+				episodePlaylistOptions: payload.playlists || [],
+				episodeSeasonOptions: payload.seasons || [],
+			});
+		})
+		.catch(() => {
+			this.setState({
+				episodesFilterLoading: false,
+				episodePlaylistOptions: [],
+				episodeSeasonOptions: [],
+			});
+		});
+	};
+
 	fetchFollowers = (init = false) => {
 		this.setState(state => ({followers: {...state.followers, isLoading: true}}));
 
@@ -157,6 +239,10 @@ class Show extends Component {
 
 		if( followers.filters.is_active !== null ) {
 			payload.is_active = followers.filters.is_active;
+		}
+
+		if( followers.filters.membership_is_active !== null ) {
+			payload.membership_is_active = followers.filters.membership_is_active;
 		}
 
 		communitiesService.getFollowers(payload)
@@ -197,6 +283,14 @@ class Show extends Component {
 
 		if( episodes.filters.visibility ) {
 			payload.visibility = episodes.filters.visibility;
+		}
+
+		if( episodes.filters.playlist_id ) {
+			payload.playlist_id = episodes.filters.playlist_id;
+		}
+
+		if( episodes.filters.season_id ) {
+			payload.season_id = episodes.filters.season_id;
 		}
 
 		communitiesService.getEpisodes(payload)
@@ -295,12 +389,22 @@ class Show extends Component {
 		}
 	}), () => this.fetchFollowers());
 
-	onFollowersFilterChange = (value) => this.setState(state => ({
+	onFollowersAccountFilterChange = (value) => this.setState(state => ({
 		followers: {
 			...state.followers,
 			filters: {
 				...state.followers.filters,
 				is_active: value,
+			}
+		}
+	}), () => this.fetchFollowers(true));
+
+	onFollowersMembershipFilterChange = (value) => this.setState(state => ({
+		followers: {
+			...state.followers,
+			filters: {
+				...state.followers.filters,
+				membership_is_active: value,
 			}
 		}
 	}), () => this.fetchFollowers(true));
@@ -338,12 +442,36 @@ class Show extends Component {
 		}
 	}), () => this.fetchEpisodes());
 
-	onEpisodesFilterChange = (value) => this.setState(state => ({
+	onEpisodesVisibilityFilterChange = (value) => this.setState(state => ({
 		episodes: {
 			...state.episodes,
 			filters: {
 				...state.episodes.filters,
 				visibility: value,
+			}
+		}
+	}), () => this.fetchEpisodes(true));
+
+	onEpisodesPlaylistFilterChange = (value) => this.setState(state => ({
+		episodes: {
+			...state.episodes,
+			filters: {
+				...state.episodes.filters,
+				playlist_id: value || null,
+				season_id  : null,
+			}
+		}
+	}), () => {
+		this.fetchEpisodeFilterOptions(value || null);
+		this.fetchEpisodes(true);
+	});
+
+	onEpisodesSeasonFilterChange = (value) => this.setState(state => ({
+		episodes: {
+			...state.episodes,
+			filters: {
+				...state.episodes.filters,
+				season_id: value || null,
 			}
 		}
 	}), () => this.fetchEpisodes(true));
@@ -465,22 +593,27 @@ class Show extends Component {
 		});
 	};
 
-	removeFollowerConfirm = (item) => {
+	toggleFollowerStatusConfirm = (item) => {
+		const shouldActivate = !item.is_active;
+
 		Modal.confirm({
-			title  : "Inativar inscrição de seguidor",
-			content: `Tem certeza de que deseja inativar a inscrição de ${item.user?.name || "usuário"} nesta comunidade?`,
-			okText : "Inativar inscrição",
-			okType : "danger",
-			onOk   : () => this.removeFollower(item.user?.uuid),
+			title  : shouldActivate ? "Ativar inscrição de seguidor" : "Inativar inscrição de seguidor",
+			content: shouldActivate
+				? `Tem certeza de que deseja ativar a inscrição de ${item.user?.name || "usuário"} nesta comunidade?`
+				: `Tem certeza de que deseja inativar a inscrição de ${item.user?.name || "usuário"} nesta comunidade?`,
+			okText : shouldActivate ? "Ativar inscrição" : "Inativar inscrição",
+			okType : shouldActivate ? "primary" : "danger",
+			onOk   : () => this.toggleFollowerStatus(item.user?.uuid, shouldActivate),
 		});
 	};
 
-	removeFollower = (userUuid) => {
+	toggleFollowerStatus = (userUuid, isActive) => {
 		if( !userUuid ) return Promise.resolve();
 
-		return communitiesService.removeFollower({
+		return communitiesService.updateFollowerStatus({
 			uuid     : this.state.uuid,
 			user_uuid: userUuid,
+			is_active: isActive,
 		})
 		.then(() => {
 			this.fetchFollowers();
@@ -546,22 +679,27 @@ class Show extends Component {
 		});
 	};
 
-	removeCollaboratorConfirm = (item) => {
+	toggleCollaboratorStatusConfirm = (item) => {
+		const shouldActivate = item.status !== "active";
+
 		Modal.confirm({
-			title  : "Remover colaborador",
-			content: `Tem certeza de que deseja remover ${item.user?.name || "este colaborador"} da comunidade?`,
-			okText : "Remover",
-			okType : "danger",
-			onOk   : () => this.removeCollaborator(item),
+			title  : shouldActivate ? "Ativar colaborador" : "Inativar colaborador",
+			content: shouldActivate
+				? `Tem certeza de que deseja ativar ${item.user?.name || "este colaborador"} na comunidade?`
+				: `Tem certeza de que deseja inativar ${item.user?.name || "este colaborador"} na comunidade?`,
+			okText : shouldActivate ? "Ativar" : "Inativar",
+			okType : shouldActivate ? "primary" : "danger",
+			onOk   : () => this.toggleCollaboratorStatus(item, shouldActivate),
 		});
 	};
 
-	removeCollaborator = (item) => {
+	toggleCollaboratorStatus = (item, shouldActivate) => {
 		if( !item?.user?.uuid ) return Promise.resolve();
 
-		return communitiesService.removeCollaborator({
+		return communitiesService.updateCollaborator({
 			uuid     : this.state.uuid,
 			user_uuid: item.user.uuid,
+			status   : shouldActivate ? "active" : "banned",
 		})
 		.then(() => this.fetchCollaborators())
 		.catch((data) => Modal.error({title: "Ocorreu um erro!", content: String(data)}));
@@ -569,14 +707,23 @@ class Show extends Component {
 
 	followerMenu = (item) => (
 		<Menu className="actions-dropdown-menu">
-			<Menu.Item key="remove" className="btn-delete">
-				<a onClick={() => this.removeFollowerConfirm(item)}><i className="fal fa-user-minus" />Inativar inscrição</a>
+			<Menu.Item key="toggle" className={item.is_active ? "btn-delete" : ""}>
+				<a onClick={() => this.toggleFollowerStatusConfirm(item)}>
+					<i className={`fal ${item.is_active ? "fa-toggle-off" : "fa-toggle-on"}`} />
+					{item.is_active ? "Inativar inscrição" : "Ativar inscrição"}
+				</a>
 			</Menu.Item>
 		</Menu>
 	);
 
 	episodeMenu = (item) => (
 		<Menu className="actions-dropdown-menu">
+			<Menu.Item key="show">
+				<a href={this.buildEpisodePublicUrl(item.uuid)} target="_blank" rel="noopener noreferrer">
+					<i className="fal fa-external-link-alt" />
+					Visualizar episódio
+				</a>
+			</Menu.Item>
 			<Menu.Item key="toggle" className={`${item.is_active ? "btn-delete" : ""}`}>
 				<a onClick={() => this.toggleEpisodeStatusConfirm(item)}>
 					<i className={`fal ${item.is_active ? "fa-toggle-off" : "fa-toggle-on"}`} />
@@ -591,8 +738,11 @@ class Show extends Component {
 			{item.role !== "owner" && <Menu.Item key="edit-role">
 				<a onClick={() => this.openRoleModal(item)}><i className="fal fa-user-edit" />Alterar cargo</a>
 			</Menu.Item>}
-			{item.role !== "owner" && <Menu.Item key="remove" className="btn-delete divider">
-				<a onClick={() => this.removeCollaboratorConfirm(item)}><i className="fal fa-user-times" />Remover colaborador</a>
+			{item.role !== "owner" && <Menu.Item key="toggle-status" className={`divider ${item.status === "active" ? "btn-delete" : ""}`}>
+				<a onClick={() => this.toggleCollaboratorStatusConfirm(item)}>
+					<i className={`fal ${item.status === "active" ? "fa-toggle-off" : "fa-toggle-on"}`} />
+					{item.status === "active" ? "Inativar colaborador" : "Ativar colaborador"}
+				</a>
 			</Menu.Item>}
 		</Menu>
 	);
@@ -601,6 +751,11 @@ class Show extends Component {
 		{title: "UUID", className: "id", render: (item) => item.user?.uuid || "-"},
 		{title: "Nome", render: (item) => <span style={item.user?.is_deleted ? {color: "#cf1322"} : {}}>{item.user?.name || "-"}</span>},
 		{title: "E-mail", render: (item) => <span style={item.user?.is_deleted ? {color: "#cf1322"} : {}}>{item.user?.email || "-"}</span>},
+		{
+			title    : "Inscrição",
+			className: "no-ellipsis",
+			render   : (item) => <Tag color={item.is_active ? "#0acf97" : "#fa5c7c"}>{item.is_active ? "Ativa" : "Inativa"}</Tag>
+		},
 		{
 			title    : "Conta",
 			className: "no-ellipsis",
@@ -624,6 +779,8 @@ class Show extends Component {
 	episodeColumns = () => [
 		{title: "ID", className: "id", render: (item) => item.uuid},
 		{title: "Título", render: (item) => item.title || "-"},
+		{title: "Playlist", render: (item) => item.playlist?.title || "-"},
+		{title: "Temporada", render: (item) => item.season?.title || (item.season?.season_number ? `Temporada ${item.season.season_number}` : "-")},
 		{title: "Autor", render: (item) => item.author?.name || "-"},
 		{title: "Visibilidade", className: "no-ellipsis", render: (item) => <Tag color={item.visibility === "public" ? "#0acf97" : "#f7b84b"}>{item.visibility}</Tag>},
 		{title: "Status", className: "no-ellipsis", render: (item) => <Tag color={item.is_active ? "#0acf97" : "#fa5c7c"}>{item.is_active ? "Ativo" : "Inativo"}</Tag>},
@@ -643,8 +800,8 @@ class Show extends Component {
 		{title: "UUID", className: "id", render: (item) => item.user?.uuid || "-"},
 		{title: "Nome", render: (item) => <span style={item.user?.is_deleted ? {color: "#cf1322"} : {}}>{item.user?.name || "-"}</span>},
 		{title: "E-mail", render: (item) => <span style={item.user?.is_deleted ? {color: "#cf1322"} : {}}>{item.user?.email || "-"}</span>},
-		{title: "Cargo", className: "no-ellipsis", render: (item) => <Tag color={item.role === "owner" ? "#0acf97" : "#39afd1"}>{item.role}</Tag>},
-		{title: "Status", className: "no-ellipsis", render: (item) => <Tag color={item.status === "active" ? "#0acf97" : "#f7b84b"}>{item.status}</Tag>},
+		{title: "Cargo", className: "no-ellipsis", render: (item) => <Tag color={item.role === "owner" ? "#0acf97" : "#39afd1"}>{collaboratorRoleLabel(item.role)}</Tag>},
+		{title: "Status", className: "no-ellipsis", render: (item) => <Tag color={item.status === "active" ? "#0acf97" : "#fa5c7c"}>{collaboratorStatusLabel(item.status)}</Tag>},
 		{title: "Entrada", className: "datetime", render: (item) => item.joined_at ? moment(item.joined_at).format("DD/MM/YYYY HH:mm") : "-"},
 		{
 			title    : "Ações",
@@ -675,7 +832,8 @@ class Show extends Component {
 				<Form.Item label="Nome">{item.name}</Form.Item>
 				<Form.Item label="Slug">{item.slug}</Form.Item>
 				<Form.Item label="Dono">{item.owner ? `${item.owner.name} (${item.owner.email})` : "-"}</Form.Item>
-				<Form.Item label="Website">{item.website_url || "-"}</Form.Item>
+				<Form.Item label="Link da comunidade">{this.renderExternalLink(this.buildCommunityPublicUrl(item.slug))}</Form.Item>
+				<Form.Item label="Website">{this.renderExternalLink(item.website_url)}</Form.Item>
 				<Form.Item label="Descrição">{item.description || "-"}</Form.Item>
 				<Row gutter={16}>
 					<Col xs={24} sm={12}><Form.Item label="Pública"><Switch disabled checked={!!item.is_public} /></Form.Item></Col>
@@ -715,15 +873,26 @@ class Show extends Component {
 				pagination={followers.pagination}
 				onPaginationChange={this.onFollowersPaginationChange}
 				appendSearch={(
-					<Select
-						allowClear
-						placeholder="Filtro: status da conta"
-						value={followers.filters.is_active}
-						style={{width: 220, marginRight: 8}}
-						onChange={this.onFollowersFilterChange}>
-						<Select.Option value={1}>Conta ativa</Select.Option>
-						<Select.Option value={0}>Conta inativa</Select.Option>
-					</Select>
+					<>
+						<Select
+							allowClear
+							placeholder="Filtro: status da inscrição"
+							value={followers.filters.membership_is_active}
+							style={{width: 250, marginRight: 8}}
+							onChange={this.onFollowersMembershipFilterChange}>
+							<Select.Option value={1}>Inscrição ativa</Select.Option>
+							<Select.Option value={0}>Inscrição inativa</Select.Option>
+						</Select>
+						<Select
+							allowClear
+							placeholder="Filtro: status da conta"
+							value={followers.filters.is_active}
+							style={{width: 220, marginRight: 8}}
+							onChange={this.onFollowersAccountFilterChange}>
+							<Select.Option value={1}>Conta ativa</Select.Option>
+							<Select.Option value={0}>Conta inativa</Select.Option>
+						</Select>
+					</>
 				)}
 				buttons={[
 					{
@@ -738,7 +907,7 @@ class Show extends Component {
 	};
 
 	renderEpisodes = () => {
-		const {episodes} = this.state;
+		const {episodes, episodePlaylistOptions, episodeSeasonOptions, episodesFilterLoading} = this.state;
 
 		return (
 			<UIPageListing
@@ -758,16 +927,51 @@ class Show extends Component {
 				pagination={episodes.pagination}
 				onPaginationChange={this.onEpisodesPaginationChange}
 				appendSearch={(
-					<Select
-						allowClear
-						placeholder="Filtro: visibilidade"
-						value={episodes.filters.visibility}
-						style={{width: 210, marginRight: 8}}
-						onChange={this.onEpisodesFilterChange}>
-						<Select.Option value="public">Público</Select.Option>
-						<Select.Option value="private">Privado</Select.Option>
-						<Select.Option value="unlisted">Não listado</Select.Option>
-					</Select>
+					<>
+						<Select
+							allowClear
+							showSearch
+							optionFilterProp="children"
+							placeholder="Filtro: playlist"
+							value={episodes.filters.playlist_id}
+							style={{width: 260, marginRight: 8}}
+							onChange={this.onEpisodesPlaylistFilterChange}
+							loading={episodesFilterLoading}>
+							{episodePlaylistOptions.map((playlist) => (
+								<Select.Option key={playlist.id} value={playlist.id}>
+									{playlist.work_title ? `${playlist.work_title} - ${playlist.title}` : playlist.title}
+								</Select.Option>
+							))}
+						</Select>
+						<Select
+							allowClear
+							showSearch
+							optionFilterProp="children"
+							placeholder="Filtro: temporada"
+							value={episodes.filters.season_id}
+							style={{width: 280, marginRight: 8}}
+							onChange={this.onEpisodesSeasonFilterChange}
+							loading={episodesFilterLoading}
+							disabled={!episodes.filters.playlist_id}>
+							{episodeSeasonOptions.map((season) => (
+								<Select.Option key={season.id} value={season.id}>
+									{season.playlist?.title
+										? `${season.playlist.title} - ${season.title || `Temporada ${season.season_number}`}`
+										: (season.title || `Temporada ${season.season_number}`)}
+								</Select.Option>
+							))}
+						</Select>
+						<Select
+							allowClear
+							placeholder="Filtro: visibilidade"
+							value={episodes.filters.visibility}
+							style={{width: 210, marginRight: 8}}
+							onChange={this.onEpisodesVisibilityFilterChange}>
+							<Select.Option value="public">Público</Select.Option>
+							<Select.Option value="private">Privado</Select.Option>
+							<Select.Option value="unlisted">Não listado</Select.Option>
+						</Select>
+					</>
 				)}
 			/>
 		);
@@ -801,10 +1005,10 @@ class Show extends Component {
 							value={collaborators.filters.role}
 							style={{width: 180, marginRight: 8}}
 							onChange={this.onCollaboratorRoleFilterChange}>
-							<Select.Option value="owner">owner</Select.Option>
-							<Select.Option value="admin">admin</Select.Option>
-							<Select.Option value="editor">editor</Select.Option>
-							<Select.Option value="member">member</Select.Option>
+							<Select.Option value="owner">Dono</Select.Option>
+							<Select.Option value="admin">Colaborador</Select.Option>
+							<Select.Option value="editor">Dublador</Select.Option>
+							<Select.Option value="member">Usuário</Select.Option>
 						</Select>
 						<Select
 							allowClear
@@ -812,10 +1016,10 @@ class Show extends Component {
 							value={collaborators.filters.status}
 							style={{width: 180, marginRight: 8}}
 							onChange={this.onCollaboratorStatusFilterChange}>
-							<Select.Option value="active">active</Select.Option>
-							<Select.Option value="pending">pending</Select.Option>
-							<Select.Option value="rejected">rejected</Select.Option>
-							<Select.Option value="banned">banned</Select.Option>
+							<Select.Option value="active">Ativo</Select.Option>
+							<Select.Option value="pending">Pendente</Select.Option>
+							<Select.Option value="rejected">Rejeitado</Select.Option>
+							<Select.Option value="banned">Inativo</Select.Option>
 						</Select>
 					</>
 				)}
@@ -899,9 +1103,9 @@ class Show extends Component {
 							<Select
 								value={selectedCollaboratorRole}
 								onChange={(value) => this.setState({selectedCollaboratorRole: value})}>
-								<Select.Option value="admin">admin</Select.Option>
-								<Select.Option value="editor">editor</Select.Option>
-								<Select.Option value="member">member</Select.Option>
+								<Select.Option value="admin">Colaborador</Select.Option>
+								<Select.Option value="editor">Dublador</Select.Option>
+								<Select.Option value="member">Usuário</Select.Option>
 							</Select>
 						</Form.Item>
 					</Form>

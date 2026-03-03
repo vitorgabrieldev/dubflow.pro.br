@@ -99,7 +99,7 @@ export const getAutocomplete = (options = {}) => {
 };
 
 export const getFollowers = (options = {}) => {
-	const query = buildSubQuery(options, ["page", "limit", "search", "orderBy", "is_active", "created_at"]);
+	const query = buildSubQuery(options, ["page", "limit", "search", "orderBy", "is_active", "membership_is_active", "created_at"]);
 
 	return api.get(`${basePath}/${options.uuid}/followers${query}`);
 };
@@ -108,12 +108,22 @@ export const addFollower = (options = {}) => api.post(`${basePath}/${options.uui
 	user_uuid: options.user_uuid,
 });
 
+export const updateFollowerStatus = (options = {}) => api.post(`${basePath}/${options.uuid}/followers/${options.user_uuid}/status`, {
+	is_active: options.is_active,
+});
+
 export const removeFollower = (options = {}) => api.delete(`${basePath}/${options.uuid}/followers/${options.user_uuid}`);
 
 export const getEpisodes = (options = {}) => {
-	const query = buildSubQuery(options, ["page", "limit", "search", "orderBy", "visibility", "created_at"]);
+	const query = buildSubQuery(options, ["page", "limit", "search", "orderBy", "visibility", "playlist_id", "season_id", "created_at"]);
 
 	return api.get(`${basePath}/${options.uuid}/episodes${query}`);
+};
+
+export const getEpisodeFilters = (options = {}) => {
+	const query = buildSubQuery(options, ["playlist_id"]);
+
+	return api.get(`${basePath}/${options.uuid}/episode-filters${query}`);
 };
 
 export const updateEpisodeStatus = (options = {}) => api.post(`${basePath}/${options.uuid}/episodes/${options.episode_uuid}/status`, {
@@ -128,6 +138,7 @@ export const getCollaborators = (options = {}) => {
 
 export const updateCollaborator = (options = {}) => api.post(`${basePath}/${options.uuid}/collaborators/${options.user_uuid}`, {
 	role: options.role,
+	status: options.status,
 });
 
 export const removeCollaborator = (options = {}) => api.delete(`${basePath}/${options.uuid}/collaborators/${options.user_uuid}`);

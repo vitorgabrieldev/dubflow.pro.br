@@ -10,6 +10,8 @@ use App\Models\DubbingPost;
 use App\Models\Organization;
 use App\Models\OrganizationFollow;
 use App\Models\OrganizationMember;
+use App\Models\Playlist;
+use App\Models\PlaylistSeason;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -296,6 +298,7 @@ class CommunitiesController extends Controller
             'orderBy' => ['sometimes', 'nullable', 'string'],
             'search' => ['sometimes', 'nullable', 'string'],
             'is_active' => ['sometimes', 'nullable', 'integer', 'in:0,1'],
+            'membership_is_active' => ['sometimes', 'nullable', 'integer', 'in:0,1'],
             'created_at' => ['sometimes', 'array'],
             'created_at.*' => ['sometimes', 'date_format:Y-m-d\TH:i:sP'],
         ]);
@@ -306,7 +309,7 @@ class CommunitiesController extends Controller
             ->where('organization_follows.organization_id', $community->id)
             ->leftJoin('users', 'users.id', '=', 'organization_follows.user_id')
             ->select('organization_follows.*')
-            ->with(['user' => fn (Builder $builder) => $builder
+            ->with(['user' => fn ($builder) => $builder
                 ->withTrashed()
                 ->select(['id', 'uuid', 'name', 'email', 'is_active', 'deleted_at'])]);
 
@@ -324,6 +327,11 @@ class CommunitiesController extends Controller
         $isActive = $request->input('is_active');
         if ($isActive !== null && $isActive !== '') {
             $query->where('users.is_active', (int) $isActive === 1 ? 1 : 0);
+        }
+
+        $membershipIsActive = $request->input('membership_is_active');
+        if ($membershipIsActive !== null && $membershipIsActive !== '') {
+            $query->where('organization_follows.is_active', (int) $membershipIsActive === 1 ? 1 : 0);
         }
 
         $range = $this->parseDateRange($request, 'created_at');
@@ -365,13 +373,15 @@ class CommunitiesController extends Controller
             ], 422);
         }
 
-        $follower = OrganizationFollow::query()->firstOrCreate([
+        $follower = OrganizationFollow::query()->firstOrNew([
             'organization_id' => $community->id,
             'user_id' => $user->id,
         ]);
+        $follower->is_active = true;
+        $follower->save();
 
         $follower->load([
-            'user' => fn (Builder $builder) => $builder
+            'user' => fn ($builder) => $builder
                 ->withTrashed()
                 ->select(['id', 'uuid', 'name', 'email', 'is_active', 'deleted_at']),
         ]);
@@ -407,16 +417,66 @@ class CommunitiesController extends Controller
             ], 422);
         }
 
-        $follower->delete();
+        $before = $follower->replicate();
+        $follower->is_active = false;
+        $follower->save();
 
         $this->logAction('communities.followers.remove', $community->name, 'Inativou inscrição de seguidor na comunidade', [
             'community_id' => $community->id,
             'user_id' => $user->id,
             'user_uuid' => $user->uuid,
             'user_name' => $user->name,
-        ]);
+        ], $before);
 
         return response()->json([], 204);
+    }
+
+    public function updateFollowerStatus(Request $request, string $communityId, string $userUuid): CommunityFollowerResource
+    {
+        $validated = $request->validate([
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        $community = $this->findCommunityById($communityId, true);
+        $user = User::query()->withTrashed()->where('uuid', $userUuid)->firstOrFail();
+
+        $follower = OrganizationFollow::query()
+            ->where('organization_id', $community->id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (! $follower) {
+            abort(422, 'Inscrição de seguidor não encontrada para esse usuário.');
+        }
+
+        $before = $follower->replicate();
+        $isActive = (bool) $validated['is_active'];
+        $follower->is_active = $isActive;
+        $follower->save();
+
+        if ($follower->wasChanged()) {
+            $this->logAction(
+                'communities.followers.status',
+                $community->name,
+                $isActive ? 'Ativou inscrição de seguidor na comunidade' : 'Inativou inscrição de seguidor na comunidade',
+                [
+                    'community_id' => $community->id,
+                    'user_id' => $user->id,
+                    'user_uuid' => $user->uuid,
+                    'user_name' => $user->name,
+                    'is_active' => $isActive,
+                ],
+                $before
+            );
+        }
+
+        $follower->load([
+            'user' => fn ($builder) => $builder
+                ->withTrashed()
+                ->select(['id', 'uuid', 'name', 'email', 'is_active', 'deleted_at']),
+        ]);
+
+        return new CommunityFollowerResource($follower);
     }
 
     public function episodes(Request $request, string $communityId)
@@ -427,6 +487,8 @@ class CommunitiesController extends Controller
             'orderBy' => ['sometimes', 'nullable', 'string'],
             'search' => ['sometimes', 'nullable', 'string'],
             'visibility' => ['sometimes', 'nullable', 'in:public,private,unlisted'],
+            'playlist_id' => ['sometimes', 'nullable', 'integer'],
+            'season_id' => ['sometimes', 'nullable', 'integer'],
             'created_at' => ['sometimes', 'array'],
             'created_at.*' => ['sometimes', 'date_format:Y-m-d\TH:i:sP'],
         ]);
@@ -438,14 +500,46 @@ class CommunitiesController extends Controller
             ->leftJoin('users as authors', 'authors.id', '=', 'dubbing_posts.author_user_id')
             ->select('dubbing_posts.*')
             ->with([
-                'author' => fn (Builder $builder) => $builder
+                'author' => fn ($builder) => $builder
                     ->withTrashed()
                     ->select(['id', 'uuid', 'name', 'email', 'is_active', 'deleted_at']),
-                'playlist:id,title,slug',
+                'playlist:id,title,slug,work_title',
+                'season:id,playlist_id,season_number,title',
             ]);
 
         if ($request->filled('visibility')) {
             $query->where('dubbing_posts.visibility', $request->string('visibility')->toString());
+        }
+
+        if ($request->filled('playlist_id')) {
+            $playlistId = (int) $request->integer('playlist_id');
+            $playlistBelongsToCommunity = Playlist::query()
+                ->withTrashed()
+                ->where('id', $playlistId)
+                ->where('organization_id', $community->id)
+                ->exists();
+
+            if (! $playlistBelongsToCommunity) {
+                abort(422, 'Playlist informada não pertence à comunidade.');
+            }
+
+            $query->where('dubbing_posts.playlist_id', $playlistId);
+        }
+
+        if ($request->filled('season_id')) {
+            $seasonId = (int) $request->integer('season_id');
+            $seasonBelongsToCommunity = PlaylistSeason::query()
+                ->where('id', $seasonId)
+                ->whereHas('playlist', fn (Builder $builder) => $builder
+                    ->withTrashed()
+                    ->where('organization_id', $community->id))
+                ->exists();
+
+            if (! $seasonBelongsToCommunity) {
+                abort(422, 'Temporada informada não pertence à comunidade.');
+            }
+
+            $query->where('dubbing_posts.season_id', $seasonId);
         }
 
         $search = $request->string('search')->toString();
@@ -483,6 +577,61 @@ class CommunitiesController extends Controller
         return CommunityEpisodeResource::collection($items);
     }
 
+    public function episodeFilters(Request $request, string $communityId): JsonResponse
+    {
+        $request->validate([
+            'playlist_id' => ['sometimes', 'nullable', 'integer'],
+        ]);
+
+        $community = $this->findCommunityById($communityId, true);
+
+        $playlists = Playlist::query()
+            ->withTrashed()
+            ->where('organization_id', $community->id)
+            ->orderBy('title')
+            ->get(['id', 'title', 'slug', 'work_title']);
+
+        $playlistId = $request->input('playlist_id');
+        $seasonsQuery = PlaylistSeason::query()
+            ->whereIn('playlist_id', $playlists->pluck('id')->all())
+            ->with(['playlist' => fn ($builder) => $builder
+                ->withTrashed()
+                ->select(['id', 'title', 'slug'])]);
+
+        if ($playlistId !== null && $playlistId !== '') {
+            $seasonsQuery->where('playlist_id', (int) $playlistId);
+        }
+
+        $seasons = $seasonsQuery
+            ->orderBy('playlist_id')
+            ->orderBy('season_number')
+            ->get(['id', 'playlist_id', 'season_number', 'title']);
+
+        return response()->json([
+            'data' => [
+                'playlists' => $playlists->map(fn (Playlist $playlist) => [
+                    'id' => $playlist->id,
+                    'uuid' => (string) $playlist->id,
+                    'title' => $playlist->title,
+                    'slug' => $playlist->slug,
+                    'work_title' => $playlist->work_title,
+                ])->values(),
+                'seasons' => $seasons->map(fn (PlaylistSeason $season) => [
+                    'id' => $season->id,
+                    'uuid' => (string) $season->id,
+                    'playlist_id' => $season->playlist_id,
+                    'season_number' => $season->season_number,
+                    'title' => $season->title,
+                    'playlist' => $season->playlist ? [
+                        'id' => $season->playlist->id,
+                        'title' => $season->playlist->title,
+                        'slug' => $season->playlist->slug,
+                    ] : null,
+                ])->values(),
+            ],
+        ]);
+    }
+
     public function updateEpisodeStatus(Request $request, string $communityId, string $episodeId): CommunityEpisodeResource
     {
         $validated = $request->validate([
@@ -517,10 +666,11 @@ class CommunitiesController extends Controller
         }
 
         $episode->load([
-            'author' => fn (Builder $builder) => $builder
+            'author' => fn ($builder) => $builder
                 ->withTrashed()
                 ->select(['id', 'uuid', 'name', 'email', 'is_active', 'deleted_at']),
-            'playlist:id,title,slug',
+            'playlist:id,title,slug,work_title',
+            'season:id,playlist_id,season_number,title',
         ]);
 
         return new CommunityEpisodeResource($episode);
@@ -545,7 +695,7 @@ class CommunitiesController extends Controller
             ->where('organization_members.organization_id', $community->id)
             ->leftJoin('users', 'users.id', '=', 'organization_members.user_id')
             ->select('organization_members.*')
-            ->with(['user' => fn (Builder $builder) => $builder
+            ->with(['user' => fn ($builder) => $builder
                 ->withTrashed()
                 ->select(['id', 'uuid', 'name', 'email', 'is_active', 'deleted_at'])]);
 
@@ -597,8 +747,13 @@ class CommunitiesController extends Controller
     public function updateCollaborator(Request $request, string $communityId, string $userUuid): CommunityCollaboratorResource
     {
         $validated = $request->validate([
-            'role' => ['required', Rule::in(['admin', 'editor', 'member'])],
+            'role' => ['sometimes', Rule::in(['admin', 'editor', 'member'])],
+            'status' => ['sometimes', Rule::in(['active', 'pending', 'rejected', 'banned'])],
         ]);
+
+        if (! array_key_exists('role', $validated) && ! array_key_exists('status', $validated)) {
+            abort(422, 'Informe ao menos um campo para atualizar (cargo ou status).');
+        }
 
         $community = $this->findCommunityById($communityId, true);
         $user = User::query()->withTrashed()->where('uuid', $userUuid)->firstOrFail();
@@ -609,24 +764,49 @@ class CommunitiesController extends Controller
             ->firstOrFail();
 
         if ($collaborator->role === 'owner') {
-            abort(422, 'Não é permitido alterar o cargo do dono da comunidade.');
+            if (array_key_exists('role', $validated)) {
+                abort(422, 'Não é permitido alterar o cargo do dono da comunidade.');
+            }
+
+            if (array_key_exists('status', $validated) && $validated['status'] !== 'active') {
+                abort(422, 'Não é permitido inativar o dono da comunidade.');
+            }
         }
 
         $before = $collaborator->replicate();
-        $collaborator->role = $validated['role'];
+        if (array_key_exists('role', $validated)) {
+            $collaborator->role = $validated['role'];
+        }
+
+        if (array_key_exists('status', $validated)) {
+            $collaborator->status = $validated['status'];
+        }
+
         $collaborator->save();
 
         if ($collaborator->wasChanged()) {
+            $changedRole = array_key_exists('role', $validated) && $before->role !== $collaborator->role;
+            $changedStatus = array_key_exists('status', $validated) && $before->status !== $collaborator->status;
+            $message = 'Atualizou colaborador da comunidade';
+
+            if ($changedRole && ! $changedStatus) {
+                $message = 'Alterou o cargo de colaborador da comunidade';
+            } elseif (! $changedRole && $changedStatus) {
+                $message = $collaborator->status === 'active'
+                    ? 'Ativou colaborador da comunidade'
+                    : 'Inativou colaborador da comunidade';
+            }
+
             $this->logAction(
                 'communities.collaborators.edit',
                 $community->name,
-                'Alterou o cargo de colaborador da comunidade',
+                $message,
                 $collaborator,
                 $before
             );
         }
 
-        $collaborator->load(['user' => fn (Builder $builder) => $builder
+        $collaborator->load(['user' => fn ($builder) => $builder
             ->withTrashed()
             ->select(['id', 'uuid', 'name', 'email', 'is_active', 'deleted_at'])]);
 
@@ -648,12 +828,14 @@ class CommunitiesController extends Controller
         }
 
         $before = $collaborator->replicate();
-        $collaborator->delete();
+        $collaborator->status = 'banned';
+        $collaborator->joined_at = null;
+        $collaborator->save();
 
         $this->logAction(
             'communities.collaborators.delete',
             $community->name,
-            'Removeu colaborador da comunidade',
+            'Inativou colaborador da comunidade',
             [
                 'organization_id' => $community->id,
                 'user_id' => $user->id,
