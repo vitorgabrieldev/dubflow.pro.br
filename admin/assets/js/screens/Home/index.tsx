@@ -12,19 +12,21 @@ class Home extends Component {
 		super(props);
 
 		this.state = {
-			isLoading                   : true,
-			despachante_active_total    : 0,
-			despachante_inactive_total  : 0,
-			customer_active_total       : 0,
-			customer_inactive_total     : 0,
-			customer_removed_total      : 0,
-			process_total               : 0,
-			document_total              : 0,
+			isLoading          : true,
+			users_total        : 0,
+			roles_total        : 0,
+			logs_total         : 0,
+			system_logs_total  : 0,
+			platform_users_total: 0,
+			communities_total   : 0,
+			playlists_total     : 0,
+			opportunities_total : 0,
+			comments_total      : 0,
+			notifications_total : 0,
 		};
 	}
 
 	componentDidMount() {
-		// Fecth all
 		this.fetchGetAll();
 	};
 
@@ -38,14 +40,17 @@ class Home extends Component {
 			const data = response.data.data || {};
 
 			this.setState({
-				isLoading                  : false,
-				despachante_active_total   : data.despachante_active_total || 0,
-				despachante_inactive_total : data.despachante_inactive_total || 0,
-				customer_active_total      : data.customer_active_total || 0,
-				customer_inactive_total    : data.customer_inactive_total || 0,
-				customer_removed_total     : data.customer_removed_total || 0,
-				process_total              : data.process_total || 0,
-				document_total             : data.document_total || 0,
+				isLoading        : false,
+				users_total      : data.users_total || 0,
+				roles_total      : data.roles_total || 0,
+				logs_total       : data.logs_total || 0,
+				system_logs_total: data.system_logs_total || 0,
+				platform_users_total: data.platform_users_total || 0,
+				communities_total   : data.communities_total || 0,
+				playlists_total     : data.playlists_total || 0,
+				opportunities_total : data.opportunities_total || 0,
+				comments_total      : data.comments_total || 0,
+				notifications_total : data.notifications_total || 0,
 			});
 		})
 		.catch((data) => {
@@ -81,52 +86,80 @@ class Home extends Component {
 		return `Olá ${this.props.user.name}, ${day}!`;
 	};
 
-		render() {
-			const {isLoading} = this.state;
-			const cards = [
-				{
-					title: "Despachantes ativos",
-					value: this.state.despachante_active_total,
-					icon : "fad fa-user-tie",
-					path : "/list/despachantes?is_active=true",
-				},
-				{
-					title: "Despachantes inativos",
-					value: this.state.despachante_inactive_total,
-					icon : "fad fa-user-slash",
-					path : "/list/despachantes?is_active=false",
-				},
-				{
-					title: "Clientes ativos",
-					value: this.state.customer_active_total,
-					icon : "fad fa-user-check",
-					path : "/list/customers?is_active=true",
-				},
-				{
-					title: "Clientes inativos",
-					value: this.state.customer_inactive_total,
-					icon : "fad fa-user-times",
-					path : "/list/customers?is_active=false",
-				},
-				{
-					title: "Clientes removidos",
-					value: this.state.customer_removed_total,
-					icon : "fad fa-user-minus",
-					path : "/list-deleted/customers-deleted",
-				},
-				{
-					title: "Total de processos",
-					value: this.state.process_total,
-					icon : "fad fa-clipboard-list",
-					path : "/list/processes",
-				},
-				{
-					title: "Total de documentos",
-					value: this.state.document_total,
-					icon : "fad fa-file-alt",
-					path : "/list/documents",
-				},
-			];
+	render() {
+		const {isLoading} = this.state;
+		const cards       = [
+			{
+				title     : "Usuários administradores",
+				value     : this.state.users_total,
+				icon      : "fad fa-users-cog",
+				path      : "/administrator/users",
+				permission: "users.list",
+			},
+			{
+				title     : "Papéis",
+				value     : this.state.roles_total,
+				icon      : "fad fa-user-shield",
+				path      : "/administrator/roles-and-permissions",
+				permission: "roles.list",
+			},
+			{
+				title     : "Registros de alterações",
+				value     : this.state.logs_total,
+				icon      : "fad fa-clipboard-list-check",
+				path      : "/administrator/logs",
+				permission: "log.list",
+			},
+			{
+				title     : "Registros de erros",
+				value     : this.state.system_logs_total,
+				icon      : "fad fa-bug",
+				path      : "/administrator/system-log",
+				permission: "system-log.list",
+			},
+			{
+				title     : "Usuários da plataforma",
+				value     : this.state.platform_users_total,
+				icon      : "fad fa-users",
+				path      : "/administrator/platform-users",
+				permission: "platform-users.list",
+			},
+			{
+				title     : "Comunidades",
+				value     : this.state.communities_total,
+				icon      : "fad fa-users-class",
+				path      : "/administrator/communities",
+				permission: "communities.list",
+			},
+			{
+				title     : "Playlists",
+				value     : this.state.playlists_total,
+				icon      : "fad fa-list-music",
+				path      : "/administrator/playlists",
+				permission: "playlists.list",
+			},
+			{
+				title     : "Oportunidades",
+				value     : this.state.opportunities_total,
+				icon      : "fad fa-microphone-stand",
+				path      : "/administrator/opportunities",
+				permission: "opportunities.list",
+			},
+			{
+				title     : "Comentários",
+				value     : this.state.comments_total,
+				icon      : "fad fa-comments",
+				path      : "/administrator/comments",
+				permission: "comments.list",
+			},
+			{
+				title     : "Notificações",
+				value     : this.state.notifications_total,
+				icon      : "fad fa-bell",
+				path      : "/administrator/notifications",
+				permission: "notifications.list",
+			},
+		].filter(card => this.props.permissions.includes(card.permission));
 
 		return (
 			<QueueAnim className="site-content-inner page-home">
@@ -139,16 +172,16 @@ class Home extends Component {
 					) : (
 						<Fragment>
 							<div className="cards">
-									<Row gutter={16}>
-										{cards.map((card) => (
-											<Col key={card.title} xs={24} sm={12} lg={8} xxl={6}>
-												<Card
-													hoverable={!!card.path}
-													className={card.path ? "dashboard-card-link" : ""}
-													onClick={card.path ? () => this.goTo(card.path) : undefined}>
-													<h3>{card.title}</h3>
-													<div className="value">{card.value}</div>
-													<i className={card.icon} />
+								<Row gutter={16}>
+									{cards.map((card) => (
+										<Col key={card.title} xs={24} sm={12} lg={8} xxl={6}>
+											<Card
+												hoverable={!!card.path}
+												className={card.path ? "dashboard-card-link" : ""}
+												onClick={card.path ? () => this.goTo(card.path) : undefined}>
+												<h3>{card.title}</h3>
+												<div className="value">{card.value}</div>
+												<i className={card.icon} />
 											</Card>
 										</Col>
 									))}

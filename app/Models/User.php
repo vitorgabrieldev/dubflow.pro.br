@@ -5,8 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use PHPOpenSourceSaver\JWTAuth\Contracts\JWTSubject;
 
 class User extends Authenticatable implements JWTSubject
@@ -15,6 +17,7 @@ class User extends Authenticatable implements JWTSubject
     use HasFactory;
 
     use Notifiable;
+    use SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -22,6 +25,7 @@ class User extends Authenticatable implements JWTSubject
      * @var list<string>
      */
     protected $fillable = [
+        'uuid',
         'name',
         'username',
         'stage_name',
@@ -47,6 +51,7 @@ class User extends Authenticatable implements JWTSubject
         'dubbing_history',
         'locale',
         'is_private',
+        'is_active',
         'email',
         'password',
     ];
@@ -71,6 +76,7 @@ class User extends Authenticatable implements JWTSubject
         return [
             'email_verified_at' => 'datetime',
             'is_private' => 'boolean',
+            'is_active' => 'boolean',
             'token_version' => 'integer',
             'skills' => 'array',
             'dubbing_languages' => 'array',
@@ -87,9 +93,23 @@ class User extends Authenticatable implements JWTSubject
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::creating(function (User $user): void {
+            if (empty($user->uuid)) {
+                $user->uuid = (string) Str::uuid();
+            }
+        });
+    }
+
     public function organizationsOwned(): HasMany
     {
         return $this->hasMany(Organization::class, 'owner_user_id');
+    }
+
+    public function roles(): BelongsToMany
+    {
+        return $this->belongsToMany(Role::class, 'user_has_roles', 'user_id', 'role_id');
     }
 
     public function organizationMemberships(): HasMany
@@ -209,6 +229,23 @@ class User extends Authenticatable implements JWTSubject
         return $this->hasMany(ChatUserBlock::class, 'blocked_user_id');
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function myPermissions(): array
+    {
+        $permissions = [];
+
+        foreach ($this->roles as $role) {
+            foreach ($role->permissions as $permission) {
+                if (! in_array($permission->key, $permissions, true)) {
+                    $permissions[] = (string) $permission->key;
+                }
+            }
+        }
+
+        return $permissions;
+    }
 
     public function getJWTIdentifier(): mixed
     {

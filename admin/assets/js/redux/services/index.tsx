@@ -36,6 +36,12 @@ import * as webserviceService from "./webserviceService";
 import * as callsForHelpService from "./callsForHelpService";
 import * as vehiclesService from "./vehiclesService";
 import * as profissionaisDeletedService from "./profissionaisDeletedService";
+import * as platformUsersService from "./platformUsersService";
+import * as communitiesService from "./communitiesService";
+import * as playlistsAdminService from "./playlistsAdminService";
+import * as opportunitiesService from "./opportunitiesService";
+import * as commentsAdminService from "./commentsAdminService";
+import * as notificationsAdminService from "./notificationsAdminService";
 
 export {
 	aboutService,
@@ -76,4 +82,10 @@ export {
 	callsForHelpService,
 	vehiclesService,
 	profissionaisDeletedService,
+	platformUsersService,
+	communitiesService,
+	playlistsAdminService,
+	opportunitiesService,
+	commentsAdminService,
+	notificationsAdminService,
 };

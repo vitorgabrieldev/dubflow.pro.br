@@ -88,6 +88,8 @@ return [
 
     'media_url_ttl_minutes' => (int) env('MEDIA_URL_TTL_MINUTES', 30),
 
+    'admin_export_url_ttl_minutes' => (int) env('ADMIN_EXPORT_URL_TTL_MINUTES', 10),
+
     /*
     |--------------------------------------------------------------------------
     | Encryption Key

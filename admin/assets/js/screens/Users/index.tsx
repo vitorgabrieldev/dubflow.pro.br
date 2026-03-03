@@ -7,6 +7,7 @@ import enquire from "enquire.js";
 import moment from "moment";
 
 import { DESKTOP_DOWN } from "./../../config/mediaQueries";
+import { downloadPrivateFile } from "./../../helpers/download";
 
 import { generalActions } from "./../../redux/actions";
 
@@ -270,7 +271,13 @@ class Index extends Component {
 					isExporting: false,
 				});
 
-				window.open(response.data.file_url, "_blank");
+				downloadPrivateFile(response.data.file_url, "usuarios-administradores.csv")
+				.catch((error) => {
+					Modal.error({
+						title  : "Ocorreu um erro!",
+						content: String(error),
+					});
+				});
 			}
 			else
 			{

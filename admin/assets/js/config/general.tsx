@@ -14,9 +14,9 @@ export const CLIENT_DATA = {
 // -----------------------------------------------------------------------------
 // API
 // -----------------------------------------------------------------------------
-const DEFAULT_API_BASE_URL = "https://homologacao.clickweb.com.br:8478/api/v1/admin";
-const DEFAULT_SOCKET_URL = "homologacao.clickweb.com.br:8478";
-const DEFAULT_SOCKET_AUTH = "https://homologacao.clickweb.com.br:8478/broadcasting/auth";
+const DEFAULT_API_BASE_URL = "https://startup.dev.br/api/v1/admin";
+const DEFAULT_SOCKET_URL = "startup.dev.br";
+const DEFAULT_SOCKET_AUTH = "https://startup.dev.br/broadcasting/auth";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, "");
 

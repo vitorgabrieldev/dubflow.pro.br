@@ -25,6 +25,7 @@ const fallbackTextSizeClassMap = {
 export function Avatar({ src, name, size = "md", className }: AvatarProps) {
   const sizeClass = sizeClassMap[size];
   const initial = (name ?? "").trim().charAt(0).toUpperCase();
+  const isRemoteSrc = typeof src === "string" && (src.startsWith("http://") || src.startsWith("https://"));
 
   if (src) {
     return (
@@ -36,6 +37,7 @@ export function Avatar({ src, name, size = "md", className }: AvatarProps) {
           alt={name ?? "Avatar"}
           fill
           sizes={size === "lg" ? "56px" : size === "md" ? "40px" : "32px"}
+          unoptimized={isRemoteSrc}
           className="object-cover"
         />
       </span>
