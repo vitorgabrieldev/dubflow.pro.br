@@ -19,6 +19,9 @@ export default defineConfig({
       less: {
         javascriptEnabled: true,
       },
+      scss: {
+        silenceDeprecations: ["import", "slash-div", "global-builtin", "color-functions"],
+      },
     },
   },
   define: {
@@ -37,5 +40,6 @@ export default defineConfig({
   build: {
     outDir: "../public/admin",
     emptyOutDir: true,
+    chunkSizeWarningLimit: 4096,
   },
 });

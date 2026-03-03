@@ -1,16 +1,16 @@
 import React, { Component } from "react";
 import * as PropTypes from "prop-types";
 import { Form, Modal, Tag } from "antd";
-import ReactDiffViewer, { DiffMethod } from "react-diff-viewer"
+import ReactJson from "@microlink/react-json-view";
 
 import moment from "moment";
 
-import { logService } from "./../../redux/services";
+import { systemLogService } from "./../../redux/services";
 
 import { UIDrawerForm } from "./../../components";
 
 const config = {
-	externalName: "log",
+	externalName: "registro de erro",
 };
 
 class Show extends Component {
@@ -37,11 +37,8 @@ class Show extends Component {
 		user      : {
 			label: "Usuário",
 		},
-		item      : {
-			label: "Item",
-		},
-		action    : {
-			label: "Ação",
+		level     : {
+			label: "Level",
 		},
 		ip        : {
 			label: "IP",
@@ -64,7 +61,7 @@ class Show extends Component {
 			item     : {},
 		});
 
-		logService.show({uuid})
+		systemLogService.show({uuid})
 		.then((response) => {
 			this.setState({
 				isLoading: false,
@@ -129,20 +126,17 @@ class Show extends Component {
 		return (
 			<UIDrawerForm
 				visible={visible}
-				width={1500}
+				width={1150}
 				onClose={this.onClose}
 				isLoading={isLoading}
 				showBtnSave={false}
 				title={`Visualizar ${this.props.external ? config.externalName : "registro"} [${uuid}]`}>
 				<Form layout="vertical">
 					<Form.Item label={this.fieldOptions.message.label}>
-						{item.message}
+						<Tag color={item.color}>{item.level}</Tag> {item.message}
 					</Form.Item>
-					<Form.Item label={this.fieldOptions.user.label}>
+					{item.user_id && <Form.Item label={this.fieldOptions.user.label}>
 						{item.user_id} - {item.user?.name}
-					</Form.Item>
-					{item.log_id && <Form.Item label={this.fieldOptions.item.label}>
-						{item.log_id} - {item.log_name}
 					</Form.Item>}
 					<Form.Item label={this.fieldOptions.ip.label}>
 						{item.ip}
@@ -156,7 +150,7 @@ class Show extends Component {
 					<Form.Item label={this.fieldOptions.created_at.label}>
 						{moment(item.created_at).calendar()}
 					</Form.Item>
-					{(item.old_data || item.new_data) && <ReactDiffViewer compareMethod={DiffMethod.LINES} oldValue={JSON.stringify(item.old_data ? item.old_data : "", null, 2)} newValue={JSON.stringify(item.new_data ? item.new_data : "", null, 2)} splitView={false} />}
+					<ReactJson name="context" src={item.context} iconStyle="square" indentWidth={6} />
 				</Form>
 			</UIDrawerForm>
 		)

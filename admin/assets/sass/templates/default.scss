@@ -59,10 +59,15 @@
 			padding:20px 15px;
 			margin-bottom:15px;
 			img {
-				max-height:100%;
+				display:block;
+				height:auto;
+			}
+			.logo-main {
+				width:100%;
+				max-width:130px;
 			}
 			.logo-icon {
-				max-height:68px;
+				width:44px;
 			}
 		}
 		.ant-menu-root {

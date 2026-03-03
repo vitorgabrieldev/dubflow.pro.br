@@ -13,9 +13,18 @@
 		justify-content:center;
 		padding:30px 20px;
 		.site-content-logo {
+			display:flex;
+			align-items:center;
+			justify-content:center;
+			width:min(100%, 360px);
 			margin-bottom:40px;
 			img {
-				// height:40px;
+				display:block;
+				width:100%;
+				height:auto;
+				max-width:340px;
+				max-height:120px;
+				object-fit:contain;
 			}
 		}
 		.site-content-inner {

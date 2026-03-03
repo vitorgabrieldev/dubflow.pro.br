@@ -5,7 +5,7 @@ agora compilado e servido com Vite.
 
 ## Stack
 
-- React 18 (JS/JSX)
+- React 18 (TS/TSX)
 - React Router 5
 - Redux + Redux Persist
 - Ant Design 4

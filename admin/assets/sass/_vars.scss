@@ -2,27 +2,27 @@
 	Vars
 ============================================================================ */
 $font-family:roboto, Helvetica, Arial, sans-serif;
-$primary-color:#272E68;
-$primary-color-hover:#272E68;
-$secondary-color:#272E68;
-$secondary-color-hover:#b4272b;
+$primary-color:#9333EA;
+$primary-color-hover:#7E22CE;
+$secondary-color:#2B1642;
+$secondary-color-hover:#9333EA;
 $grid-width:1200px;
 $shadow:0 4px 10px rgba($primary-color, 0.1);
 $shadow-hover:0 4px 20px rgba($primary-color, 0.4);
 $border-radius:6px;
 $form-vertical-label-padding:0 0 6px;
-$layout-body-background:#eef2f7;
+$layout-body-background:#f1f1f1;
 $input-height:40px;
 
 // Main drawer
-$main-drawer-background: #272E68;
+$main-drawer-background:#2B1642;
 $main-drawer-color:#dadada;
 $main-drawer-color-hover:#ffffff;
 $main-drawer-color-active:#ffffff;
 $main-drawer-background-active:$primary-color;
 $main-drawer-arrow-color:#fff;
-$main-drawer-submenu-background:#1b2046;
-$main-drawer-submenu-color:rgba(47, 46, 46, 0.607);
+$main-drawer-submenu-background:#1d0f2d;
+$main-drawer-submenu-color:rgba(255, 255, 255, 0.72);
 $main-drawer-submenu-color-hover:#fff;
 $main-drawer-submenu-color-active:#fff;
 $main-drawer-submenu-background-active:$primary-color;
