@@ -1,6 +1,6 @@
 import React, { Component, Fragment } from "react";
 import { connect } from "react-redux";
-import { Button, Dropdown, Menu, Modal, Spin, Tag } from "antd";
+import { Button, Dropdown, Input, Menu, Modal, Spin, Tag } from "antd";
 import QueueAnim from "rc-queue-anim";
 import moment from "moment";
 
@@ -78,11 +78,14 @@ class Index extends Component {
 			{this.props.permissions.includes(config.permissionPrefix + ".show") && (
 				<Menu.Item key="show"><a onClick={() => this.showOpen(item)}><i className="fal fa-file" />Visualizar</a></Menu.Item>
 			)}
-			{this.props.permissions.includes(config.permissionPrefix + ".edit") && (
+			{this.props.permissions.includes(config.permissionPrefix + ".edit") && !item.is_deleted && (
 				<Menu.Item key="edit"><a onClick={() => this.editOpen(item)}><i className="fal fa-pen" />Editar</a></Menu.Item>
 			)}
-			{this.props.permissions.includes(config.permissionPrefix + ".delete") && (
-				<Menu.Item key="delete" className="divider btn-delete"><a onClick={() => this.deleteConfirm(item)}><i className="fal fa-trash" />Desativar</a></Menu.Item>
+			{this.props.permissions.includes(config.permissionPrefix + ".delete") && !item.is_deleted && (
+				<Menu.Item key="delete" className="divider btn-delete"><a onClick={() => this.toggleActiveConfirm(item)}><i className={`fal ${item.is_active ? "fa-toggle-off" : "fa-toggle-on"}`} />{item.is_active ? "Desativar" : "Ativar"}</a></Menu.Item>
+			)}
+			{this.props.permissions.includes(config.permissionPrefix + ".delete") && !item.is_deleted && (
+				<Menu.Item key="delete-permanent" className="btn-delete"><a onClick={() => this.permanentDeleteConfirm(item)}><i className="fal fa-user-times" />Deletar</a></Menu.Item>
 			)}
 		</Menu>
 	);
@@ -91,15 +94,27 @@ class Index extends Component {
 		const listTypeCard = this.state.listType === "card";
 
 		return [
-			{ title: "ID", className: "id", visible: !listTypeCard, render: (item) => <span title={item.uuid}>{item.uuid}</span> },
-			{ title: "Nome", render: (item) => listTypeCard ? <h3>{item.name}</h3> : item.name },
-			{ title: "E-mail", render: (item) => item.email },
+			{ title: "ID", className: "id", visible: !listTypeCard, render: (item) => <span title={item.id}>{item.id}</span> },
+			{ title: "Nome", render: (item) => {
+				if( listTypeCard ) {
+					return <h3 style={item.is_deleted ? {color: "#cf1322"} : {}}>{item.name}</h3>;
+				}
+
+				return <span style={item.is_deleted ? {color: "#cf1322", fontWeight: 600} : {}}>{item.name}</span>;
+			} },
+			{ title: "E-mail", render: (item) => <span style={item.is_deleted ? {color: "#cf1322"} : {}}>{item.email}</span> },
 			{ title: "Username", render: (item) => item.username || "-" },
 			{ title: "Localização", render: (item) => [item.city, item.state].filter(Boolean).join("/") || "-" },
 			{
 				title    : "Conta",
 				className: "no-ellipsis",
-				render   : (item) => <Tag color={item.is_active ? "#0acf97" : "#fa5c7c"}>{item.is_active ? "Ativa" : "Inativa"}</Tag>
+				render   : (item) => {
+					if( item.is_deleted ) {
+						return <Tag color="#cf1322">Deletado</Tag>;
+					}
+
+					return <Tag color={item.is_active ? "#0acf97" : "#fa5c7c"}>{item.is_active ? "Ativa" : "Inativa"}</Tag>;
+				}
 			},
 			{
 				title    : "Privacidade",
@@ -233,19 +248,74 @@ class Index extends Component {
 
 	showOnClose = () => this.setState({showModalVisible: false});
 
-	deleteConfirm = ({uuid, name}) => {
+	toggleActiveConfirm = ({uuid, name, is_active: isActive}) => {
+		const nextAction = isActive ? "desativar" : "ativar";
+
 		Modal.confirm({
-			title  : "Confirmar desativação",
-			content: `Tem certeza de que deseja desativar ${name}?`,
-			okText : "Desativar",
-			onOk   : () => this.deleteConfirmed(uuid),
+			title  : `Confirmar ${nextAction}`,
+			content: `Tem certeza de que deseja ${nextAction} ${name}?`,
+			okText : isActive ? "Desativar" : "Ativar",
+			onOk   : () => this.toggleActiveConfirmed(uuid, isActive),
 		});
 	};
 
-	deleteConfirmed = (uuid) => {
-		return platformUsersService.destroy({uuid})
+	toggleActiveConfirmed = (uuid, isActive) => {
+		if( isActive ) {
+			return platformUsersService.destroy({uuid})
+			.then(() => this.fetchGetAll())
+			.catch((data) => Modal.error({title: "Ocorreu um erro!", content: String(data)}));
+		}
+
+		return platformUsersService.edit({uuid, is_active: true})
 		.then(() => this.fetchGetAll())
 		.catch((data) => Modal.error({title: "Ocorreu um erro!", content: String(data)}));
+	};
+
+	permanentDeleteConfirm = ({uuid, name}) => {
+		let userPassword = "";
+
+		Modal.confirm({
+			title  : "Confirmar deleção (soft delete)",
+			okText : "Deletar",
+			okType : "danger",
+			content: (
+				<div>
+					<p>O usuário será marcado como deletado e continuará visível na listagem. Para confirmar, digite a senha atual de <strong>{name}</strong>.</p>
+					<Input.Password
+						autoFocus
+						placeholder="Senha atual do usuário"
+						onChange={(event) => {
+							userPassword = event.target.value || "";
+						}}
+					/>
+				</div>
+			),
+			onOk: () => {
+				if( !userPassword.trim() ) {
+					Modal.error({
+						title  : "Senha obrigatória",
+						content: "Informe a senha atual do usuário para continuar.",
+					});
+
+					return Promise.reject();
+				}
+
+				return this.permanentDeleteConfirmed(uuid, userPassword.trim());
+			},
+		});
+	};
+
+	permanentDeleteConfirmed = (uuid, password) => {
+		return platformUsersService.destroyPermanent({uuid, password})
+		.then(() => this.fetchGetAll())
+		.catch((data) => {
+			Modal.error({
+				title  : "Ocorreu um erro!",
+				content: String(data),
+			});
+
+			return Promise.reject(data);
+		});
 	};
 
 	filtersOpen = () => {
