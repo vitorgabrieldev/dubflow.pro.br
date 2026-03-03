@@ -12,6 +12,7 @@ BACKEND_SERVICE="${BACKEND_SERVICE:-}"
 RUN_BACKEND_TESTS="${RUN_BACKEND_TESTS:-0}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-1}"
 FORCE_GIT_RESTORE="${FORCE_GIT_RESTORE:-1}"
+ALLOW_SERVICE_RESTART_FAILURE="${ALLOW_SERVICE_RESTART_FAILURE:-1}"
 
 run_systemctl() {
   if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
@@ -39,8 +40,23 @@ restart_service_if_available() {
   fi
 
   echo "[backend] Restarting service '$service'"
-  run_systemctl restart "$service"
-  run_systemctl is-active --quiet "$service"
+  if ! run_systemctl restart "$service"; then
+    if [[ "$ALLOW_SERVICE_RESTART_FAILURE" == "1" ]]; then
+      echo "[backend] Nao foi possivel reiniciar '$service' sem autenticacao interativa. Continuando deploy."
+      return 0
+    fi
+
+    return 1
+  fi
+
+  if ! run_systemctl is-active --quiet "$service"; then
+    if [[ "$ALLOW_SERVICE_RESTART_FAILURE" == "1" ]]; then
+      echo "[backend] Servico '$service' nao confirmou estado ativo apos restart. Continuando deploy."
+      return 0
+    fi
+
+    return 1
+  fi
 }
 
 cd "$APP_DIR"
