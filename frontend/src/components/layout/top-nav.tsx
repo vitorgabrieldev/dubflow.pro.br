@@ -487,6 +487,8 @@ type LiveNotificationsPayload = {
   } | null;
 };
 
+const NOTIFICATIONS_POLL_INTERVAL_MS = 15_000;
+
 function NotificationsIconLink({
   href,
   locale,
@@ -505,8 +507,15 @@ function NotificationsIconLink({
   const hasHydrated = useRef(false);
   const lastUnreadCount = useRef(0);
   const lastToastNotificationId = useRef<string | null>(null);
+  const isPolling = useRef(false);
 
   const pollNotifications = useCallback(async () => {
+    if (isPolling.current) {
+      return;
+    }
+
+    isPolling.current = true;
+
     try {
       const response = await fetch("/api/notifications/live", {
         method: "GET",
@@ -539,6 +548,8 @@ function NotificationsIconLink({
       hasHydrated.current = true;
     } catch {
       // Keep current count when polling fails.
+    } finally {
+      isPolling.current = false;
     }
   }, [active, locale]);
 
@@ -553,7 +564,7 @@ function NotificationsIconLink({
       }
 
       void pollNotifications();
-    }, 4000);
+    }, NOTIFICATIONS_POLL_INTERVAL_MS);
 
     const handleVisibilityChange = () => {
       if (!document.hidden) {

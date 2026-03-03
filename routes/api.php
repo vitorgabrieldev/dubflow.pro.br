@@ -1,6 +1,13 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AchievementController;
+use App\Http\Controllers\Api\V1\Admin\AuthController as AdminAuthController;
+use App\Http\Controllers\Api\V1\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Api\V1\Admin\LogController as AdminLogController;
+use App\Http\Controllers\Api\V1\Admin\PermissionsController as AdminPermissionsController;
+use App\Http\Controllers\Api\V1\Admin\RolesController as AdminRolesController;
+use App\Http\Controllers\Api\V1\Admin\SystemLogController as AdminSystemLogController;
+use App\Http\Controllers\Api\V1\Admin\UsersController as AdminUsersController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\DashboardController;
@@ -20,6 +27,48 @@ use App\Http\Controllers\Api\V1\UserProfileController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
+    Route::prefix('admin')->group(function () {
+        Route::prefix('auth')->middleware('throttle:30,1')->group(function () {
+            Route::post('/login', [AdminAuthController::class, 'login']);
+            Route::post('/password/recovery', [AdminAuthController::class, 'passwordRecovery']);
+        });
+
+        Route::middleware('auth:api')->group(function () {
+            Route::get('/dashboard', [AdminDashboardController::class, 'index']);
+
+            Route::delete('/auth/logout', [AdminAuthController::class, 'logout']);
+            Route::get('/auth/user', [AdminAuthController::class, 'show']);
+            Route::post('/auth/change-password', [AdminAuthController::class, 'changePassword']);
+            Route::post('/auth/change-avatar', [AdminAuthController::class, 'changeAvatar']);
+
+            Route::get('/logs', [AdminLogController::class, 'index'])->middleware('permission:log.list');
+            Route::get('/logs/export', [AdminLogController::class, 'export'])->middleware('permission:log.export');
+            Route::get('/logs/{logUuid}', [AdminLogController::class, 'show'])->middleware('permission:log.show');
+
+            Route::get('/permissions/autocomplete', [AdminPermissionsController::class, 'autocomplete']);
+
+            Route::get('/roles', [AdminRolesController::class, 'index'])->middleware('permission:roles.list');
+            Route::post('/roles', [AdminRolesController::class, 'store'])->middleware('permission:roles.create');
+            Route::get('/roles/autocomplete', [AdminRolesController::class, 'autocomplete']);
+            Route::get('/roles/export', [AdminRolesController::class, 'export'])->middleware('permission:roles.export');
+            Route::get('/roles/{roleUuid}', [AdminRolesController::class, 'show'])->middleware('permission:roles.show');
+            Route::post('/roles/{roleUuid}', [AdminRolesController::class, 'update'])->middleware('permission:roles.edit');
+            Route::delete('/roles/{roleUuid}', [AdminRolesController::class, 'destroy'])->middleware('permission:roles.delete');
+
+            Route::get('/system-log', [AdminSystemLogController::class, 'index'])->middleware('permission:system-log.list');
+            Route::get('/system-log/export', [AdminSystemLogController::class, 'export'])->middleware('permission:system-log.export');
+            Route::get('/system-log/{logUuid}', [AdminSystemLogController::class, 'show'])->middleware('permission:system-log.show');
+
+            Route::get('/users', [AdminUsersController::class, 'index'])->middleware('permission:users.list');
+            Route::post('/users', [AdminUsersController::class, 'store'])->middleware('permission:users.create');
+            Route::get('/users/autocomplete', [AdminUsersController::class, 'autocomplete']);
+            Route::get('/users/export', [AdminUsersController::class, 'export'])->middleware('permission:users.export');
+            Route::get('/users/{userUuid}', [AdminUsersController::class, 'show'])->middleware('permission:users.show');
+            Route::post('/users/{userUuid}', [AdminUsersController::class, 'update'])->middleware('permission:users.edit');
+            Route::delete('/users/{userUuid}', [AdminUsersController::class, 'destroy'])->middleware('permission:users.delete');
+        });
+    });
+
     Route::get('/media/{path}', [MediaController::class, 'show'])
         ->where('path', '.*')
         ->name('api.v1.media.show');
@@ -97,7 +146,6 @@ Route::prefix('v1')->group(function () {
         Route::patch('/organizations/{organization}/dubbing-tests/{dubbingTest}/submissions/{submission}/review', [DubbingTestController::class, 'reviewSubmission']);
         Route::patch('/organizations/{organization}/dubbing-tests/{dubbingTest}/submissions/{submission}/feedback', [DubbingTestController::class, 'saveRejectionFeedback']);
         Route::post('/organizations/{organization}/dubbing-tests/{dubbingTest}/conclude-selection', [DubbingTestController::class, 'concludeSelection']);
-
 
         Route::post('/dubbing-tests/{dubbingTest}/submissions', [DubbingTestController::class, 'submit']);
         Route::get('/dubbing-tests/{dubbingTest}/my-submissions', [DubbingTestController::class, 'mySubmissions']);
