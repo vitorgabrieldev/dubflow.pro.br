@@ -11,6 +11,7 @@ REVERB_SERVICE="${REVERB_SERVICE:-dubflow-reverb}"
 BACKEND_SERVICE="${BACKEND_SERVICE:-}"
 RUN_BACKEND_TESTS="${RUN_BACKEND_TESTS:-0}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-1}"
+FORCE_GIT_RESTORE="${FORCE_GIT_RESTORE:-1}"
 
 run_systemctl() {
   if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
@@ -45,6 +46,13 @@ restart_service_if_available() {
 cd "$APP_DIR"
 
 echo "[backend] Syncing repository"
+if [[ "$FORCE_GIT_RESTORE" == "1" ]]; then
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo "[backend] Local tracked changes detected. Restoring working tree before checkout."
+    git restore --staged --worktree .
+  fi
+fi
+
 git fetch --all --tags --prune
 git checkout "$DEPLOY_REF"
 if git ls-remote --exit-code --heads "$REPO_REMOTE" "$DEPLOY_REF" >/dev/null 2>&1; then
