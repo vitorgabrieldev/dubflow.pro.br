@@ -24,6 +24,7 @@ class Organization extends Model
         'website_url',
         'is_public',
         'is_verified',
+        'is_active',
         'settings',
     ];
 
@@ -32,6 +33,7 @@ class Organization extends Model
         return [
             'is_public' => 'boolean',
             'is_verified' => 'boolean',
+            'is_active' => 'boolean',
             'settings' => 'array',
         ];
     }

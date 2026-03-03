@@ -2,8 +2,13 @@
 
 namespace App\Http\Controllers\Api\V1\Admin;
 
+use App\Http\Resources\Admin\CommunityCollaboratorResource;
+use App\Http\Resources\Admin\CommunityEpisodeResource;
+use App\Http\Resources\Admin\CommunityFollowerResource;
 use App\Http\Resources\Admin\CommunityResource;
+use App\Models\DubbingPost;
 use App\Models\Organization;
+use App\Models\OrganizationFollow;
 use App\Models\OrganizationMember;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -25,6 +30,7 @@ class CommunitiesController extends Controller
         'slug',
         'is_public',
         'is_verified',
+        'is_active',
         'created_at',
         'updated_at',
     ];
@@ -49,6 +55,7 @@ class CommunitiesController extends Controller
             'search' => ['sometimes', 'nullable', 'string'],
             'is_public' => ['sometimes', 'integer', 'in:0,1'],
             'is_verified' => ['sometimes', 'integer', 'in:0,1'],
+            'is_active' => ['sometimes', 'integer', 'in:0,1'],
             'owner_uuid' => ['sometimes', 'nullable', 'uuid'],
             'with_deleted' => ['sometimes', 'boolean'],
             'created_at' => ['sometimes', 'array'],
@@ -78,11 +85,12 @@ class CommunitiesController extends Controller
             'avatar' => ['sometimes', 'nullable', 'image', 'mimes:jpeg,png,webp', 'max:5120'],
             'cover' => ['sometimes', 'nullable', 'image', 'mimes:jpeg,png,webp', 'max:10240'],
             'name' => ['required', 'string', 'max:255', Rule::unique('organizations', 'name')],
-            'slug' => ['sometimes', 'nullable', 'string', 'max:255', Rule::unique('organizations', 'slug')],
+            'slug' => ['sometimes', 'nullable', 'string', 'max:255', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', Rule::unique('organizations', 'slug')],
             'description' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'website_url' => ['sometimes', 'nullable', 'url', 'max:255'],
             'is_public' => ['sometimes', 'boolean'],
             'is_verified' => ['sometimes', 'boolean'],
+            'is_active' => ['sometimes', 'boolean'],
         ]);
 
         $owner = User::query()->where('uuid', $validated['owner_uuid'])->firstOrFail();
@@ -97,6 +105,7 @@ class CommunitiesController extends Controller
                 'website_url' => $validated['website_url'] ?? null,
                 'is_public' => (bool) ($validated['is_public'] ?? true),
                 'is_verified' => (bool) ($validated['is_verified'] ?? false),
+                'is_active' => (bool) ($validated['is_active'] ?? true),
             ]);
 
             if ($request->hasFile('avatar')) {
@@ -152,11 +161,12 @@ class CommunitiesController extends Controller
             'remove_avatar' => ['sometimes', 'boolean'],
             'remove_cover' => ['sometimes', 'boolean'],
             'name' => ['sometimes', 'required', 'string', 'max:255', Rule::unique('organizations', 'name')->ignore($community->id)],
-            'slug' => ['sometimes', 'nullable', 'string', 'max:255', Rule::unique('organizations', 'slug')->ignore($community->id)],
+            'slug' => ['sometimes', 'nullable', 'string', 'max:255', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', Rule::unique('organizations', 'slug')->ignore($community->id)],
             'description' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'website_url' => ['sometimes', 'nullable', 'url', 'max:255'],
             'is_public' => ['sometimes', 'boolean'],
             'is_verified' => ['sometimes', 'boolean'],
+            'is_active' => ['sometimes', 'boolean'],
         ]);
 
         DB::transaction(function () use ($request, $validated, $community): void {
@@ -191,6 +201,7 @@ class CommunitiesController extends Controller
                 'website_url' => $validated['website_url'] ?? $community->website_url,
                 'is_public' => array_key_exists('is_public', $validated) ? (bool) $validated['is_public'] : $community->is_public,
                 'is_verified' => array_key_exists('is_verified', $validated) ? (bool) $validated['is_verified'] : $community->is_verified,
+                'is_active' => array_key_exists('is_active', $validated) ? (bool) $validated['is_active'] : $community->is_active,
             ]);
 
             if ($request->boolean('remove_avatar') && $community->avatar_path) {
@@ -252,12 +263,417 @@ class CommunitiesController extends Controller
         return response()->json([], 204);
     }
 
+    public function restore(string $communityId): JsonResponse
+    {
+        $community = $this->findCommunityById($communityId, true);
+
+        if (! $community->trashed()) {
+            return response()->json([
+                'message' => 'Comunidade já está ativa.',
+            ], 422);
+        }
+
+        $before = $community->replicate();
+
+        DB::transaction(function () use ($community): void {
+            $community->restore();
+            $community->is_active = true;
+            $community->save();
+        });
+
+        $community->refresh();
+
+        $this->logAction('communities.restore', $community->name, 'Ativou uma comunidade', $community, $before);
+
+        return response()->json([], 204);
+    }
+
+    public function followers(Request $request, string $communityId)
+    {
+        $request->validate([
+            'limit' => ['sometimes', 'nullable', 'integer'],
+            'page' => ['sometimes', 'nullable', 'integer'],
+            'orderBy' => ['sometimes', 'nullable', 'string'],
+            'search' => ['sometimes', 'nullable', 'string'],
+            'is_active' => ['sometimes', 'nullable', 'integer', 'in:0,1'],
+            'created_at' => ['sometimes', 'array'],
+            'created_at.*' => ['sometimes', 'date_format:Y-m-d\TH:i:sP'],
+        ]);
+
+        $community = $this->findCommunityById($communityId, true);
+
+        $query = OrganizationFollow::query()
+            ->where('organization_follows.organization_id', $community->id)
+            ->leftJoin('users', 'users.id', '=', 'organization_follows.user_id')
+            ->select('organization_follows.*')
+            ->with(['user' => fn (Builder $builder) => $builder
+                ->withTrashed()
+                ->select(['id', 'uuid', 'name', 'email', 'is_active', 'deleted_at'])]);
+
+        $search = $request->string('search')->toString();
+        if ($search !== '') {
+            $query->where(function (Builder $builder) use ($search): void {
+                $builder
+                    ->orWhere('users.uuid', 'like', '%'.$search.'%')
+                    ->orWhere('users.name', 'like', '%'.$search.'%')
+                    ->orWhere('users.email', 'like', '%'.$search.'%')
+                    ->orWhere('organization_follows.id', 'like', '%'.$search.'%');
+            });
+        }
+
+        $isActive = $request->input('is_active');
+        if ($isActive !== null && $isActive !== '') {
+            $query->where('users.is_active', (int) $isActive === 1 ? 1 : 0);
+        }
+
+        $range = $this->parseDateRange($request, 'created_at');
+        $this->applyDateRange($query, $range['start'], $range['end'], 'organization_follows.created_at');
+
+        $orderBy = $this->parseOrderBy($request->input('orderBy'), [
+            'id', 'created_at', 'name', 'email',
+        ], 'created_at', 'desc');
+
+        foreach ($orderBy as $item) {
+            $column = match ($item['name']) {
+                'name' => 'users.name',
+                'email' => 'users.email',
+                default => 'organization_follows.'.$item['name'],
+            };
+
+            $query->orderBy($column, $item['sort']);
+        }
+
+        $items = $query
+            ->paginate($this->resolveLimit($request->integer('limit')))
+            ->appends($request->except('page'));
+
+        return CommunityFollowerResource::collection($items);
+    }
+
+    public function addFollower(Request $request, string $communityId): JsonResponse
+    {
+        $validated = $request->validate([
+            'user_uuid' => ['required', 'uuid', Rule::exists('users', 'uuid')],
+        ]);
+
+        $community = $this->findCommunityById($communityId, true);
+        $user = User::query()->where('uuid', $validated['user_uuid'])->firstOrFail();
+
+        if (! $user->is_active) {
+            return response()->json([
+                'message' => 'Não é possível adicionar um usuário inativo como seguidor.',
+            ], 422);
+        }
+
+        $follower = OrganizationFollow::query()->firstOrCreate([
+            'organization_id' => $community->id,
+            'user_id' => $user->id,
+        ]);
+
+        $follower->load([
+            'user' => fn (Builder $builder) => $builder
+                ->withTrashed()
+                ->select(['id', 'uuid', 'name', 'email', 'is_active', 'deleted_at']),
+        ]);
+
+        $this->logAction('communities.followers.add', $community->name, 'Adicionou seguidor na comunidade', [
+            'community_id' => $community->id,
+            'user_id' => $user->id,
+            'user_uuid' => $user->uuid,
+            'user_name' => $user->name,
+        ]);
+
+        $response = (new CommunityFollowerResource($follower))->response();
+        if ($follower->wasRecentlyCreated) {
+            $response->setStatusCode(201);
+        }
+
+        return $response;
+    }
+
+    public function removeFollower(string $communityId, string $userUuid): JsonResponse
+    {
+        $community = $this->findCommunityById($communityId, true);
+        $user = User::query()->withTrashed()->where('uuid', $userUuid)->firstOrFail();
+
+        $follower = OrganizationFollow::query()
+            ->where('organization_id', $community->id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (! $follower) {
+            return response()->json([
+                'message' => 'Inscrição de seguidor não encontrada para esse usuário.',
+            ], 422);
+        }
+
+        $follower->delete();
+
+        $this->logAction('communities.followers.remove', $community->name, 'Inativou inscrição de seguidor na comunidade', [
+            'community_id' => $community->id,
+            'user_id' => $user->id,
+            'user_uuid' => $user->uuid,
+            'user_name' => $user->name,
+        ]);
+
+        return response()->json([], 204);
+    }
+
+    public function episodes(Request $request, string $communityId)
+    {
+        $request->validate([
+            'limit' => ['sometimes', 'nullable', 'integer'],
+            'page' => ['sometimes', 'nullable', 'integer'],
+            'orderBy' => ['sometimes', 'nullable', 'string'],
+            'search' => ['sometimes', 'nullable', 'string'],
+            'visibility' => ['sometimes', 'nullable', 'in:public,private,unlisted'],
+            'created_at' => ['sometimes', 'array'],
+            'created_at.*' => ['sometimes', 'date_format:Y-m-d\TH:i:sP'],
+        ]);
+
+        $community = $this->findCommunityById($communityId, true);
+
+        $query = DubbingPost::query()
+            ->where('dubbing_posts.organization_id', $community->id)
+            ->leftJoin('users as authors', 'authors.id', '=', 'dubbing_posts.author_user_id')
+            ->select('dubbing_posts.*')
+            ->with([
+                'author' => fn (Builder $builder) => $builder
+                    ->withTrashed()
+                    ->select(['id', 'uuid', 'name', 'email', 'is_active', 'deleted_at']),
+                'playlist:id,title,slug',
+            ]);
+
+        if ($request->filled('visibility')) {
+            $query->where('dubbing_posts.visibility', $request->string('visibility')->toString());
+        }
+
+        $search = $request->string('search')->toString();
+        if ($search !== '') {
+            $query->where(function (Builder $builder) use ($search): void {
+                $builder
+                    ->orWhere('dubbing_posts.id', 'like', '%'.$search.'%')
+                    ->orWhere('dubbing_posts.title', 'like', '%'.$search.'%')
+                    ->orWhere('dubbing_posts.description', 'like', '%'.$search.'%')
+                    ->orWhere('authors.name', 'like', '%'.$search.'%')
+                    ->orWhere('authors.email', 'like', '%'.$search.'%');
+            });
+        }
+
+        $range = $this->parseDateRange($request, 'created_at');
+        $this->applyDateRange($query, $range['start'], $range['end'], 'dubbing_posts.created_at');
+
+        $orderBy = $this->parseOrderBy($request->input('orderBy'), [
+            'id', 'title', 'visibility', 'published_at', 'created_at', 'name',
+        ], 'id', 'desc');
+
+        foreach ($orderBy as $item) {
+            $column = match ($item['name']) {
+                'name' => 'authors.name',
+                default => 'dubbing_posts.'.$item['name'],
+            };
+
+            $query->orderBy($column, $item['sort']);
+        }
+
+        $items = $query
+            ->paginate($this->resolveLimit($request->integer('limit')))
+            ->appends($request->except('page'));
+
+        return CommunityEpisodeResource::collection($items);
+    }
+
+    public function updateEpisodeStatus(Request $request, string $communityId, string $episodeId): CommunityEpisodeResource
+    {
+        $validated = $request->validate([
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        $community = $this->findCommunityById($communityId, true);
+
+        $episode = DubbingPost::query()
+            ->where('organization_id', $community->id)
+            ->where('id', (int) $episodeId)
+            ->firstOrFail();
+
+        $before = $episode->replicate();
+        $isActive = (bool) $validated['is_active'];
+
+        $episode->visibility = $isActive ? 'public' : 'private';
+        $episode->published_at = $isActive
+            ? ($episode->published_at ?? now())
+            : null;
+
+        $episode->save();
+
+        if ($episode->wasChanged()) {
+            $this->logAction(
+                'communities.episodes.status',
+                $community->name,
+                $isActive ? 'Ativou episódio da comunidade' : 'Inativou episódio da comunidade',
+                $episode,
+                $before
+            );
+        }
+
+        $episode->load([
+            'author' => fn (Builder $builder) => $builder
+                ->withTrashed()
+                ->select(['id', 'uuid', 'name', 'email', 'is_active', 'deleted_at']),
+            'playlist:id,title,slug',
+        ]);
+
+        return new CommunityEpisodeResource($episode);
+    }
+
+    public function collaborators(Request $request, string $communityId)
+    {
+        $request->validate([
+            'limit' => ['sometimes', 'nullable', 'integer'],
+            'page' => ['sometimes', 'nullable', 'integer'],
+            'orderBy' => ['sometimes', 'nullable', 'string'],
+            'search' => ['sometimes', 'nullable', 'string'],
+            'role' => ['sometimes', 'nullable', Rule::in(['owner', 'admin', 'editor', 'member'])],
+            'status' => ['sometimes', 'nullable', Rule::in(['active', 'pending', 'rejected', 'banned'])],
+            'created_at' => ['sometimes', 'array'],
+            'created_at.*' => ['sometimes', 'date_format:Y-m-d\TH:i:sP'],
+        ]);
+
+        $community = $this->findCommunityById($communityId, true);
+
+        $query = OrganizationMember::query()
+            ->where('organization_members.organization_id', $community->id)
+            ->leftJoin('users', 'users.id', '=', 'organization_members.user_id')
+            ->select('organization_members.*')
+            ->with(['user' => fn (Builder $builder) => $builder
+                ->withTrashed()
+                ->select(['id', 'uuid', 'name', 'email', 'is_active', 'deleted_at'])]);
+
+        if ($request->filled('role')) {
+            $query->where('organization_members.role', $request->string('role')->toString());
+        }
+
+        if ($request->filled('status')) {
+            $query->where('organization_members.status', $request->string('status')->toString());
+        }
+
+        $search = $request->string('search')->toString();
+        if ($search !== '') {
+            $query->where(function (Builder $builder) use ($search): void {
+                $builder
+                    ->orWhere('users.uuid', 'like', '%'.$search.'%')
+                    ->orWhere('users.name', 'like', '%'.$search.'%')
+                    ->orWhere('users.email', 'like', '%'.$search.'%')
+                    ->orWhere('organization_members.role', 'like', '%'.$search.'%')
+                    ->orWhere('organization_members.status', 'like', '%'.$search.'%')
+                    ->orWhere('organization_members.id', 'like', '%'.$search.'%');
+            });
+        }
+
+        $range = $this->parseDateRange($request, 'created_at');
+        $this->applyDateRange($query, $range['start'], $range['end'], 'organization_members.created_at');
+
+        $orderBy = $this->parseOrderBy($request->input('orderBy'), [
+            'id', 'role', 'status', 'created_at', 'name', 'email',
+        ], 'created_at', 'desc');
+
+        foreach ($orderBy as $item) {
+            $column = match ($item['name']) {
+                'name' => 'users.name',
+                'email' => 'users.email',
+                default => 'organization_members.'.$item['name'],
+            };
+
+            $query->orderBy($column, $item['sort']);
+        }
+
+        $items = $query
+            ->paginate($this->resolveLimit($request->integer('limit')))
+            ->appends($request->except('page'));
+
+        return CommunityCollaboratorResource::collection($items);
+    }
+
+    public function updateCollaborator(Request $request, string $communityId, string $userUuid): CommunityCollaboratorResource
+    {
+        $validated = $request->validate([
+            'role' => ['required', Rule::in(['admin', 'editor', 'member'])],
+        ]);
+
+        $community = $this->findCommunityById($communityId, true);
+        $user = User::query()->withTrashed()->where('uuid', $userUuid)->firstOrFail();
+
+        $collaborator = OrganizationMember::query()
+            ->where('organization_id', $community->id)
+            ->where('user_id', $user->id)
+            ->firstOrFail();
+
+        if ($collaborator->role === 'owner') {
+            abort(422, 'Não é permitido alterar o cargo do dono da comunidade.');
+        }
+
+        $before = $collaborator->replicate();
+        $collaborator->role = $validated['role'];
+        $collaborator->save();
+
+        if ($collaborator->wasChanged()) {
+            $this->logAction(
+                'communities.collaborators.edit',
+                $community->name,
+                'Alterou o cargo de colaborador da comunidade',
+                $collaborator,
+                $before
+            );
+        }
+
+        $collaborator->load(['user' => fn (Builder $builder) => $builder
+            ->withTrashed()
+            ->select(['id', 'uuid', 'name', 'email', 'is_active', 'deleted_at'])]);
+
+        return new CommunityCollaboratorResource($collaborator);
+    }
+
+    public function removeCollaborator(string $communityId, string $userUuid): JsonResponse
+    {
+        $community = $this->findCommunityById($communityId, true);
+        $user = User::query()->withTrashed()->where('uuid', $userUuid)->firstOrFail();
+
+        $collaborator = OrganizationMember::query()
+            ->where('organization_id', $community->id)
+            ->where('user_id', $user->id)
+            ->firstOrFail();
+
+        if ($collaborator->role === 'owner') {
+            abort(422, 'Não é permitido remover o dono da comunidade.');
+        }
+
+        $before = $collaborator->replicate();
+        $collaborator->delete();
+
+        $this->logAction(
+            'communities.collaborators.delete',
+            $community->name,
+            'Removeu colaborador da comunidade',
+            [
+                'organization_id' => $community->id,
+                'user_id' => $user->id,
+                'user_uuid' => $user->uuid,
+                'user_name' => $user->name,
+                'role' => $before->role,
+            ],
+            $before
+        );
+
+        return response()->json([], 204);
+    }
+
     public function autocomplete(Request $request)
     {
         $request->validate([
             'search' => ['sometimes', 'nullable', 'string'],
             'orderBy' => ['sometimes', 'nullable', 'string'],
             'is_public' => ['sometimes', 'integer', 'in:0,1'],
+            'is_active' => ['sometimes', 'integer', 'in:0,1'],
             'with_deleted' => ['sometimes', 'boolean'],
         ]);
 
@@ -270,6 +686,11 @@ class CommunitiesController extends Controller
         $isPublic = $request->input('is_public');
         if ($isPublic !== null && $isPublic !== '') {
             $query->where('is_public', (int) $isPublic === 1 ? 1 : 0);
+        }
+
+        $isActive = $request->input('is_active');
+        if ($isActive !== null && $isActive !== '') {
+            $query->where('is_active', (int) $isActive === 1 ? 1 : 0);
         }
 
         $this->applySearch($query, $request->string('search')->toString(), ['id', 'name', 'slug']);
@@ -292,6 +713,7 @@ class CommunitiesController extends Controller
             'search' => ['sometimes', 'nullable', 'string'],
             'is_public' => ['sometimes', 'integer', 'in:0,1'],
             'is_verified' => ['sometimes', 'integer', 'in:0,1'],
+            'is_active' => ['sometimes', 'integer', 'in:0,1'],
             'owner_uuid' => ['sometimes', 'nullable', 'uuid'],
             'with_deleted' => ['sometimes', 'boolean'],
             'created_at' => ['sometimes', 'array'],
@@ -306,6 +728,7 @@ class CommunitiesController extends Controller
             ['name' => 'Slug', 'value' => 'slug'],
             ['name' => 'Descrição', 'value' => 'description'],
             ['name' => 'Website', 'value' => 'website_url'],
+            ['name' => 'Ativa', 'value' => static fn ($item) => $item->is_active ? 'Sim' : 'Não'],
             ['name' => 'Pública', 'value' => static fn ($item) => $item->is_public ? 'Sim' : 'Não'],
             ['name' => 'Verificada', 'value' => static fn ($item) => $item->is_verified ? 'Sim' : 'Não'],
             ['name' => 'Dona', 'value' => static fn ($item) => $item->owner?->name],
@@ -336,6 +759,11 @@ class CommunitiesController extends Controller
         $isVerified = $request->input('is_verified');
         if ($isVerified !== null && $isVerified !== '') {
             $query->where('is_verified', (int) $isVerified === 1 ? 1 : 0);
+        }
+
+        $isActive = $request->input('is_active');
+        if ($isActive !== null && $isActive !== '') {
+            $query->where('is_active', (int) $isActive === 1 ? 1 : 0);
         }
 
         if ($request->filled('owner_uuid')) {

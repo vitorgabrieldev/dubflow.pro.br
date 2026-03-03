@@ -100,6 +100,15 @@ Route::prefix('v1')->group(function () {
             Route::get('/communities/{communityId}', [AdminCommunitiesController::class, 'show'])->middleware('permission:communities.show');
             Route::post('/communities/{communityId}', [AdminCommunitiesController::class, 'update'])->middleware('permission:communities.edit');
             Route::delete('/communities/{communityId}', [AdminCommunitiesController::class, 'destroy'])->middleware('permission:communities.delete');
+            Route::post('/communities/{communityId}/restore', [AdminCommunitiesController::class, 'restore'])->middleware('permission:communities.delete');
+            Route::get('/communities/{communityId}/followers', [AdminCommunitiesController::class, 'followers'])->middleware('permission:communities.show');
+            Route::post('/communities/{communityId}/followers', [AdminCommunitiesController::class, 'addFollower'])->middleware('permission:communities.edit');
+            Route::delete('/communities/{communityId}/followers/{userUuid}', [AdminCommunitiesController::class, 'removeFollower'])->middleware('permission:communities.edit');
+            Route::get('/communities/{communityId}/episodes', [AdminCommunitiesController::class, 'episodes'])->middleware('permission:communities.show');
+            Route::post('/communities/{communityId}/episodes/{episodeId}/status', [AdminCommunitiesController::class, 'updateEpisodeStatus'])->middleware('permission:communities.edit');
+            Route::get('/communities/{communityId}/collaborators', [AdminCommunitiesController::class, 'collaborators'])->middleware('permission:communities.show');
+            Route::post('/communities/{communityId}/collaborators/{userUuid}', [AdminCommunitiesController::class, 'updateCollaborator'])->middleware('permission:communities.edit');
+            Route::delete('/communities/{communityId}/collaborators/{userUuid}', [AdminCommunitiesController::class, 'removeCollaborator'])->middleware('permission:communities.edit');
 
             Route::get('/playlists', [AdminPlaylistsController::class, 'index'])->middleware('permission:playlists.list');
             Route::post('/playlists', [AdminPlaylistsController::class, 'store'])->middleware('permission:playlists.create');

@@ -1,7 +1,9 @@
 import React, { Component } from "react";
 import * as PropTypes from "prop-types";
-import { Button, DatePicker, Form, Input, Modal, Radio } from "antd";
+import { Button, DatePicker, Form, Modal, Radio, Select } from "antd";
 import moment from "moment";
+
+import { platformUsersService } from "./../../redux/services";
 
 class Filters extends Component {
 	static propTypes = {
@@ -15,6 +17,7 @@ class Filters extends Component {
 
 		this.filtersClean = {
 			created_at : null,
+			is_active  : null,
 			is_public  : null,
 			is_verified: null,
 			owner_uuid : null,
@@ -23,10 +26,14 @@ class Filters extends Component {
 
 		this.state = {
 			filters: {...this.filtersClean},
+			owners: [],
+			isLoadingOwners: false,
 		};
 	}
 
-	onOpen = (filters) => this.setState({filters});
+	onOpen = (filters) => {
+		this.setState({filters}, () => this.fetchOwners());
+	};
 
 	cleanFilters = () => this.setState({filters: this.filtersClean}, () => this.props.onComplete({...this.state.filters}));
 	onClose = () => this.props.onClose();
@@ -41,9 +48,31 @@ class Filters extends Component {
 		}));
 	};
 
+	fetchOwners = (search = "") => {
+		this.setState({isLoadingOwners: true});
+
+		platformUsersService.getAutocomplete({
+			search,
+			is_active: 1,
+			orderBy  : "name:asc",
+		})
+		.then((response) => {
+			this.setState({
+				owners: response.data.data || [],
+				isLoadingOwners: false,
+			});
+		})
+		.catch(() => {
+			this.setState({
+				owners: [],
+				isLoadingOwners: false,
+			});
+		});
+	};
+
 	render() {
 		const {visible} = this.props;
-		const {filters} = this.state;
+		const {filters, owners, isLoadingOwners} = this.state;
 
 		return (
 			<Modal
@@ -60,6 +89,16 @@ class Filters extends Component {
 					<Button key="back" type="link" onClick={this.cleanFilters}>Excluir filtros</Button>,
 					<Button key="submit" type="primary" onClick={this.filtersOnConfirm}>Aplicar</Button>,
 				]}>
+				<div className="filter-group">
+					<div className="filter-group-title" style={{paddingTop: 0}}><h3>Status</h3></div>
+					<div className="filter-group-filters" style={{paddingBottom: 5}}>
+						<div className="filter-group-radios">
+							<div className="filter-group-radio"><Radio onChange={() => this.setFilter("is_active", null)} checked={filters.is_active === null}>Todas</Radio></div>
+							<div className="filter-group-radio"><Radio onChange={() => this.setFilter("is_active", 1)} checked={filters.is_active === 1}>Ativas</Radio></div>
+							<div className="filter-group-radio"><Radio onChange={() => this.setFilter("is_active", 0)} checked={filters.is_active === 0}>Inativas</Radio></div>
+						</div>
+					</div>
+				</div>
 				<div className="filter-group">
 					<div className="filter-group-title" style={{paddingTop: 0}}><h3>Visibilidade</h3></div>
 					<div className="filter-group-filters" style={{paddingBottom: 5}}>
@@ -84,7 +123,21 @@ class Filters extends Component {
 					<div className="filter-group-title"><h3>Dono da comunidade</h3></div>
 					<div className="filter-group-filters">
 						<Form.Item label="UUID do usuário dono">
-							<Input value={filters.owner_uuid || ""} onChange={(e) => this.setFilter("owner_uuid", e.target.value || null)} placeholder="ex.: 6f2f..." />
+							<Select
+								showSearch
+								allowClear
+								filterOption={false}
+								placeholder="Selecione o dono"
+								value={filters.owner_uuid || undefined}
+								onChange={(value) => this.setFilter("owner_uuid", value || null)}
+								onSearch={this.fetchOwners}
+								loading={isLoadingOwners}>
+								{owners.filter((item) => !!item.uuid).map((item) => (
+									<Select.Option key={item.uuid} value={item.uuid}>
+										{`${item.uuid} - ${item.name} (${item.email})`}
+									</Select.Option>
+								))}
+							</Select>
 						</Form.Item>
 					</div>
 				</div>

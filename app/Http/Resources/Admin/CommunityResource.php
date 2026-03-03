@@ -22,6 +22,7 @@ class CommunityResource extends JsonResource
             'cover' => $this->cover_path ? $this->normalizeMediaUrl((string) $this->cover_path) : null,
             'is_public' => (bool) $this->is_public,
             'is_verified' => (bool) $this->is_verified,
+            'is_active' => (bool) ($this->is_active ?? true),
             'owner' => $owner ? [
                 'id' => $owner->id,
                 'uuid' => $owner->uuid,

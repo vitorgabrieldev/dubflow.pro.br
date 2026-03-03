@@ -1,6 +1,6 @@
 import React, { Component, Fragment } from "react";
 import { connect } from "react-redux";
-import { Button, Dropdown, Menu, Modal, Tag } from "antd";
+import { Button, Dropdown, Menu, Modal, Tag, Tooltip } from "antd";
 import QueueAnim from "rc-queue-anim";
 import moment from "moment";
 
@@ -52,6 +52,7 @@ class Index extends Component {
 			totalFilters       : 0,
 			filters            : {
 				created_at : null,
+				is_active  : null,
 				is_public  : null,
 				is_verified: null,
 				owner_uuid : null,
@@ -71,9 +72,28 @@ class Index extends Component {
 
 	menuItem = (item) => (
 		<Menu className="actions-dropdown-menu">
-			{this.props.permissions.includes(config.permissionPrefix + ".show") && <Menu.Item key="show"><a onClick={() => this.showOpen(item)}><i className="fal fa-file" />Visualizar</a></Menu.Item>}
-			{this.props.permissions.includes(config.permissionPrefix + ".edit") && <Menu.Item key="edit"><a onClick={() => this.editOpen(item)}><i className="fal fa-pen" />Editar</a></Menu.Item>}
-			{this.props.permissions.includes(config.permissionPrefix + ".delete") && <Menu.Item key="delete" className="divider btn-delete"><a onClick={() => this.deleteConfirm(item)}><i className="fal fa-trash" />Excluir (soft)</a></Menu.Item>}
+			{this.props.permissions.includes(config.permissionPrefix + ".show") && (
+				<Menu.Item key="show"><a onClick={() => this.showOpen(item)}><i className="fal fa-file" />Visualizar</a></Menu.Item>
+			)}
+			{this.props.permissions.includes(config.permissionPrefix + ".edit") && !item.deleted_at && (
+				<Menu.Item key="edit"><a onClick={() => this.editOpen(item)}><i className="fal fa-pen" />Editar</a></Menu.Item>
+			)}
+			{this.props.permissions.includes(config.permissionPrefix + ".edit") && !item.deleted_at && !item.is_verified && (
+				<Menu.Item key="verify"><a onClick={() => this.verifyConfirm(item)}><i className="fal fa-badge-check" />Verificar comunidade</a></Menu.Item>
+			)}
+			{this.props.permissions.includes(config.permissionPrefix + ".edit") && !item.deleted_at && !!item.is_verified && (
+				<Menu.Item key="verified" disabled><i className="fal fa-badge-check" /><span style={{marginLeft: 8}}>Verificado</span></Menu.Item>
+			)}
+			{this.props.permissions.includes(config.permissionPrefix + ".delete") && !item.deleted_at && (
+				<Menu.Item
+					key="toggle-active"
+					className={`divider ${item.is_active ? "btn-delete" : ""}`}>
+					<a onClick={() => this.toggleActiveConfirm(item)}>
+						<i className={`fal ${item.is_active ? "fa-toggle-off" : "fa-toggle-on"}`} />
+						{item.is_active ? "Inativar" : "Ativar"}
+					</a>
+				</Menu.Item>
+			)}
 		</Menu>
 	);
 
@@ -82,11 +102,41 @@ class Index extends Component {
 
 		return [
 			{ title: "ID", className: "id", visible: !listTypeCard, render: (item) => <span title={item.uuid}>{item.uuid}</span> },
-			{ title: "Nome", render: (item) => listTypeCard ? <h3>{item.name}</h3> : item.name },
-			{ title: "Slug", render: (item) => item.slug },
-			{ title: "Dono", render: (item) => item.owner?.name || "-" },
-			{ title: "Pública", className: "no-ellipsis", render: (item) => <Tag color={item.is_public ? "#0acf97" : "#fa5c7c"}>{item.is_public ? "Sim" : "Não"}</Tag> },
-			{ title: "Verificada", className: "no-ellipsis", render: (item) => <Tag color={item.is_verified ? "#0acf97" : "#f7b84b"}>{item.is_verified ? "Sim" : "Não"}</Tag> },
+			{
+				title : "Nome",
+				render: (item) => listTypeCard
+					? <h3 style={item.deleted_at ? {color: "#cf1322"} : {}}>{item.name}</h3>
+					: <span style={item.deleted_at ? {color: "#cf1322", fontWeight: 600} : {}}>{item.name}</span>
+			},
+			{ title: "Slug", render: (item) => <span style={item.deleted_at ? {color: "#cf1322"} : {}}>{item.slug}</span> },
+			{ title: "Dono", render: (item) => <span style={item.deleted_at ? {color: "#cf1322"} : {}}>{item.owner?.name || "-"}</span> },
+			{
+				title    : "Status",
+				className: "no-ellipsis",
+				render   : (item) => {
+					if( item.deleted_at ) {
+						return <Tag color="#cf1322">Deletada</Tag>;
+					}
+
+					return <Tag color={item.is_active ? "#0acf97" : "#fa5c7c"}>{item.is_active ? "Ativa" : "Inativa"}</Tag>;
+				}
+			},
+			{
+				title    : "Pública",
+				className: "no-ellipsis",
+				render   : (item) => {
+					return <Tag color={item.is_public ? "#0acf97" : "#fa5c7c"}>{item.is_public ? "Sim" : "Não"}</Tag>;
+				}
+			},
+			{
+				title    : "Verificada",
+				className: "no-ellipsis",
+				render   : (item) => (
+					<Tooltip title={item.is_verified ? "Comunidade com selo de confiança e validação da plataforma." : "Comunidade ainda sem selo de confiança da plataforma."}>
+						<Tag color={item.is_verified ? "#0acf97" : "#f7b84b"}>{item.is_verified ? "Sim" : "Não"}</Tag>
+					</Tooltip>
+				)
+			},
 			{ title: "Seguidores", className: "text-center", render: (item) => item.followers_count ?? 0 },
 			{
 				title    : "Criação",
@@ -119,6 +169,7 @@ class Index extends Component {
 			data.limit = pagination.pageSize;
 		}
 
+		if( filters.is_active !== null ) data.is_active = filters.is_active;
 		if( filters.is_public !== null ) data.is_public = filters.is_public;
 		if( filters.is_verified !== null ) data.is_verified = filters.is_verified;
 		if( filters.owner_uuid ) data.owner_uuid = filters.owner_uuid;
@@ -188,15 +239,40 @@ class Index extends Component {
 	showOpen = ({uuid}) => { this.setState({showModalVisible: true}); this.showScreen.onOpen(uuid); };
 	showOnClose = () => this.setState({showModalVisible: false});
 
-	deleteConfirm = ({uuid, name}) => {
+	toggleActiveConfirm = ({uuid, name, is_active: isActive}) => {
+		const shouldActivate = !isActive;
+
 		Modal.confirm({
-			title  : "Confirmar exclusão",
-			content: `Tem certeza de que deseja remover (soft delete) a comunidade ${name}?`,
-			okText : "Excluir",
-			onOk   : () => this.deleteConfirmed(uuid),
+			title  : shouldActivate ? "Confirmar ativação" : "Confirmar inativação",
+			content: shouldActivate
+				? `Tem certeza de que deseja ativar a comunidade ${name}?`
+				: `Tem certeza de que deseja inativar a comunidade ${name}?`,
+			okText : shouldActivate ? "Ativar" : "Inativar",
+			okType : shouldActivate ? "primary" : "danger",
+			onOk   : () => this.toggleActiveConfirmed(uuid, shouldActivate),
 		});
 	};
-	deleteConfirmed = (uuid) => communitiesService.destroy({uuid}).then(() => this.fetchGetAll()).catch((data) => Modal.error({title: "Ocorreu um erro!", content: String(data)}));
+
+	toggleActiveConfirmed = (uuid, shouldActivate) => {
+		return communitiesService.edit({uuid, is_active: shouldActivate})
+		.then(() => this.fetchGetAll())
+		.catch((data) => Modal.error({title: "Ocorreu um erro!", content: String(data)}));
+	};
+
+	verifyConfirm = ({uuid, name}) => {
+		Modal.confirm({
+			title  : "Confirmar verificação",
+			content: `Tem certeza de que deseja verificar a comunidade ${name}?`,
+			okText : "Verificar",
+			onOk   : () => this.verifyConfirmed(uuid),
+		});
+	};
+
+	verifyConfirmed = (uuid) => {
+		return communitiesService.edit({uuid, is_verified: true})
+		.then(() => this.fetchGetAll())
+		.catch((data) => Modal.error({title: "Ocorreu um erro!", content: String(data)}));
+	};
 
 	filtersOpen = () => { this.setState({filtersModalVisible: true}); this.filtersScreen.onOpen({...this.state.filters}); };
 	filtersOnClose = () => this.setState({filtersModalVisible: false});
