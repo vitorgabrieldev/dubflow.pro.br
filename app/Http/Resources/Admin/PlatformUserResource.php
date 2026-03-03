@@ -24,8 +24,10 @@ class PlatformUserResource extends JsonResource
             'avatar' => $avatarUrl,
             'is_active' => (bool) $this->is_active,
             'is_private' => (bool) $this->is_private,
+            'is_deleted' => (bool) $this->trashed(),
             'created_at' => $this->created_at?->toAtomString(),
             'updated_at' => $this->updated_at?->toAtomString(),
+            'deleted_at' => $this->deleted_at?->toAtomString(),
         ];
     }
 

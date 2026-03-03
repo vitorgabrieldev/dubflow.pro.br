@@ -63,6 +63,12 @@ export const edit = (options) => {
 
 export const destroy = (options) => api.delete(`${basePath}/${options.uuid}`);
 
+export const destroyPermanent = (options) => api.delete(`${basePath}/${options.uuid}/permanent`, {
+	data: {
+		password: options.password,
+	},
+});
+
 export const getAutocomplete = (options = {}) => {
 	const query = buildQuery(options);
 

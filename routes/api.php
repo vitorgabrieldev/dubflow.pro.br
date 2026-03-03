@@ -90,6 +90,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/platform-users/{userUuid}', [AdminPlatformUsersController::class, 'show'])->middleware('permission:platform-users.show');
             Route::post('/platform-users/{userUuid}', [AdminPlatformUsersController::class, 'update'])->middleware('permission:platform-users.edit');
             Route::delete('/platform-users/{userUuid}', [AdminPlatformUsersController::class, 'destroy'])->middleware('permission:platform-users.delete');
+            Route::delete('/platform-users/{userUuid}/permanent', [AdminPlatformUsersController::class, 'destroyPermanent'])->middleware('permission:platform-users.delete');
 
             Route::get('/communities', [AdminCommunitiesController::class, 'index'])->middleware('permission:communities.list');
             Route::post('/communities', [AdminCommunitiesController::class, 'store'])->middleware('permission:communities.create');

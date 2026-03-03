@@ -51,6 +51,41 @@ class AdminContentModulesApiTest extends TestCase
             ->assertJsonPath('data.0.email', 'platform.user.1@example.com');
     }
 
+    public function test_super_admin_can_permanently_delete_platform_user_with_password_validation(): void
+    {
+        $admin = $this->createSuperAdminUser();
+        $token = $this->loginAndGetToken($admin->email, 'password123');
+
+        $platformUser = User::factory()->create([
+            'email' => 'platform.delete.me@example.com',
+            'password' => Hash::make('senha-forte-123'),
+            'is_active' => true,
+        ]);
+
+        $this->withToken($token)->deleteJson('/api/v1/admin/platform-users/'.$platformUser->uuid.'/permanent', [
+            'password' => 'senha-errada-123',
+        ])->assertStatus(422)->assertJsonValidationErrors(['password']);
+
+        $this->assertDatabaseHas('users', [
+            'id' => $platformUser->id,
+            'email' => 'platform.delete.me@example.com',
+        ]);
+
+        $this->withToken($token)->deleteJson('/api/v1/admin/platform-users/'.$platformUser->uuid.'/permanent', [
+            'password' => 'senha-forte-123',
+        ])->assertNoContent();
+
+        $this->assertSoftDeleted('users', [
+            'id' => $platformUser->id,
+        ]);
+
+        $this->withToken($token)->getJson('/api/v1/admin/platform-users?search=platform.delete.me@example.com')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.email', 'platform.delete.me@example.com')
+            ->assertJsonPath('data.0.is_deleted', true);
+    }
+
     public function test_super_admin_can_crud_communities_and_playlists_with_soft_delete(): void
     {
         $admin = $this->createSuperAdminUser();

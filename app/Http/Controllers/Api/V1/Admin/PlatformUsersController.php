@@ -8,8 +8,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class PlatformUsersController extends Controller
 {
@@ -68,7 +70,7 @@ class PlatformUsersController extends Controller
 
     public function show(string $userUuid): PlatformUserResource
     {
-        $user = $this->findUserByUuid($userUuid);
+        $user = $this->findUserByUuid($userUuid, true);
 
         return new PlatformUserResource($user);
     }
@@ -219,6 +221,57 @@ class PlatformUsersController extends Controller
         return response()->json([], 204);
     }
 
+    public function destroyPermanent(Request $request, string $userUuid): JsonResponse
+    {
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'min:8'],
+        ]);
+
+        $user = $this->findUserByUuid($userUuid, true);
+        $current = $this->currentUser();
+
+        if ($current && (int) $current->id === (int) $user->id) {
+            throw ValidationException::withMessages([
+                'user' => ['Não é permitido deletar o próprio usuário.'],
+            ]);
+        }
+
+        if ($user->trashed()) {
+            return response()->json([
+                'message' => 'Usuário já está deletado.',
+            ], 422);
+        }
+
+        if (! Hash::check((string) $validated['password'], (string) $user->password)) {
+            return response()->json([
+                'message' => 'A senha informada não corresponde à senha atual do usuário.',
+                'errors' => [
+                    'password' => ['A senha informada não corresponde à senha atual do usuário.'],
+                ],
+            ], 422);
+        }
+
+        $before = $user->replicate();
+        $name = (string) $user->name;
+        $uuid = (string) $user->uuid;
+        $email = (string) $user->email;
+
+        DB::transaction(function () use ($user): void {
+            $user->is_active = false;
+            $user->token_version = ((int) $user->token_version) + 1;
+            $user->save();
+            $user->delete();
+        });
+
+        $this->logAction('platform-users.soft-delete', $name, 'Deletou (soft delete) um usuário da plataforma', [
+            'uuid' => $uuid,
+            'name' => $name,
+            'email' => $email,
+        ], $before);
+
+        return response()->json([], 204);
+    }
+
     public function autocomplete(Request $request)
     {
         $request->validate([
@@ -227,7 +280,7 @@ class PlatformUsersController extends Controller
             'is_active' => ['sometimes', 'integer', 'in:0,1'],
         ]);
 
-        $query = User::query();
+        $query = User::query()->withTrashed();
 
         $isActive = $request->input('is_active');
         if ($isActive !== null && $isActive !== '') {
@@ -269,17 +322,19 @@ class PlatformUsersController extends Controller
             ['name' => 'Username', 'value' => 'username'],
             ['name' => 'Nome artístico', 'value' => 'stage_name'],
             ['name' => 'Ativo', 'value' => static fn ($item) => $item->is_active ? 'Sim' : 'Não'],
+            ['name' => 'Deletado', 'value' => static fn ($item) => $item->deleted_at ? 'Sim' : 'Não'],
             ['name' => 'Privado', 'value' => static fn ($item) => $item->is_private ? 'Sim' : 'Não'],
             ['name' => 'Estado', 'value' => 'state'],
             ['name' => 'Cidade', 'value' => 'city'],
             ['name' => 'Criação', 'value' => 'created_at', 'format' => 'datetime'],
             ['name' => 'Atualização', 'value' => 'updated_at', 'format' => 'datetime'],
+            ['name' => 'Deletado em', 'value' => 'deleted_at', 'format' => 'datetime'],
         ], $items, 'platform-users', 'Exportou usuários da plataforma');
     }
 
     private function buildIndexQuery(Request $request): Builder
     {
-        $query = User::query();
+        $query = User::query()->withTrashed();
 
         $isActive = $request->input('is_active');
         if ($isActive !== null && $isActive !== '') {
@@ -312,8 +367,14 @@ class PlatformUsersController extends Controller
         return $query;
     }
 
-    private function findUserByUuid(string $uuid): User
+    private function findUserByUuid(string $uuid, bool $withDeleted = false): User
     {
-        return User::query()->where('uuid', $uuid)->firstOrFail();
+        $query = User::query();
+
+        if ($withDeleted) {
+            $query->withTrashed();
+        }
+
+        return $query->where('uuid', $uuid)->firstOrFail();
     }
 }
