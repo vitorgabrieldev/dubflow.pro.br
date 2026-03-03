@@ -44,12 +44,16 @@
             "@php artisan db:seed --force",
             "npm install",
             "npm --prefix frontend install",
-            "cd admin; npm install",
+            "npm --prefix admin install",
             "npm --prefix frontend run build"
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#fb7185,#fdba74,#34d399,#c084fc,#60a5fa\" \"sh -c 'cd public && php -d upload_max_filesize=1024M -d post_max_size=1200M -d max_execution_time=0 -d max_input_time=0 -S 127.0.0.1:8000 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php'\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm --prefix frontend run dev\" \"cd admin; npm run dev\" \"./scripts/reverb-dev.sh\" --names=server,queue,logs,next,admin,reverb --kill-others"
+            "npx concurrently -c \"#93c5fd,#fb7185,#34d399,#c084fc,#60a5fa\" \"php -d upload_max_filesize=1024M -d post_max_size=1200M -d max_execution_time=0 -d max_input_time=0 artisan serve --host=127.0.0.1 --port=8000\" \"php artisan queue:listen --tries=1 --timeout=0\" \"npm --prefix frontend run dev\" \"npm --prefix admin run dev\" \"php artisan reverb:start --host=127.0.0.1 --port=8081\" --names=server,queue,next,admin,reverb --kill-others"
+        ],
+        "dev:admin": [
+            "Composer\\Config::disableProcessTimeout",
+            "npx concurrently -c \"#93c5fd,#fb7185,#c084fc,#60a5fa\" \"php -d upload_max_filesize=1024M -d post_max_size=1200M -d max_execution_time=0 -d max_input_time=0 artisan serve --host=127.0.0.1 --port=8000\" \"php artisan queue:listen --tries=1 --timeout=0\" \"npm --prefix admin run dev\" \"php artisan reverb:start --host=127.0.0.1 --port=8081\" --names=server,queue,admin,reverb --kill-others"
         ],
         "test": [
             "@php artisan test --env=testing"
