@@ -17,6 +17,12 @@ class Home extends Component {
 			roles_total        : 0,
 			logs_total         : 0,
 			system_logs_total  : 0,
+			platform_users_total: 0,
+			communities_total   : 0,
+			playlists_total     : 0,
+			opportunities_total : 0,
+			comments_total      : 0,
+			notifications_total : 0,
 		};
 	}
 
@@ -39,6 +45,12 @@ class Home extends Component {
 				roles_total      : data.roles_total || 0,
 				logs_total       : data.logs_total || 0,
 				system_logs_total: data.system_logs_total || 0,
+				platform_users_total: data.platform_users_total || 0,
+				communities_total   : data.communities_total || 0,
+				playlists_total     : data.playlists_total || 0,
+				opportunities_total : data.opportunities_total || 0,
+				comments_total      : data.comments_total || 0,
+				notifications_total : data.notifications_total || 0,
 			});
 		})
 		.catch((data) => {
@@ -104,6 +116,48 @@ class Home extends Component {
 				icon      : "fad fa-bug",
 				path      : "/administrator/system-log",
 				permission: "system-log.list",
+			},
+			{
+				title     : "Usuários da plataforma",
+				value     : this.state.platform_users_total,
+				icon      : "fad fa-users",
+				path      : "/administrator/platform-users",
+				permission: "platform-users.list",
+			},
+			{
+				title     : "Comunidades",
+				value     : this.state.communities_total,
+				icon      : "fad fa-users-class",
+				path      : "/administrator/communities",
+				permission: "communities.list",
+			},
+			{
+				title     : "Playlists",
+				value     : this.state.playlists_total,
+				icon      : "fad fa-list-music",
+				path      : "/administrator/playlists",
+				permission: "playlists.list",
+			},
+			{
+				title     : "Oportunidades",
+				value     : this.state.opportunities_total,
+				icon      : "fad fa-microphone-stand",
+				path      : "/administrator/opportunities",
+				permission: "opportunities.list",
+			},
+			{
+				title     : "Comentários",
+				value     : this.state.comments_total,
+				icon      : "fad fa-comments",
+				path      : "/administrator/comments",
+				permission: "comments.list",
+			},
+			{
+				title     : "Notificações",
+				value     : this.state.notifications_total,
+				icon      : "fad fa-bell",
+				path      : "/administrator/notifications",
+				permission: "notifications.list",
 			},
 		].filter(card => this.props.permissions.includes(card.permission));
 

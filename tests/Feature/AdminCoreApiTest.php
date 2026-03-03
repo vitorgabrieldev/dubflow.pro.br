@@ -111,7 +111,72 @@ class AdminCoreApiTest extends TestCase
             ->assertJsonPath('message', 'Usuário sem acesso ao painel administrativo.');
     }
 
-    private function createSuperAdminUser(): User
+    public function test_non_system_admin_cannot_assign_system_role_and_cannot_access_dashboard_without_permission(): void
+    {
+        $this->seed(AdminPermissionSeeder::class);
+        $this->seed(AdminRoleSeeder::class);
+
+        $usersCreatePermission = Permission::query()->where('key', 'users.create')->firstOrFail();
+        $superAdminRole = Role::query()->where('name', 'Super Administrador')->firstOrFail();
+
+        $limitedRole = Role::query()->create([
+            'name' => 'Criador de Usuários',
+            'description' => 'Pode criar usuários administradores.',
+            'is_system' => false,
+        ]);
+        $limitedRole->permissions()->sync([$usersCreatePermission->id]);
+
+        $limitedAdmin = User::factory()->create([
+            'email' => 'limited.admin@example.com',
+            'password' => Hash::make('password123'),
+            'is_active' => true,
+        ]);
+        $limitedAdmin->roles()->sync([$limitedRole->id]);
+
+        $token = $this->loginAndGetToken($limitedAdmin->email, 'password123');
+
+        $this->withToken($token)->getJson('/api/v1/admin/dashboard')
+            ->assertStatus(403);
+
+        $this->withToken($token)->postJson('/api/v1/admin/users', [
+            'name' => 'Tentativa Escalonada',
+            'email' => 'escalated-attempt@example.com',
+            'password_random' => true,
+            'is_active' => true,
+            'roles' => [$superAdminRole->uuid],
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors(['roles']);
+    }
+
+    public function test_admin_token_is_invalidated_after_role_change(): void
+    {
+        $adminA = $this->createSuperAdminUser('admin.a@example.com');
+        $adminB = $this->createSuperAdminUser('admin.b@example.com');
+
+        $tokenA = $this->loginAndGetToken($adminA->email, 'password123');
+        $tokenB = $this->loginAndGetToken($adminB->email, 'password123');
+
+        $usersListPermission = Permission::query()->where('key', 'users.list')->firstOrFail();
+        $limitedRole = Role::query()->create([
+            'name' => 'Apenas Listagem',
+            'description' => 'Acesso mínimo para listagem de usuários.',
+            'is_system' => false,
+        ]);
+        $limitedRole->permissions()->sync([$usersListPermission->id]);
+
+        $this->withToken($tokenB)->postJson('/api/v1/admin/users/'.$adminA->uuid, [
+            'is_active' => true,
+            'roles' => [$limitedRole->uuid],
+        ])->assertOk();
+
+        auth('api')->logout();
+
+        $this->withToken($tokenA)->getJson('/api/v1/admin/auth/user')
+            ->assertStatus(401)
+            ->assertJsonPath('message', 'Sessão inválida. Faça login novamente.');
+    }
+
+    private function createSuperAdminUser(string $email = 'admin@example.com'): User
     {
         $this->seed(AdminPermissionSeeder::class);
         $this->seed(AdminRoleSeeder::class);
@@ -119,7 +184,7 @@ class AdminCoreApiTest extends TestCase
         $role = Role::query()->where('name', 'Super Administrador')->firstOrFail();
 
         $user = User::factory()->create([
-            'email' => 'admin@example.com',
+            'email' => $email,
             'password' => Hash::make('password123'),
             'is_active' => true,
         ]);

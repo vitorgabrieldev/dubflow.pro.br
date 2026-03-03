@@ -1,8 +1,14 @@
 import Account from "./../screens/Account";
 import AccountPassword from "./../screens/AccountPassword";
+import CommentsAdmin from "./../screens/CommentsAdmin";
+import Communities from "./../screens/Communities";
 import Home from "./../screens/Home";
 import Login from "./../screens/Login";
 import Logs from "./../screens/Logs";
+import NotificationsAdmin from "./../screens/NotificationsAdmin";
+import Opportunities from "./../screens/Opportunities";
+import PlatformUsers from "./../screens/PlatformUsers";
+import PlaylistsAdmin from "./../screens/PlaylistsAdmin";
 import RecoveryPassword from "./../screens/RecoveryPassword";
 import RolesAndPermissions from "./../screens/RolesAndPermissions";
 import SystemLog from "./../screens/SystemLog";
@@ -29,6 +35,12 @@ export const PRIVATE_ROUTES = [
 	{ path: "/administrator/roles-and-permissions", component: RolesAndPermissions, exact: true },
 	{ path: "/administrator/system-log", component: SystemLog, exact: true },
 	{ path: "/administrator/users", component: Users, exact: true },
+	{ path: "/administrator/platform-users", component: PlatformUsers, exact: true },
+	{ path: "/administrator/communities", component: Communities, exact: true },
+	{ path: "/administrator/playlists", component: PlaylistsAdmin, exact: true },
+	{ path: "/administrator/opportunities", component: Opportunities, exact: true },
+	{ path: "/administrator/comments", component: CommentsAdmin, exact: true },
+	{ path: "/administrator/notifications", component: NotificationsAdmin, exact: true },
 
 ];
 

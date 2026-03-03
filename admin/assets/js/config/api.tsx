@@ -44,17 +44,49 @@ export const apiUpdateAccessToken = (access_token) => {
 	api.defaults.headers.common["Authorization"] = access_token;
 };
 
+const getRequestAuthorizationHeader = (config) => {
+	const headers = config?.headers;
+
+	if( !headers )
+	{
+		return "";
+	}
+
+	if( typeof headers.get === "function" )
+	{
+		return headers.get("Authorization") || headers.get("authorization") || "";
+	}
+
+	return headers.Authorization || headers.authorization || headers.common?.Authorization || "";
+};
+
+const setRequestAuthorizationHeader = (config, value) => {
+	if( !config.headers )
+	{
+		config.headers = {};
+	}
+
+	if( typeof config.headers.set === "function" )
+	{
+		config.headers.set("Authorization", value);
+
+		return;
+	}
+
+	config.headers["Authorization"] = value;
+};
+
 // -----------------------------------------------------------------------------
 // Errors
 // -----------------------------------------------------------------------------
 api.interceptors.request.use((config) => {
-	if( !config.headers.common["Authorization"] )
+	if( !getRequestAuthorizationHeader(config) )
 	{
 		const access_token = store.getState().auth.access_token;
 
 		if( access_token )
 		{
-			config.headers["Authorization"] = access_token;
+			setRequestAuthorizationHeader(config, access_token);
 
 			// Update access_token on instance
 			apiUpdateAccessToken(access_token);
@@ -102,8 +134,8 @@ api.interceptors.response.use((response) => {
 
 	const originalRequest = error.config;
 
-	let is_logout_request = originalRequest && originalRequest.url.endsWith("auth/logout");
-	let is_login_request  = originalRequest && originalRequest.url.endsWith("auth/login");
+	let is_logout_request = originalRequest && originalRequest.url?.endsWith("auth/logout");
+	let is_login_request  = originalRequest && originalRequest.url?.endsWith("auth/login");
 
 	// Has response from server
 	if( error.response )

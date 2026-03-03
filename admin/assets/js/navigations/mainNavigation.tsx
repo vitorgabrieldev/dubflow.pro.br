@@ -64,7 +64,13 @@ class MainNavigation extends Component {
       this.props.permissions.includes("roles.list") ||
       this.props.permissions.includes("log.list") ||
       this.props.permissions.includes("system-log.list") ||
-      this.props.permissions.includes("users.list");
+      this.props.permissions.includes("users.list") ||
+      this.props.permissions.includes("platform-users.list") ||
+      this.props.permissions.includes("communities.list") ||
+      this.props.permissions.includes("playlists.list") ||
+      this.props.permissions.includes("opportunities.list") ||
+      this.props.permissions.includes("comments.list") ||
+      this.props.permissions.includes("notifications.list");
 
     return (
       <Menu
@@ -94,6 +100,36 @@ class MainNavigation extends Component {
             {this.props.permissions.includes("users.list") && (
               <Menu.Item key="/administrator/users">
                 <NavLink to="/administrator/users">Usuários administradores</NavLink>
+              </Menu.Item>
+            )}
+            {this.props.permissions.includes("platform-users.list") && (
+              <Menu.Item key="/administrator/platform-users">
+                <NavLink to="/administrator/platform-users">Usuários da plataforma</NavLink>
+              </Menu.Item>
+            )}
+            {this.props.permissions.includes("communities.list") && (
+              <Menu.Item key="/administrator/communities">
+                <NavLink to="/administrator/communities">Comunidades</NavLink>
+              </Menu.Item>
+            )}
+            {this.props.permissions.includes("playlists.list") && (
+              <Menu.Item key="/administrator/playlists">
+                <NavLink to="/administrator/playlists">Playlists</NavLink>
+              </Menu.Item>
+            )}
+            {this.props.permissions.includes("opportunities.list") && (
+              <Menu.Item key="/administrator/opportunities">
+                <NavLink to="/administrator/opportunities">Oportunidades</NavLink>
+              </Menu.Item>
+            )}
+            {this.props.permissions.includes("comments.list") && (
+              <Menu.Item key="/administrator/comments">
+                <NavLink to="/administrator/comments">Comentários</NavLink>
+              </Menu.Item>
+            )}
+            {this.props.permissions.includes("notifications.list") && (
+              <Menu.Item key="/administrator/notifications">
+                <NavLink to="/administrator/notifications">Notificações</NavLink>
               </Menu.Item>
             )}
             {this.props.permissions.includes("roles.list") && (

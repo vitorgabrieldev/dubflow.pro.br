@@ -70,7 +70,7 @@ class UsersController extends Controller
             'roles.*' => ['required', 'uuid'],
         ]);
 
-        $roleIds = $this->resolveRoleIds($validated['roles']);
+        $roleIds = $this->resolveRoleIds($validated['roles'], $this->canAssignSystemRoles());
 
         $password = (bool) $validated['password_random']
             ? str_pad((string) random_int(0, 99999999), 8, '0', STR_PAD_LEFT)
@@ -133,19 +133,36 @@ class UsersController extends Controller
 
         $before = $user->replicate();
 
-        DB::transaction(function () use ($request, $validated, $user): void {
+        $shouldInvalidateTokens = false;
+
+        DB::transaction(function () use ($request, $validated, $user, &$shouldInvalidateTokens): void {
             if (array_key_exists('is_active', $validated)) {
-                $user->is_active = (bool) $validated['is_active'];
-                $user->save();
+                $newIsActive = (bool) $validated['is_active'];
+
+                if ((bool) $user->is_active !== $newIsActive) {
+                    $shouldInvalidateTokens = true;
+                    $user->is_active = $newIsActive;
+                    $user->save();
+                }
             }
 
             if ($request->has('roles')) {
-                $roleIds = $this->resolveRoleIds($validated['roles'] ?? []);
+                $roleIds = $this->resolveRoleIds($validated['roles'] ?? [], $this->canAssignSystemRoles());
                 $syncResult = $user->roles()->sync($roleIds);
+                $rolesChanged = (bool) ($syncResult['attached'] || $syncResult['detached'] || $syncResult['updated']);
 
-                if (! $user->wasChanged() && ($syncResult['attached'] || $syncResult['detached'] || $syncResult['updated'])) {
+                if ($rolesChanged) {
+                    $shouldInvalidateTokens = true;
+                }
+
+                if (! $user->wasChanged() && $rolesChanged) {
                     $user->touch();
                 }
+            }
+
+            if ($shouldInvalidateTokens) {
+                $user->token_version = ((int) $user->token_version) + 1;
+                $user->save();
             }
         });
 
@@ -173,6 +190,7 @@ class UsersController extends Controller
         DB::transaction(function () use ($user): void {
             $user->roles()->detach();
             $user->is_active = false;
+            $user->token_version = ((int) $user->token_version) + 1;
             $user->save();
         });
 
@@ -264,21 +282,42 @@ class UsersController extends Controller
      * @param  array<int, string>  $roleUuids
      * @return array<int, int>
      */
-    private function resolveRoleIds(array $roleUuids): array
+    private function resolveRoleIds(array $roleUuids, bool $allowSystemRoles = true): array
     {
-        $roleIds = Role::query()
-            ->whereIn('uuid', collect($roleUuids)->filter()->unique()->values())
-            ->orderBy('id')
-            ->pluck('id')
-            ->all();
+        $requestedUuids = collect($roleUuids)->filter()->unique()->values();
 
-        if (empty($roleIds)) {
+        $roles = Role::query()
+            ->select(['id', 'is_system'])
+            ->whereIn('uuid', $requestedUuids)
+            ->orderBy('id')
+            ->get();
+
+        if ($roles->isEmpty() || $roles->count() !== $requestedUuids->count()) {
             throw ValidationException::withMessages([
                 'roles' => ['Selecione papéis válidos.'],
             ]);
         }
 
-        return $roleIds;
+        if (! $allowSystemRoles && $roles->contains(static fn (Role $role): bool => (bool) $role->is_system)) {
+            throw ValidationException::withMessages([
+                'roles' => ['Você não pode atribuir papéis de sistema.'],
+            ]);
+        }
+
+        return $roles->pluck('id')->all();
+    }
+
+    private function canAssignSystemRoles(): bool
+    {
+        $current = $this->currentUser();
+
+        if (! $current) {
+            return false;
+        }
+
+        $current->loadMissing('roles');
+
+        return $current->roles->contains(static fn (Role $role): bool => (bool) $role->is_system);
     }
 
     private function findAdminUserByUuid(string $uuid): User

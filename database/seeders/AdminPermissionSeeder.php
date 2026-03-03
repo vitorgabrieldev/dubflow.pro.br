@@ -24,6 +24,12 @@ class AdminPermissionSeeder extends Seeder
             'roles' => ['Papéis e permissões' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
             'system-log' => ['Registros de erros' => ['list', 'show', 'export']],
             'users' => ['Usuários administradores' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
+            'platform-users' => ['Usuários da plataforma' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
+            'communities' => ['Comunidades' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
+            'playlists' => ['Playlists' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
+            'opportunities' => ['Oportunidades' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
+            'comments' => ['Comentários' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
+            'notifications' => ['Notificações' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
         ];
 
         foreach ($modules as $prefix => $groups) {

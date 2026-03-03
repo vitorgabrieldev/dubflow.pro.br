@@ -6,6 +6,7 @@ import QueueAnim from "rc-queue-anim";
 import moment from "moment";
 
 import { generalActions } from "./../../redux/actions";
+import { downloadPrivateFile } from "./../../helpers/download";
 
 import { systemLogService } from "./../../redux/services";
 
@@ -233,7 +234,13 @@ class Index extends Component {
 					isExporting: false,
 				});
 
-				window.open(response.data.file_url, "_blank");
+				downloadPrivateFile(response.data.file_url, "registros-erros.csv")
+				.catch((error) => {
+					Modal.error({
+						title  : "Ocorreu um erro!",
+						content: String(error),
+					});
+				});
 			}
 			else
 			{

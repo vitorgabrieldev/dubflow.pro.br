@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -159,11 +160,12 @@ class Controller extends BaseController
      */
     protected function exportAsCsv(array $columns, Collection $items, string $prefix, string $logMessage): JsonResponse
     {
-        Storage::disk('public')->makeDirectory('export');
+        $disk = Storage::disk('local');
+        $disk->makeDirectory('exports/admin');
 
         $fileName = Str::slug($prefix).'-'.now()->format('Ymd-His').'-'.Str::lower(Str::random(8)).'.csv';
-        $relativePath = 'export/'.$fileName;
-        $absolutePath = storage_path('app/public/'.$relativePath);
+        $relativePath = 'exports/admin/'.$fileName;
+        $absolutePath = $disk->path($relativePath);
 
         $handle = fopen($absolutePath, 'wb');
         if ($handle === false) {
@@ -201,8 +203,15 @@ class Controller extends BaseController
 
         $this->logAction('export', null, $logMessage, ['total_items' => $items->count()]);
 
+        $encodedFile = rtrim(strtr(base64_encode($relativePath), '+/', '-_'), '=');
+        $expiresAt = now()->addMinutes(max(1, (int) config('app.admin_export_url_ttl_minutes', 10)));
+        $downloadUrl = URL::temporarySignedRoute('api.v1.admin.exports.download', $expiresAt, [
+            'file' => $encodedFile,
+        ]);
+
         return response()->json([
-            'file_url' => asset('storage/'.$relativePath),
+            'file_url' => $downloadUrl,
+            'expires_at' => $expiresAt->toAtomString(),
         ]);
     }
 }
