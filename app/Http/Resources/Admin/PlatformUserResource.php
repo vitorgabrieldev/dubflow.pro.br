@@ -14,8 +14,8 @@ class PlatformUserResource extends JsonResource
         $adminRoles = $this->relationLoaded('roles')
             ? $this->roles->map(fn ($role): array => [
                 'uuid' => $role->uuid,
-                'key' => $role->key,
                 'name' => $role->name,
+                'is_system' => (bool) ($role->is_system ?? false),
             ])->values()
             : collect();
 
