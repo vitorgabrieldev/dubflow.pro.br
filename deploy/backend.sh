@@ -4,6 +4,7 @@ set -Eeuo pipefail
 APP_DIR="${APP_DIR:-/var/www/dubflow}"
 PHP_BIN="${PHP_BIN:-php}"
 COMPOSER_BIN="${COMPOSER_BIN:-composer}"
+NPM_BIN="${NPM_BIN:-npm}"
 REPO_REMOTE="${REPO_REMOTE:-origin}"
 DEPLOY_REF="${DEPLOY_REF:-main}"
 QUEUE_SERVICE="${QUEUE_SERVICE:-dubflow-queue}"
@@ -11,8 +12,15 @@ REVERB_SERVICE="${REVERB_SERVICE:-dubflow-reverb}"
 BACKEND_SERVICE="${BACKEND_SERVICE:-}"
 RUN_BACKEND_TESTS="${RUN_BACKEND_TESTS:-0}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-1}"
+RUN_ADMIN_BUILD="${RUN_ADMIN_BUILD:-1}"
 FORCE_GIT_RESTORE="${FORCE_GIT_RESTORE:-1}"
 ALLOW_SERVICE_RESTART_FAILURE="${ALLOW_SERVICE_RESTART_FAILURE:-1}"
+
+is_truthy() {
+  local value="${1:-}"
+  value="${value,,}"
+  [[ "$value" == "1" || "$value" == "true" || "$value" == "yes" || "$value" == "on" ]]
+}
 
 run_systemctl() {
   if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
@@ -41,8 +49,8 @@ restart_service_if_available() {
 
   echo "[backend] Restarting service '$service'"
   if ! run_systemctl restart "$service"; then
-    if [[ "$ALLOW_SERVICE_RESTART_FAILURE" == "1" ]]; then
-      echo "[backend] Nao foi possivel reiniciar '$service' sem autenticacao interativa. Continuando deploy."
+    if is_truthy "$ALLOW_SERVICE_RESTART_FAILURE"; then
+      echo "[backend] Nao foi possivel reiniciar '$service' sem autenticacao interativa (ALLOW_SERVICE_RESTART_FAILURE=${ALLOW_SERVICE_RESTART_FAILURE}). Continuando deploy."
       return 0
     fi
 
@@ -50,8 +58,8 @@ restart_service_if_available() {
   fi
 
   if ! run_systemctl is-active --quiet "$service"; then
-    if [[ "$ALLOW_SERVICE_RESTART_FAILURE" == "1" ]]; then
-      echo "[backend] Servico '$service' nao confirmou estado ativo apos restart. Continuando deploy."
+    if is_truthy "$ALLOW_SERVICE_RESTART_FAILURE"; then
+      echo "[backend] Servico '$service' nao confirmou estado ativo apos restart (ALLOW_SERVICE_RESTART_FAILURE=${ALLOW_SERVICE_RESTART_FAILURE}). Continuando deploy."
       return 0
     fi
 
@@ -77,7 +85,7 @@ else
   echo "[backend] '$DEPLOY_REF' nao e branch remota; seguindo sem git pull"
 fi
 
-if [[ "$RUN_BACKEND_TESTS" == "1" ]]; then
+if is_truthy "$RUN_BACKEND_TESTS"; then
   echo "[backend] Running backend tests (RUN_BACKEND_TESTS=1)"
   $COMPOSER_BIN install --prefer-dist --no-interaction
   $PHP_BIN artisan test
@@ -86,7 +94,18 @@ fi
 echo "[backend] Installing dependencies"
 $COMPOSER_BIN install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
-if [[ "$RUN_MIGRATIONS" == "1" ]]; then
+if is_truthy "$RUN_ADMIN_BUILD"; then
+  if ! command -v "$NPM_BIN" >/dev/null 2>&1; then
+    echo "[backend] Erro: npm indisponivel para build do admin."
+    exit 1
+  fi
+
+  echo "[backend] Building admin assets"
+  $NPM_BIN --prefix admin ci
+  $NPM_BIN --prefix admin run build
+fi
+
+if is_truthy "$RUN_MIGRATIONS"; then
   echo "[backend] Running migrations"
   $PHP_BIN artisan migrate --force
 fi

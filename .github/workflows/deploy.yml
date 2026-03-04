@@ -63,12 +63,15 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            admin/package-lock.json
 
       - name: Install dependencies
         run: |
           composer install --no-interaction --prefer-dist
           npm --prefix frontend ci
+          npm --prefix admin ci
 
       - name: Prepare backend testing env
         run: |
@@ -87,6 +90,7 @@ jobs:
         run: |
           npm --prefix frontend run lint
           npm --prefix frontend run build
+          npm --prefix admin run build
 
       - name: Install Playwright browser
         run: npx --prefix frontend playwright install --with-deps chromium
@@ -165,6 +169,7 @@ jobs:
             export QUEUE_SERVICE="${{ secrets.QUEUE_SERVICE }}"
             export REVERB_SERVICE="${{ secrets.REVERB_SERVICE }}"
             export BACKEND_SERVICE="${{ secrets.BACKEND_SERVICE }}"
+            export ALLOW_SERVICE_RESTART_FAILURE=1
             bash "${{ secrets.REPO_DIR }}/deploy/backend.sh"
 
       - name: Deploy backend via SSH password
@@ -182,6 +187,7 @@ jobs:
             export QUEUE_SERVICE="${{ secrets.QUEUE_SERVICE }}"
             export REVERB_SERVICE="${{ secrets.REVERB_SERVICE }}"
             export BACKEND_SERVICE="${{ secrets.BACKEND_SERVICE }}"
+            export ALLOW_SERVICE_RESTART_FAILURE=1
             bash "${{ secrets.REPO_DIR }}/deploy/backend.sh"
 
   deploy-frontend:
