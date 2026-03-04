@@ -7,6 +7,7 @@ import Login from "./../screens/Login";
 import Logs from "./../screens/Logs";
 import NotificationsAdmin from "./../screens/NotificationsAdmin";
 import Opportunities from "./../screens/Opportunities";
+import PostsAdmin from "./../screens/PostsAdmin";
 import PlatformUsers from "./../screens/PlatformUsers";
 import PlaylistsAdmin from "./../screens/PlaylistsAdmin";
 import RecoveryPassword from "./../screens/RecoveryPassword";
@@ -37,6 +38,7 @@ export const PRIVATE_ROUTES = [
 	{ path: "/administrator/users", component: Users, exact: true },
 	{ path: "/administrator/platform-users", component: PlatformUsers, exact: true },
 	{ path: "/administrator/communities", component: Communities, exact: true },
+	{ path: "/administrator/posts", component: PostsAdmin, exact: true },
 	{ path: "/administrator/playlists", component: PlaylistsAdmin, exact: true },
 	{ path: "/administrator/opportunities", component: Opportunities, exact: true },
 	{ path: "/administrator/comments", component: CommentsAdmin, exact: true },

@@ -25,6 +25,7 @@ class DashboardController extends Controller
                 'system_logs_total' => SystemLog::query()->count(),
                 'platform_users_total' => User::query()->count(),
                 'communities_total' => Organization::query()->count(),
+                'posts_total' => \App\Models\DubbingPost::query()->count(),
                 'playlists_total' => Playlist::query()->count(),
                 'opportunities_total' => DubbingTest::query()->count(),
                 'comments_total' => Comment::query()->count(),

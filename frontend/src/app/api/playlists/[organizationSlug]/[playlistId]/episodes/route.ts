@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import type { ApiList, Playlist, PlaylistSeason, Post } from "@/types/api";
 
-const API_BASE_URL = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3030/api/v1";
+const API_BASE_URL = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api/v1";
 
 type PlaylistShowResponse = {
   playlist?: Playlist & { seasons_count?: number };

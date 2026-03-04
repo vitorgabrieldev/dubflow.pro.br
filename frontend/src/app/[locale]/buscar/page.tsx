@@ -96,7 +96,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
 
   const cookieStore = await cookies();
   const token = cookieStore.get("ed_token")?.value;
-  const apiBase = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3030/api/v1";
+  const apiBase = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api/v1";
   const headers = {
     Accept: "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

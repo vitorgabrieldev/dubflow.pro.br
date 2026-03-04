@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Permission;
+use App\Models\Role;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
@@ -26,6 +27,7 @@ class AdminPermissionSeeder extends Seeder
             'users' => ['Usuários administradores' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
             'platform-users' => ['Usuários da plataforma' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
             'communities' => ['Comunidades' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
+            'posts' => ['Publicações' => ['list', 'show']],
             'playlists' => ['Playlists' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
             'opportunities' => ['Oportunidades' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
             'comments' => ['Comentários' => ['list', 'show', 'create', 'edit', 'delete', 'export']],
@@ -49,5 +51,13 @@ class AdminPermissionSeeder extends Seeder
                 }
             }
         }
+
+        $allPermissionIds = Permission::query()->pluck('id')->all();
+
+        Role::query()
+            ->where('is_system', true)
+            ->each(function (Role $role) use ($allPermissionIds): void {
+                $role->permissions()->sync($allPermissionIds);
+            });
     }
 }

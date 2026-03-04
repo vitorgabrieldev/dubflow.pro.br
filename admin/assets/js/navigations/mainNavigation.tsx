@@ -12,6 +12,7 @@ const ADMIN_SECTION_OPEN_KEYS = {
   logs: "/nav-audit",
   "system-log": "/nav-audit",
   communities: "/nav-platform",
+  posts: "/nav-publications",
   playlists: "/nav-publications",
   opportunities: "/nav-publications",
   comments: "/nav-publications",
@@ -75,6 +76,8 @@ class MainNavigation extends Component {
   render() {
     const { location } = this.props;
     const selectedKeys = [location.pathname];
+    const hasSystemRole = Array.isArray(this.props.roles) && this.props.roles.some((role) => role?.is_system);
+    const hasPermission = (permission) => hasSystemRole || this.props.permissions.includes(permission);
 
     const base = location.pathname.split("/").filter(Boolean)[0];
     if (base) {
@@ -82,21 +85,22 @@ class MainNavigation extends Component {
     }
 
     const canSeeAdminAccess =
-      this.props.permissions.includes("users.list") ||
-      this.props.permissions.includes("roles.list");
+      hasPermission("users.list") ||
+      hasPermission("roles.list");
 
     const canSeeAudit =
-      this.props.permissions.includes("log.list") ||
-      this.props.permissions.includes("system-log.list");
+      hasPermission("log.list") ||
+      hasPermission("system-log.list");
 
-    const canSeePlatform = this.props.permissions.includes("communities.list");
+    const canSeePlatform = hasPermission("communities.list");
     const canSeePublications =
-      this.props.permissions.includes("playlists.list") ||
-      this.props.permissions.includes("opportunities.list") ||
-      this.props.permissions.includes("comments.list");
+      hasPermission("posts.list") ||
+      hasPermission("playlists.list") ||
+      hasPermission("opportunities.list") ||
+      hasPermission("comments.list");
     const canSeeModeration =
-      this.props.permissions.includes("platform-users.list") ||
-      this.props.permissions.includes("notifications.list");
+      hasPermission("platform-users.list") ||
+      hasPermission("notifications.list");
 
     return (
       <Menu
@@ -113,12 +117,12 @@ class MainNavigation extends Component {
 
         {canSeeAdminAccess && (
           <SubMenu key="/nav-access" title="Acesso e permissões" icon={<i className="fal fa-user-lock" />}>
-            {this.props.permissions.includes("users.list") && (
+            {hasPermission("users.list") && (
               <Menu.Item key="/administrator/users">
                 <NavLink to="/administrator/users">Usuários administradores</NavLink>
               </Menu.Item>
             )}
-            {this.props.permissions.includes("roles.list") && (
+            {hasPermission("roles.list") && (
               <Menu.Item key="/administrator/roles-and-permissions">
                 <NavLink to="/administrator/roles-and-permissions">Papéis e permissões</NavLink>
               </Menu.Item>
@@ -128,12 +132,12 @@ class MainNavigation extends Component {
 
         {canSeeAudit && (
           <SubMenu key="/nav-audit" title="Auditoria e monitoramento" icon={<i className="fal fa-clipboard-list-check" />}>
-            {this.props.permissions.includes("log.list") && (
+            {hasPermission("log.list") && (
               <Menu.Item key="/administrator/logs">
                 <NavLink to="/administrator/logs">Registros de alterações</NavLink>
               </Menu.Item>
             )}
-            {this.props.permissions.includes("system-log.list") && (
+            {hasPermission("system-log.list") && (
               <Menu.Item key="/administrator/system-log">
                 <NavLink to="/administrator/system-log">Registros de erros</NavLink>
               </Menu.Item>
@@ -151,17 +155,22 @@ class MainNavigation extends Component {
 
         {canSeePublications && (
           <SubMenu key="/nav-publications" title="Publicações" icon={<i className="fal fa-film-alt" />}>
-            {this.props.permissions.includes("playlists.list") && (
+            {hasPermission("posts.list") && (
+              <Menu.Item key="/administrator/posts">
+                <NavLink to="/administrator/posts">Publicações</NavLink>
+              </Menu.Item>
+            )}
+            {hasPermission("playlists.list") && (
               <Menu.Item key="/administrator/playlists">
                 <NavLink to="/administrator/playlists">Playlists</NavLink>
               </Menu.Item>
             )}
-            {this.props.permissions.includes("opportunities.list") && (
+            {hasPermission("opportunities.list") && (
               <Menu.Item key="/administrator/opportunities">
                 <NavLink to="/administrator/opportunities">Oportunidades</NavLink>
               </Menu.Item>
             )}
-            {this.props.permissions.includes("comments.list") && (
+            {hasPermission("comments.list") && (
               <Menu.Item key="/administrator/comments">
                 <NavLink to="/administrator/comments">Comentários</NavLink>
               </Menu.Item>
@@ -171,12 +180,12 @@ class MainNavigation extends Component {
 
         {canSeeModeration && (
           <SubMenu key="/nav-moderation" title="Moderação" icon={<i className="fal fa-shield-check" />}>
-            {this.props.permissions.includes("platform-users.list") && (
+            {hasPermission("platform-users.list") && (
               <Menu.Item key="/administrator/platform-users">
                 <NavLink to="/administrator/platform-users">Usuários do sistema</NavLink>
               </Menu.Item>
             )}
-            {this.props.permissions.includes("notifications.list") && (
+            {hasPermission("notifications.list") && (
               <Menu.Item key="/administrator/notifications">
                 <NavLink to="/administrator/notifications">Notificações</NavLink>
               </Menu.Item>
@@ -191,6 +200,7 @@ class MainNavigation extends Component {
 const mapStateToProps = (state, ownProps) => {
   return {
     permissions: state.auth.userData.permissions,
+    roles: state.auth.userData.roles,
   };
 };
 

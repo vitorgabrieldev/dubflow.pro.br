@@ -68,7 +68,7 @@ export default async function EditOrganizationPage({
   }
 
   const query = await searchParams;
-  const apiBase = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3030/api/v1";
+  const apiBase = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api/v1";
 
   const [organizationResponse, membersResponse] = await Promise.all([
     fetch(`${apiBase}/organizations/${slug}`, {

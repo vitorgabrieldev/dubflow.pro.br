@@ -59,8 +59,9 @@ export default function reducer(state = defaultState, action) {
 					avatar     : action.data.avatar,
 					roles      : action.data.roles.map((role) => {
 						return {
-							id  : role.id,
-							name: role.name,
+							id       : role.id,
+							name     : role.name,
+							is_system: !!role.is_system,
 						}
 					}),
 					permissions: action.data.permissions,
@@ -85,8 +86,9 @@ export default function reducer(state = defaultState, action) {
 					avatar     : action.data.avatar,
 					roles      : action.data.roles.map((role) => {
 						return {
-							id  : role.id,
-							name: role.name,
+							id       : role.id,
+							name     : role.name,
+							is_system: !!role.is_system,
 						}
 					}),
 					permissions: action.data.permissions,

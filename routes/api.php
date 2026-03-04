@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\Admin\NotificationsController as AdminNotificati
 use App\Http\Controllers\Api\V1\Admin\OpportunitiesController as AdminOpportunitiesController;
 use App\Http\Controllers\Api\V1\Admin\PermissionsController as AdminPermissionsController;
 use App\Http\Controllers\Api\V1\Admin\PlatformUsersController as AdminPlatformUsersController;
+use App\Http\Controllers\Api\V1\Admin\PostsController as AdminPostsController;
 use App\Http\Controllers\Api\V1\Admin\PlaylistsController as AdminPlaylistsController;
 use App\Http\Controllers\Api\V1\Admin\RolesController as AdminRolesController;
 use App\Http\Controllers\Api\V1\Admin\SystemLogController as AdminSystemLogController;
@@ -46,7 +47,7 @@ Route::prefix('v1')->group(function () {
 
         Route::middleware('auth:api')->group(function () {
             Route::get('/dashboard', [AdminDashboardController::class, 'index'])
-                ->middleware('permission:users.list,roles.list,log.list,system-log.list,platform-users.list,communities.list,playlists.list,opportunities.list,comments.list,notifications.list');
+                ->middleware('permission:users.list,roles.list,log.list,system-log.list,platform-users.list,communities.list,posts.list,playlists.list,opportunities.list,comments.list,notifications.list');
 
             Route::delete('/auth/logout', [AdminAuthController::class, 'logout']);
             Route::get('/auth/user', [AdminAuthController::class, 'show']);
@@ -120,6 +121,9 @@ Route::prefix('v1')->group(function () {
             Route::get('/playlists/{playlistId}', [AdminPlaylistsController::class, 'show'])->middleware('permission:playlists.show');
             Route::post('/playlists/{playlistId}', [AdminPlaylistsController::class, 'update'])->middleware('permission:playlists.edit');
             Route::delete('/playlists/{playlistId}', [AdminPlaylistsController::class, 'destroy'])->middleware('permission:playlists.delete');
+
+            Route::get('/posts', [AdminPostsController::class, 'index'])->middleware('permission:posts.list');
+            Route::get('/posts/{postId}', [AdminPostsController::class, 'show'])->middleware('permission:posts.show');
 
             Route::get('/opportunities', [AdminOpportunitiesController::class, 'index'])->middleware('permission:opportunities.list');
             Route::post('/opportunities', [AdminOpportunitiesController::class, 'store'])->middleware('permission:opportunities.create');
