@@ -28,6 +28,7 @@ import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ImageFancybox } from "@/components/ui/image-fancybox";
 import { fetchCurrentUser, resolveMediaUrl } from "@/lib/api";
 import { isLocale, type Locale } from "@/lib/i18n";
 import { getSiteUrl } from "@/lib/seo";
@@ -222,7 +223,7 @@ export default async function PublicProfilePage({
   const communities = payload.communities ?? [];
   const achievements = payload.achievements ?? [];
   const visibleCommunities = communities.slice(0, 3);
-  const visibleAchievements = achievements.slice(0, 3);
+  const visibleAchievements = achievements.slice(0, 4);
   const communityRouteParams = new URLSearchParams();
   if (isExternalPreview) {
     communityRouteParams.set("external_preview", "1");
@@ -243,6 +244,7 @@ export default async function PublicProfilePage({
   const showMoreAchievementsHref = achievementRouteParams.toString()
     ? `/${locale}/perfil/${payload.user.id}/conquistas?${achievementRouteParams.toString()}`
     : `/${locale}/perfil/${payload.user.id}/conquistas`;
+  const avatarSrc = resolveMediaUrl(payload.user.avatar_path);
   const profileUrl = `${getSiteUrl()}/${locale}/perfil/${payload.user.id}`;
   const profileSchema = {
     "@context": "https://schema.org",
@@ -250,7 +252,7 @@ export default async function PublicProfilePage({
     name,
     url: profileUrl,
     description: payload.user.bio ?? undefined,
-    image: resolveMediaUrl(payload.user.avatar_path) ?? undefined,
+    image: avatarSrc ?? undefined,
     sameAs: payload.user.website_url ? [payload.user.website_url] : undefined,
   };
 
@@ -286,6 +288,26 @@ export default async function PublicProfilePage({
   if (payload.user.recording_equipment_other?.trim()) {
     equipment.push(payload.user.recording_equipment_other.trim());
   }
+
+  const isOwnProfile = isProfileOwner && !isExternalPreview;
+  const hasInformationContent = Boolean(
+    payload.user.pronouns ||
+    locationText ||
+    dubbingLanguages.length > 0 ||
+    accents.length > 0
+  );
+  const hasWorkContent = Boolean(
+    payload.user.has_recording_equipment ||
+    weeklyAvailability.length > 0 ||
+    contactPreferences.length > 0
+  );
+  const hasAchievementsContent = achievements.length > 0;
+  const hasCommunitiesContent = communities.length > 0;
+
+  const shouldShowWorkBlock = isOwnProfile || hasWorkContent;
+  const shouldShowInformationBlock = isOwnProfile || hasInformationContent;
+  const shouldShowAchievementsBlock = isOwnProfile || hasAchievementsContent;
+  const shouldShowCommunitiesBlock = isOwnProfile || hasCommunitiesContent;
 
   return (
     <section className="space-y-4">
@@ -327,16 +349,29 @@ export default async function PublicProfilePage({
             ? { backgroundImage: `url(${coverSrc})`, backgroundSize: "cover", backgroundPosition: "center" }
             : undefined}
         >
-          <span className="absolute inset-0 bg-black/30" />
+          {coverSrc ? (
+            <ImageFancybox
+              src={coverSrc}
+              alt={`Capa do perfil de ${name}`}
+              className="absolute inset-0 z-10 h-full w-full"
+              showExpandBadge
+            >
+              <span className="block h-full w-full" />
+            </ImageFancybox>
+          ) : null}
 
-          <div className="absolute inset-x-4 bottom-4 flex flex-wrap items-end justify-between gap-3">
+          <span className="pointer-events-none absolute inset-0 z-20 bg-black/30" />
+
+          <div className="absolute inset-x-4 bottom-4 z-30 flex flex-wrap items-end justify-between gap-3">
             <div className="flex min-w-0 items-end gap-3">
-              <Avatar
-                src={resolveMediaUrl(payload.user.avatar_path)}
-                name={name}
-                size="lg"
-                className="h-20 w-20 rounded-[14px] border-2 border-white/80 shadow-xl"
-              />
+              <ImageFancybox src={avatarSrc} alt={`Avatar de ${name}`} className="rounded-[14px]">
+                <Avatar
+                  src={avatarSrc}
+                  name={name}
+                  size="lg"
+                  className="h-20 w-20 rounded-[14px] border-2 border-white/80 shadow-xl transition hover:brightness-110"
+                />
+              </ImageFancybox>
               <div className="min-w-0 text-white">
                 <p className="line-clamp-1 text-xl font-semibold">{name}</p>
                 <p className="line-clamp-1 text-sm text-white/85">
@@ -348,6 +383,8 @@ export default async function PublicProfilePage({
             {payload.user.website_url ? (
               <Link
                 href={payload.user.website_url}
+                target="_blank"
+                rel="noreferrer noopener"
                 className="inline-flex h-9 items-center rounded-[8px] border border-white/45 bg-black/25 px-3 text-sm font-semibold text-white backdrop-blur hover:bg-black/35"
               >
                 Website
@@ -435,172 +472,228 @@ export default async function PublicProfilePage({
 
           {payload.user.bio ? <p className="text-sm text-black/70">{payload.user.bio}</p> : null}
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-[8px] border border-black/10 bg-black/[0.02] p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-black/60">Informações</p>
-              <div className="mt-2 space-y-2 text-sm text-black/75">
-                {payload.user.pronouns ? <p className="block"><strong>Pronomes:</strong> {payload.user.pronouns}</p> : null}
-                {locationText ? (
-                  <div className="flex items-start gap-1.5">
-                    <MapPin size={14} className="mt-0.5 shrink-0" />
-                    <span><strong>Local:</strong> {locationText}</span>
-                  </div>
-                ) : null}
-                {dubbingLanguages.length > 0 ? (
-                  <div className="flex items-start gap-1.5">
-                    <Languages size={14} className="mt-0.5 shrink-0" />
-                    <span><strong>Idiomas:</strong> {dubbingLanguages.join(", ")}</span>
-                  </div>
-                ) : null}
-                {accents.length > 0 ? <p className="block"><strong>Sotaques:</strong> {accents.join(", ")}</p> : null}
-              </div>
-            </div>
-
-            <div className="rounded-[8px] border border-black/10 bg-black/[0.02] p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-black/60">Trabalho</p>
-              <div className="mt-2 space-y-2 text-sm text-black/75">
-                {payload.user.has_recording_equipment ? (
-                  <div className="flex items-start gap-1.5">
-                    <Mic size={14} className="mt-0.5 shrink-0" />
-                    <span><strong>Equipamentos:</strong> {equipment.length > 0 ? equipment.join(", ") : "Possui equipamento de gravação"}</span>
-                  </div>
-                ) : null}
-                {weeklyAvailability.length > 0 ? (
-                  <div className="flex items-start gap-1.5">
-                    <CalendarDays size={14} className="mt-0.5 shrink-0" />
-                    <span><strong>Disponibilidade:</strong> {weeklyAvailability.join(", ")}</span>
-                  </div>
-                ) : null}
-                {contactPreferences.length > 0 ? (
-                  <div className="flex items-start gap-1.5">
-                    <MessageSquareMore size={14} className="mt-0.5 shrink-0" />
-                    <span>
-                      <strong>Propostas:</strong>{" "}
-                      {contactPreferencesWithLinks.map((item, index) => (
-                        <span key={item.key}>
-                          {index > 0 ? ", " : ""}
-                          {item.href ? (
-                            item.href.startsWith("/") ? (
-                              <Link
-                                href={item.href}
-                                className="underline decoration-black/30 underline-offset-2 hover:decoration-black/60"
-                              >
-                                {item.label}
-                              </Link>
-                            ) : (
-                              <a
-                                href={item.href}
-                                className="underline decoration-black/30 underline-offset-2 hover:decoration-black/60"
-                                target={item.href.startsWith("http") ? "_blank" : undefined}
-                                rel={item.href.startsWith("http") ? "noreferrer noopener" : undefined}
-                              >
-                                {item.label}
-                              </a>
-                            )
-                          ) : item.value ? (
-                            `${item.label}: ${item.value}`
-                          ) : (
-                            item.label
-                          )}
+          <div className="space-y-3">
+            {shouldShowWorkBlock ? (
+              <div className="rounded-[8px] border border-black/10 bg-black/[0.02] p-3">
+                <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-black/60">
+                  <Mic size={14} />
+                  Trabalho
+                </p>
+                {hasWorkContent ? (
+                  <div className="mt-2 space-y-2 text-sm text-black/75">
+                    {payload.user.has_recording_equipment ? (
+                      <div className="flex items-start gap-1.5">
+                        <Mic size={14} className="mt-0.5 shrink-0" />
+                        <span><strong>Equipamentos:</strong> {equipment.length > 0 ? equipment.join(", ") : "Possui equipamento de gravação"}</span>
+                      </div>
+                    ) : null}
+                    {weeklyAvailability.length > 0 ? (
+                      <div className="flex items-start gap-1.5">
+                        <CalendarDays size={14} className="mt-0.5 shrink-0" />
+                        <span><strong>Disponibilidade:</strong> {weeklyAvailability.join(", ")}</span>
+                      </div>
+                    ) : null}
+                    {contactPreferences.length > 0 ? (
+                      <div className="flex items-start gap-1.5">
+                        <MessageSquareMore size={14} className="mt-0.5 shrink-0" />
+                        <span>
+                          <strong>Propostas:</strong>{" "}
+                          {contactPreferencesWithLinks.map((item, index) => (
+                            <span key={item.key}>
+                              {index > 0 ? ", " : ""}
+                              {item.href ? (
+                                item.href.startsWith("/") ? (
+                                  <Link
+                                    href={item.href}
+                                    className="underline decoration-black/30 underline-offset-2 hover:decoration-black/60"
+                                  >
+                                    {item.label}
+                                  </Link>
+                                ) : (
+                                  <a
+                                    href={item.href}
+                                    className="underline decoration-black/30 underline-offset-2 hover:decoration-black/60"
+                                    target={item.href.startsWith("http") ? "_blank" : undefined}
+                                    rel={item.href.startsWith("http") ? "noreferrer noopener" : undefined}
+                                  >
+                                    {item.label}
+                                  </a>
+                                )
+                              ) : item.value ? (
+                                `${item.label}: ${item.value}`
+                              ) : (
+                                item.label
+                              )}
+                            </span>
+                          ))}
                         </span>
-                      ))}
-                    </span>
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-[8px] border border-black/10 bg-black/[0.02] p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-black/60">
-                  <Building2 size={14} />
-                  Comunidades
-                </p>
-                <Link
-                  href={showMoreCommunitiesHref}
-                  className="text-xs font-semibold text-[var(--color-primary)] underline decoration-[var(--color-primary)]/40 underline-offset-2 hover:decoration-[var(--color-primary)]"
-                >
-                  Ver mais
-                </Link>
-              </div>
-              {communities.length === 0 ? (
-                <p className="mt-2 text-sm text-black/55">Nenhuma comunidade pública para exibir.</p>
-              ) : (
-                <div className="mt-2 space-y-2">
-                  {visibleCommunities.map((community) => (
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-sm text-black/55">Você ainda não preencheu seus dados de trabalho.</p>
                     <Link
-                      key={community.id}
-                      href={`/${locale}/organizations/${community.slug}`}
-                      className="flex items-center gap-2 rounded-[8px] border border-black/10 bg-white p-2 text-sm text-[var(--color-ink)]"
+                      href={`/${locale}/perfil/editar`}
+                      className="inline-flex h-8 items-center rounded-[8px] border border-black/10 bg-white px-3 text-xs font-semibold text-[var(--color-ink)]"
                     >
-                      <Avatar src={resolveMediaUrl(community.avatar_path)} name={community.name} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <p className="line-clamp-1 font-semibold">{community.name}</p>
-                        <p className="line-clamp-1 text-xs text-black/55">
-                          {community.posts_count ?? 0} posts • {community.playlists_count ?? 0} playlists
-                        </p>
-                      </div>
+                      Adicionar informações de trabalho
                     </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-[8px] border border-black/10 bg-black/[0.02] p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-black/60">
-                  <Trophy size={14} />
-                  Conquistas
-                </p>
-                <Link
-                  href={showMoreAchievementsHref}
-                  className="text-xs font-semibold text-[var(--color-primary)] underline decoration-[var(--color-primary)]/40 underline-offset-2 hover:decoration-[var(--color-primary)]"
-                >
-                  Ver mais
-                </Link>
+                  </div>
+                )}
               </div>
-              {achievements.length === 0 ? (
-                <p className="mt-2 text-sm text-black/55">Nenhuma conquista desbloqueada ainda.</p>
-              ) : (
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {visibleAchievements.map((achievement) => {
-                    const title =
-                      achievement.level_definition?.title
-                      ?? achievement.definition?.title
-                      ?? "Conquista";
-                    const icon =
-                      achievement.level_definition?.icon
-                      ?? achievement.definition?.icon
-                      ?? "trophy";
-                    const colorStart =
-                      achievement.level_definition?.color_start
-                      ?? achievement.definition?.color_start
-                      ?? "#4c1d95";
-                    const colorEnd =
-                      achievement.level_definition?.color_end
-                      ?? achievement.definition?.color_end
-                      ?? "#9333ea";
+            ) : null}
 
-                    return (
-                      <div
-                        key={achievement.id}
-                        className="rounded-[8px] border border-black/10 px-2 py-2 text-sm text-white shadow-[0_14px_24px_-18px_rgba(0,0,0,0.65)]"
-                        style={{ backgroundImage: `linear-gradient(135deg, ${colorStart}, ${colorEnd})` }}
-                      >
-                        <p className="line-clamp-1 flex items-center gap-1.5 font-semibold">
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/45 bg-white/18">
-                            {renderAchievementIcon(icon, 12)}
-                          </span>
-                          {title}
-                        </p>
+            {shouldShowInformationBlock ? (
+              <div className="rounded-[8px] border border-black/10 bg-black/[0.02] p-3">
+                <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-black/60">
+                  <MapPin size={14} />
+                  Informações
+                </p>
+                {hasInformationContent ? (
+                  <div className="mt-2 space-y-2 text-sm text-black/75">
+                    {payload.user.pronouns ? <p className="block"><strong>Pronomes:</strong> {payload.user.pronouns}</p> : null}
+                    {locationText ? (
+                      <div className="flex items-start gap-1.5">
+                        <MapPin size={14} className="mt-0.5 shrink-0" />
+                        <span><strong>Local:</strong> {locationText}</span>
                       </div>
-                    );
-                  })}
+                    ) : null}
+                    {dubbingLanguages.length > 0 ? (
+                      <div className="flex items-start gap-1.5">
+                        <Languages size={14} className="mt-0.5 shrink-0" />
+                        <span><strong>Idiomas:</strong> {dubbingLanguages.join(", ")}</span>
+                      </div>
+                    ) : null}
+                    {accents.length > 0 ? <p className="block"><strong>Sotaques:</strong> {accents.join(", ")}</p> : null}
+                  </div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-sm text-black/55">Você ainda não preencheu suas informações básicas.</p>
+                    <Link
+                      href={`/${locale}/perfil/editar`}
+                      className="inline-flex h-8 items-center rounded-[8px] border border-black/10 bg-white px-3 text-xs font-semibold text-[var(--color-ink)]"
+                    >
+                      Adicionar informações pessoais
+                    </Link>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {shouldShowAchievementsBlock ? (
+              <div className="rounded-[8px] border border-black/10 bg-black/[0.02] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-black/60">
+                    <Trophy size={14} />
+                    Conquistas
+                  </p>
+                  {hasAchievementsContent ? (
+                    <Link
+                      href={showMoreAchievementsHref}
+                      className="text-xs font-semibold text-[var(--color-primary)] underline decoration-[var(--color-primary)]/40 underline-offset-2 hover:decoration-[var(--color-primary)]"
+                    >
+                      Ver mais
+                    </Link>
+                  ) : null}
                 </div>
-              )}
-            </div>
+                {hasAchievementsContent ? (
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    {visibleAchievements.map((achievement) => {
+                      const title =
+                        achievement.level_definition?.title
+                        ?? achievement.definition?.title
+                        ?? "Conquista";
+                      const icon =
+                        achievement.level_definition?.icon
+                        ?? achievement.definition?.icon
+                        ?? "trophy";
+                      const colorStart =
+                        achievement.level_definition?.color_start
+                        ?? achievement.definition?.color_start
+                        ?? "#4c1d95";
+                      const colorEnd =
+                        achievement.level_definition?.color_end
+                        ?? achievement.definition?.color_end
+                        ?? "#9333ea";
+
+                      return (
+                        <div
+                          key={achievement.id}
+                          className="rounded-[8px] border border-black/10 px-2 py-2 text-sm text-white shadow-[0_14px_24px_-18px_rgba(0,0,0,0.65)]"
+                          style={{ backgroundImage: `linear-gradient(135deg, ${colorStart}, ${colorEnd})` }}
+                        >
+                          <p className="line-clamp-1 flex items-center gap-1.5 font-semibold">
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/45 bg-white/18">
+                              {renderAchievementIcon(icon, 12)}
+                            </span>
+                            {title}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-sm text-black/55">Você ainda não desbloqueou conquistas.</p>
+                    <Link
+                      href={`/${locale}/publicar`}
+                      className="inline-flex h-8 items-center rounded-[8px] border border-black/10 bg-white px-3 text-xs font-semibold text-[var(--color-ink)]"
+                    >
+                      Começar a conquistar
+                    </Link>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {shouldShowCommunitiesBlock ? (
+              <div className="rounded-[8px] border border-black/10 bg-black/[0.02] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-black/60">
+                    <Building2 size={14} />
+                    Comunidades
+                  </p>
+                  {hasCommunitiesContent ? (
+                    <Link
+                      href={showMoreCommunitiesHref}
+                      className="text-xs font-semibold text-[var(--color-primary)] underline decoration-[var(--color-primary)]/40 underline-offset-2 hover:decoration-[var(--color-primary)]"
+                    >
+                      Ver mais
+                    </Link>
+                  ) : null}
+                </div>
+                {hasCommunitiesContent ? (
+                  <div className="mt-2 space-y-2">
+                    {visibleCommunities.map((community) => (
+                      <Link
+                        key={community.id}
+                        href={`/${locale}/organizations/${community.slug}`}
+                        className="flex items-center gap-2 rounded-[8px] border border-black/10 bg-white p-2 text-sm text-[var(--color-ink)]"
+                      >
+                        <Avatar src={resolveMediaUrl(community.avatar_path)} name={community.name} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <p className="line-clamp-1 font-semibold">{community.name}</p>
+                          <p className="line-clamp-1 text-xs text-black/55">
+                            {community.posts_count ?? 0} posts • {community.playlists_count ?? 0} playlists
+                          </p>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-sm text-black/55">Você ainda não participa de nenhuma comunidade.</p>
+                    <Link
+                      href={`/${locale}/nova-organizacao`}
+                      className="inline-flex h-8 items-center rounded-[8px] border border-black/10 bg-white px-3 text-xs font-semibold text-[var(--color-ink)]"
+                    >
+                      Criar comunidade
+                    </Link>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         </CardBody>
       </Card>

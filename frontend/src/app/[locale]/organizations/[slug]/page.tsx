@@ -10,6 +10,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ImageFancybox } from "@/components/ui/image-fancybox";
 import { resolveMediaUrl } from "@/lib/api";
 import { isLocale, type Locale } from "@/lib/i18n";
 import { getSiteUrl } from "@/lib/seo";
@@ -132,24 +133,35 @@ export default async function OrganizationPage({
 
       <Card>
         <div className="relative h-32 w-full overflow-hidden sm:h-40 md:h-48">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <ImageFancybox
             src={coverImage}
             alt={`Capa da comunidade ${organization.name}`}
-            className="h-full w-full object-cover"
-            loading="eager"
-          />
-          <div className="absolute inset-0 bg-[linear-gradient(130deg,rgba(12,6,24,0.2),rgba(12,6,24,0.55))]" />
+            className="h-full w-full"
+            showExpandBadge
+          >
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={coverImage}
+                alt={`Capa da comunidade ${organization.name}`}
+                className="h-full w-full object-cover"
+                loading="eager"
+              />
+              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(130deg,rgba(12,6,24,0.2),rgba(12,6,24,0.55))]" />
+            </>
+          </ImageFancybox>
         </div>
         <CardBody className="space-y-4 p-4">
           <div className="-mt-10 flex flex-col gap-3 sm:-mt-14 sm:flex-row sm:items-end sm:justify-between">
             <div className="flex min-w-0 flex-col items-start gap-2">
-              <Avatar
-                src={avatarImage}
-                name={organization.name}
-                size="lg"
-                className="h-20 w-20 rounded-[10px] border-2 border-white bg-white shadow-lg sm:h-24 sm:w-24"
-              />
+              <ImageFancybox src={avatarImage} alt={`Avatar da comunidade ${organization.name}`} className="rounded-[10px]">
+                <Avatar
+                  src={avatarImage}
+                  name={organization.name}
+                  size="lg"
+                  className="h-20 w-20 rounded-[10px] border-2 border-white bg-white shadow-lg transition hover:brightness-110 sm:h-24 sm:w-24"
+                />
+              </ImageFancybox>
               <div className="min-w-0">
                 <p className="line-clamp-3 break-words text-xl font-semibold leading-tight text-[var(--color-ink)] sm:text-2xl">
                   {organization.name}
