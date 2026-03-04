@@ -14,9 +14,10 @@ export const CLIENT_DATA = {
 // -----------------------------------------------------------------------------
 // API
 // -----------------------------------------------------------------------------
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000/api/v1/admin";
-const DEFAULT_SOCKET_URL = "127.0.0.1:8000";
-const DEFAULT_SOCKET_AUTH = "http://127.0.0.1:8000/broadcasting/auth";
+const DEFAULT_APP_BASE_URL = ENV === "development" ? "http://127.0.0.1:8000" : "https://startup.dev.br";
+const DEFAULT_API_BASE_URL = `${DEFAULT_APP_BASE_URL}/api/v1/admin`;
+const DEFAULT_SOCKET_URL = ENV === "development" ? "127.0.0.1:8000" : "startup.dev.br";
+const DEFAULT_SOCKET_AUTH = `${DEFAULT_APP_BASE_URL}/broadcasting/auth`;
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, "");
 
