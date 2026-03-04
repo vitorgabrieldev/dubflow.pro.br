@@ -71,7 +71,7 @@ class PlatformUsersController extends Controller
     public function show(string $userUuid): PlatformUserResource
     {
         $user = $this->findUserByUuid($userUuid, true);
-        $user->load('roles:id,uuid,key,name');
+        $user->load('roles:id,uuid,name,is_system');
 
         return new PlatformUserResource($user);
     }
@@ -283,7 +283,7 @@ class PlatformUsersController extends Controller
 
         $query = User::query()
             ->withTrashed()
-            ->with('roles:id,uuid,key,name');
+            ->with('roles:id,uuid,name,is_system');
 
         $isActive = $request->input('is_active');
         if ($isActive !== null && $isActive !== '') {
@@ -339,7 +339,7 @@ class PlatformUsersController extends Controller
     {
         $query = User::query()
             ->withTrashed()
-            ->with('roles:id,uuid,key,name');
+            ->with('roles:id,uuid,name,is_system');
 
         $isActive = $request->input('is_active');
         if ($isActive !== null && $isActive !== '') {
