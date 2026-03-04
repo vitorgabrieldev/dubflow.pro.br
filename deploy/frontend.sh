@@ -34,6 +34,21 @@ fi
 
 cd "$FRONTEND_DIR"
 
+echo "[frontend] Preparing build directory"
+if [[ -d ".next" ]]; then
+  if ! rm -rf ".next" 2>/dev/null; then
+    echo "[frontend] .next possui arquivos sem permissao de escrita para '$USER'."
+    if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+      echo "[frontend] Removendo .next com sudo -n"
+      sudo -n rm -rf ".next"
+    else
+      echo "[frontend] Erro: nao foi possivel remover .next sem sudo nao-interativo."
+      echo "[frontend] Execute manualmente: sudo rm -rf \"$FRONTEND_DIR/.next\" && sudo chown -R $(id -un):$(id -gn) \"$FRONTEND_DIR\""
+      exit 1
+    fi
+  fi
+fi
+
 echo "[frontend] Runtime details"
 $NODE_BIN -v
 
