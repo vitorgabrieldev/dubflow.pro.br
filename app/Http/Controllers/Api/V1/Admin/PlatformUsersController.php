@@ -375,6 +375,12 @@ class PlatformUsersController extends Controller
             $query->withTrashed();
         }
 
-        return $query->where('uuid', $uuid)->firstOrFail();
+        return $query->where(function (Builder $builder) use ($uuid): void {
+            $builder->where('uuid', $uuid);
+
+            if (ctype_digit($uuid)) {
+                $builder->orWhere('id', (int) $uuid);
+            }
+        })->firstOrFail();
     }
 }

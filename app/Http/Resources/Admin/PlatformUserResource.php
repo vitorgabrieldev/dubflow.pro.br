@@ -13,7 +13,7 @@ class PlatformUserResource extends JsonResource
 
         return [
             'id' => $this->id,
-            'uuid' => $this->uuid,
+            'uuid' => $this->uuid ?: (string) $this->id,
             'name' => $this->name,
             'email' => $this->email,
             'username' => $this->username,
