@@ -13,6 +13,7 @@ FRONTEND_SERVICE="${FRONTEND_SERVICE:-dubflow-next}"
 SKIP_GIT_SYNC="${SKIP_GIT_SYNC:-0}"
 RUN_ADMIN_BUILD="${RUN_ADMIN_BUILD:-1}"
 NODE_BUILD_OPTIONS="${NODE_BUILD_OPTIONS:---max-old-space-size=1024}"
+SUDO_PASSWORD="${SUDO_PASSWORD:-${DEPLOY_PASSWORD:-}}"
 
 is_truthy() {
   local value="${1:-}"
@@ -34,11 +35,19 @@ apply_node_options() {
 }
 
 run_systemctl() {
-  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
-    sudo -n systemctl "$@"
-  else
-    systemctl "$@"
+  if command -v sudo >/dev/null 2>&1; then
+    if sudo -n true >/dev/null 2>&1; then
+      sudo -n systemctl "$@"
+      return 0
+    fi
+
+    if [[ -n "$SUDO_PASSWORD" ]]; then
+      printf '%s\n' "$SUDO_PASSWORD" | sudo -S -p '' systemctl "$@"
+      return 0
+    fi
   fi
+
+  systemctl "$@"
 }
 
 cd "$REPO_DIR"
