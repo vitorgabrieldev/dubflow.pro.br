@@ -364,14 +364,26 @@ export default async function PublicProfilePage({
 
           <div className="absolute inset-x-4 bottom-4 z-30 flex flex-wrap items-end justify-between gap-3">
             <div className="flex min-w-0 items-end gap-3">
-              <ImageFancybox src={avatarSrc} alt={`Avatar de ${name}`} className="rounded-[14px]">
+              {avatarSrc ? (
+                <ImageFancybox src={avatarSrc} alt={`Avatar de ${name}`} className="rounded-[14px]">
+                  <span className="relative inline-flex h-20 w-20 overflow-hidden rounded-[14px] border-2 border-white/80 shadow-xl transition hover:brightness-110">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={avatarSrc}
+                      alt={`Avatar de ${name}`}
+                      className="h-full w-full object-cover"
+                      loading="eager"
+                    />
+                  </span>
+                </ImageFancybox>
+              ) : (
                 <Avatar
                   src={avatarSrc}
                   name={name}
                   size="lg"
                   className="h-20 w-20 rounded-[14px] border-2 border-white/80 shadow-xl transition hover:brightness-110"
                 />
-              </ImageFancybox>
+              )}
               <div className="min-w-0 text-white">
                 <p className="line-clamp-1 text-xl font-semibold">{name}</p>
                 <p className="line-clamp-1 text-sm text-white/85">
