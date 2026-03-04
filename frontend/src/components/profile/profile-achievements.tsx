@@ -109,7 +109,8 @@ export function ProfileAchievementsPreview({
               style={
                 unlocked
                   ? {
-                      boxShadow: `0 10px 20px -18px ${withAlpha(colorStart, 0.85)}`,
+                      boxShadow: `0 18px 32px -24px ${withAlpha(colorStart, 0.9)}`,
+                      background: `linear-gradient(145deg, ${withAlpha(colorStart, 0.22)} 0%, ${withAlpha(colorEnd, 0.16)} 38%, rgba(255,255,255,0.98) 100%)`,
                     }
                   : undefined
               }
@@ -244,10 +245,10 @@ function AchievementCard({ achievement, index }: { achievement: AchievementItem;
       style={{
         animationDelay: `${Math.min(index * 30, 280)}ms`,
         boxShadow: unlocked
-          ? `0 26px 48px -34px ${withAlpha(colorStart, 0.92)}, inset 0 0 0 1px ${withAlpha(colorEnd, 0.38)}`
+          ? `0 30px 56px -36px ${withAlpha(colorStart, 0.96)}, inset 0 0 0 1px ${withAlpha(colorEnd, 0.45)}`
           : "inset 0 0 0 1px rgba(0,0,0,0.04)",
         background: unlocked
-          ? `linear-gradient(145deg, ${withAlpha(colorStart, 0.12)} 0%, ${withAlpha(colorEnd, 0.08)} 35%, rgba(255,255,255,0.95) 100%)`
+          ? `linear-gradient(145deg, ${withAlpha(colorStart, 0.24)} 0%, ${withAlpha(colorEnd, 0.18)} 40%, rgba(255,255,255,0.95) 100%)`
           : undefined,
       }}
     >

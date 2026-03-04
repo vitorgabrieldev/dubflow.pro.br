@@ -17,7 +17,7 @@ import {
 import type { ReactNode } from "react";
 
 import { Card, CardBody } from "@/components/ui/card";
-import { fetchNotifications, resolveMediaUrl } from "@/lib/api";
+import { fetchNotifications, markAllNotificationsAsRead, resolveMediaUrl } from "@/lib/api";
 import { isLocale } from "@/lib/i18n";
 import type { NotificationItem } from "@/types/api";
 
@@ -42,6 +42,7 @@ export default async function NotificationsPage({
     redirect(`/${locale}/entrar`);
   }
 
+  await markAllNotificationsAsRead(token);
   const payload = await fetchNotifications(token);
 
   if (!payload) {
@@ -141,7 +142,6 @@ export default async function NotificationsPage({
             const canRespondOwnerTransfer =
               isOwnerTransferNotification &&
               Boolean(ownerTransferOrganizationSlug) &&
-              !notification.read_at &&
               ownerTransferStatus !== "accepted" &&
               ownerTransferStatus !== "rejected";
             const canViewTransferredCommunity =

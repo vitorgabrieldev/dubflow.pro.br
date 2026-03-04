@@ -14,6 +14,7 @@ import {
   MessageCircle,
   Pencil,
   Paperclip,
+  Reply,
   RotateCcw,
   ShieldCheck,
   Trash2,
@@ -96,6 +97,7 @@ const CHAT_POLL_CONNECTED_MS = 20_000;
 const CHAT_POLL_FALLBACK_MS = 3_000;
 const CHAT_CONVERSATIONS_PER_PAGE = 20;
 const CHAT_MAX_ATTACHMENTS = 8;
+const CHAT_REPLY_MARKER_PATTERN = /^\[\[reply:(\d+)]]\s*\n?/;
 
 export function ChatScreen({ currentUserId, initialPeerUserId, initialConversationId }: ChatScreenProps) {
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
@@ -107,8 +109,10 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
   const [error, setError] = useState<string | null>(null);
   const [composerText, setComposerText] = useState("");
   const [composerFiles, setComposerFiles] = useState<File[]>([]);
+  const [replyingToMessageId, setReplyingToMessageId] = useState<number | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editingBody, setEditingBody] = useState("");
+  const [editingReplyToMessageId, setEditingReplyToMessageId] = useState<number | null>(null);
   const [typingLabel, setTypingLabel] = useState<string | null>(null);
   const [openMessageMenuId, setOpenMessageMenuId] = useState<number | null>(null);
   const [openConversationMenu, setOpenConversationMenu] = useState(false);
@@ -152,6 +156,14 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
 
     return messagesByConversation[activeConversationId] ?? [];
   }, [activeConversationId, messagesByConversation]);
+
+  const replyingToMessage = useMemo(() => {
+    if (!replyingToMessageId) {
+      return null;
+    }
+
+    return activeMessages.find((message) => message.id === replyingToMessageId) ?? null;
+  }, [activeMessages, replyingToMessageId]);
   const canUsePortal = typeof window !== "undefined";
 
   const resolvePeerBaseName = useCallback((conversation: ChatConversation | null) => {
@@ -503,6 +515,10 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
 
     setOpenConversationMenu(false);
     setOpenMessageMenuId(null);
+    setReplyingToMessageId(null);
+    setEditingMessageId(null);
+    setEditingBody("");
+    setEditingReplyToMessageId(null);
 
     void loadMessages(activeConversationId);
   }, [activeConversationId, loadMessages]);
@@ -702,8 +718,9 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
 
     try {
       const formData = new FormData();
-      if (composerText.trim().length > 0) {
-        formData.set("body", composerText);
+      const normalizedBody = buildReplyBody(composerText, replyingToMessageId);
+      if (normalizedBody !== null) {
+        formData.set("body", normalizedBody);
       }
 
       for (const file of composerFiles) {
@@ -755,6 +772,7 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
 
       setComposerText("");
       setComposerFiles([]);
+      setReplyingToMessageId(null);
       setFileLimitError(null);
       setError(null);
       void emitTyping(false);
@@ -786,7 +804,9 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ body: editingBody }),
+      body: JSON.stringify({
+        body: buildReplyBody(editingBody, editingReplyToMessageId) ?? "",
+      }),
     });
 
     const payload = (await response.json().catch(() => ({}))) as MessageMutationPayload;
@@ -803,6 +823,7 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
 
     setEditingMessageId(null);
     setEditingBody("");
+    setEditingReplyToMessageId(null);
   }
 
   async function removeMessage(messageId: number) {
@@ -1022,12 +1043,7 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
                     {regularConversations.map((conversation) => {
                       const isActive = conversation.id === activeConversationId;
                       const peerName = resolvePeerDisplayName(conversation);
-                      const preview = conversation.last_message?.is_deleted
-                        ? "Mensagem removida"
-                        : conversation.last_message?.body?.trim() ||
-                          (conversation.last_message?.attachments?.length
-                            ? `${conversation.last_message.attachments.length} anexo(s)`
-                            : "Sem mensagens ainda");
+                      const preview = messageReplyPreview(conversation.last_message, "Sem mensagens ainda");
                       const lastAt = conversation.last_message?.created_at ?? conversation.updated_at ?? null;
 
                       return (
@@ -1228,6 +1244,12 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
                       {activeMessages.map((message) => {
                         const mine = message.sender_user_id === currentUserId;
                         const editing = editingMessageId === message.id;
+                        const parsedMessageBody = parseReplyBody(message.body);
+                        const messageBody = parsedMessageBody.text;
+                        const replyTargetMessage = parsedMessageBody.replyToMessageId
+                          ? activeMessages.find((item) => item.id === parsedMessageBody.replyToMessageId) ?? null
+                          : null;
+                        const replyPreview = messageReplyPreview(replyTargetMessage, "Mensagem original indisponível");
                         const senderName =
                           message.sender?.stage_name?.trim() ||
                           message.sender?.name ||
@@ -1241,7 +1263,18 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
                             {!mine ? <Avatar src={senderAvatar} name={senderName} size="sm" className="shrink-0" /> : null}
 
                             {mine && !message.is_deleted && !editing ? (
-                              <div className="relative flex items-center">
+                              <div className="relative flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  aria-label="Responder mensagem"
+                                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-[var(--color-border-soft)] bg-white text-black/65 shadow-sm opacity-0 transition group-hover:opacity-100 hover:bg-black/5"
+                                  onClick={() => {
+                                    setReplyingToMessageId(message.id);
+                                    setOpenMessageMenuId(null);
+                                  }}
+                                >
+                                  <Reply size={13} />
+                                </button>
                                 <button
                                   type="button"
                                   aria-label="Ações da mensagem"
@@ -1259,8 +1292,10 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
                                       type="button"
                                       className="flex w-full cursor-pointer items-center gap-2 rounded-[8px] px-2 py-2 text-left text-xs font-semibold text-black/75 hover:bg-black/5"
                                       onClick={() => {
+                                        const editingDraft = parseReplyBody(message.body);
                                         setEditingMessageId(message.id);
-                                        setEditingBody(message.body ?? "");
+                                        setEditingBody(editingDraft.text);
+                                        setEditingReplyToMessageId(editingDraft.replyToMessageId);
                                         setOpenMessageMenuId(null);
                                       }}
                                     >
@@ -1281,6 +1316,17 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
                                   </div>
                                 ) : null}
                               </div>
+                            ) : null}
+
+                            {!mine && !message.is_deleted && !editing ? (
+                              <button
+                                type="button"
+                                aria-label="Responder mensagem"
+                                className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-[var(--color-border-soft)] bg-white text-black/65 shadow-sm opacity-0 transition group-hover:opacity-100 hover:bg-black/5"
+                                onClick={() => setReplyingToMessageId(message.id)}
+                              >
+                                <Reply size={13} />
+                              </button>
                             ) : null}
 
                             <article
@@ -1321,6 +1367,7 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
                                       onClick={() => {
                                         setEditingMessageId(null);
                                         setEditingBody("");
+                                        setEditingReplyToMessageId(null);
                                       }}
                                     >
                                       Cancelar
@@ -1329,9 +1376,26 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
                                 </div>
                               ) : (
                                 <>
-                                  <p className="whitespace-pre-wrap text-[var(--color-ink)]">
-                                    {message.is_deleted ? <strong>Mensagem removida</strong> : message.body ?? ""}
-                                  </p>
+                                  {!message.is_deleted && parsedMessageBody.replyToMessageId ? (
+                                    <div
+                                      className={`mb-2 rounded-[8px] border px-2 py-1.5 text-xs ${
+                                        mine
+                                          ? "border-[var(--color-primary)]/35 bg-white/60 text-black/65"
+                                          : "border-black/10 bg-black/[0.03] text-black/60"
+                                      }`}
+                                    >
+                                      <p className="font-semibold uppercase tracking-wide text-[10px]">Resposta</p>
+                                      <p className="line-clamp-2 whitespace-pre-wrap">{replyPreview}</p>
+                                    </div>
+                                  ) : null}
+
+                                  {message.is_deleted ? (
+                                    <p className="whitespace-pre-wrap text-[var(--color-ink)]">
+                                      <strong>Mensagem removida</strong>
+                                    </p>
+                                  ) : messageBody.trim().length > 0 ? (
+                                    <p className="whitespace-pre-wrap text-[var(--color-ink)]">{messageBody}</p>
+                                  ) : null}
 
                                   {!message.is_deleted && imageAttachments.length > 0 ? (
                                     <ChatImageAttachmentGrid
@@ -1399,6 +1463,25 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
                 {!activeConversation.is_blocked_by_me ? (
                   <div className="border-t border-[var(--color-border-soft)] px-4 py-3">
                     <div className="space-y-2">
+                      {replyingToMessageId ? (
+                        <div className="flex items-start justify-between gap-3 rounded-[10px] border border-[var(--color-primary)]/25 bg-[var(--color-primary-soft)]/70 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-ink)]">Respondendo</p>
+                            <p className="line-clamp-2 whitespace-pre-wrap text-xs text-black/70">
+                              {messageReplyPreview(replyingToMessage, "Mensagem original indisponível")}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-[var(--color-border-soft)] bg-white text-black/60 hover:bg-black/5"
+                            onClick={() => setReplyingToMessageId(null)}
+                            aria-label="Cancelar resposta"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ) : null}
+
                       {composerFiles.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
                           {composerFiles.map((file, index) => (
@@ -1633,6 +1716,57 @@ function ChatImageAttachmentGrid({ attachments, onOpen }: ChatImageAttachmentGri
       })}
     </div>
   );
+}
+
+function parseReplyBody(body: string | null | undefined): { replyToMessageId: number | null; text: string } {
+  if (!body) {
+    return { replyToMessageId: null, text: "" };
+  }
+
+  const match = body.match(CHAT_REPLY_MARKER_PATTERN);
+  if (!match) {
+    return { replyToMessageId: null, text: body };
+  }
+
+  const parsedReplyId = Number.parseInt(match[1] ?? "", 10);
+  return {
+    replyToMessageId: Number.isFinite(parsedReplyId) && parsedReplyId > 0 ? parsedReplyId : null,
+    text: body.replace(CHAT_REPLY_MARKER_PATTERN, ""),
+  };
+}
+
+function buildReplyBody(body: string, replyToMessageId: number | null): string | null {
+  const normalizedBody = body.trim();
+
+  if (replyToMessageId && replyToMessageId > 0) {
+    return normalizedBody.length > 0
+      ? `[[reply:${replyToMessageId}]]\n${normalizedBody}`
+      : `[[reply:${replyToMessageId}]]`;
+  }
+
+  return normalizedBody.length > 0 ? normalizedBody : null;
+}
+
+function messageReplyPreview(message: ChatMessage | null, fallback: string): string {
+  if (!message) {
+    return fallback;
+  }
+
+  if (message.is_deleted) {
+    return "Mensagem removida";
+  }
+
+  const parsed = parseReplyBody(message.body);
+  const text = parsed.text.trim();
+  if (text.length > 0) {
+    return text;
+  }
+
+  if (message.attachments.length > 0) {
+    return `${message.attachments.length} anexo(s)`;
+  }
+
+  return fallback;
 }
 
 function formatTime(value?: string | null) {
