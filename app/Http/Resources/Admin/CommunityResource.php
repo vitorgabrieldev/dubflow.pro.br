@@ -25,7 +25,7 @@ class CommunityResource extends JsonResource
             'is_active' => (bool) ($this->is_active ?? true),
             'owner' => $owner ? [
                 'id' => $owner->id,
-                'uuid' => $owner->uuid,
+                'uuid' => $owner->uuid ?: (string) $owner->id,
                 'name' => $owner->name,
                 'email' => $owner->email,
             ] : null,

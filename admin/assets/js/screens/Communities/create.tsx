@@ -8,14 +8,41 @@ import { UIDrawerForm, UIUpload } from "./../../components";
 const formId = `form-drawer-${Math.floor(Math.random() * 10001)}`;
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-const normalizeSlug = (value = "") => value
+const normalizeSlugInput = (value = "") => value
 	.toString()
 	.toLowerCase()
 	.normalize("NFD")
 	.replace(/[\u0300-\u036f]/g, "")
 	.replace(/[^a-z0-9]+/g, "-")
-	.replace(/^-+|-+$/g, "")
 	.replace(/-{2,}/g, "-");
+
+const normalizeSlugSubmit = (value = "") => normalizeSlugInput(value).replace(/^-+|-+$/g, "");
+
+const extractUploadFile = async (file, fallbackBaseName = "upload") => {
+	if( !file ) return null;
+	if( file instanceof File || file instanceof Blob ) return file;
+	if( file.originFileObj && (file.originFileObj instanceof File || file.originFileObj instanceof Blob) ) {
+		return file.originFileObj;
+	}
+
+	if( typeof file.url === "string" && /^blob:/i.test(file.url) ) {
+		try {
+			const response = await fetch(file.url);
+			const blob = await response.blob();
+			const extension = String(file.extension || "bin").toLowerCase();
+			const normalizedExtension = extension === "jpg" ? "jpeg" : extension;
+			const mimeFromFileType = file.fileType === "image" ? `image/${normalizedExtension}` : "application/octet-stream";
+			const type = blob.type || mimeFromFileType;
+			const fileName = `${fallbackBaseName}.${extension}`;
+
+			return new File([blob], fileName, {type});
+		} catch (error) {
+			return null;
+		}
+	}
+
+	return null;
+};
 
 class Create extends Component {
 	static propTypes = {
@@ -71,27 +98,27 @@ class Create extends Component {
 				return;
 			}
 
-			this.setState({slugTouched: true});
+				this.setState({slugTouched: true});
 
-			const normalized = normalizeSlug(changedValues.slug || "");
-			if( normalized !== (changedValues.slug || "") && this.form ) {
-				this.isAutoSlugUpdate = true;
-				this.form.setFieldsValue({slug: normalized});
+				const normalized = normalizeSlugInput(changedValues.slug || "");
+				if( normalized !== (changedValues.slug || "") && this.form ) {
+					this.isAutoSlugUpdate = true;
+					this.form.setFieldsValue({slug: normalized});
 			}
 
 			return;
 		}
 
-		if( changedValues.hasOwnProperty("name") && !this.state.slugTouched && this.form ) {
-			const normalizedFromName = normalizeSlug(changedValues.name || "");
-			if( (allValues.slug || "") !== normalizedFromName ) {
-				this.isAutoSlugUpdate = true;
-				this.form.setFieldsValue({slug: normalizedFromName});
+			if( changedValues.hasOwnProperty("name") && !this.state.slugTouched && this.form ) {
+				const normalizedFromName = normalizeSlugInput(changedValues.name || "");
+				if( (allValues.slug || "") !== normalizedFromName ) {
+					this.isAutoSlugUpdate = true;
+					this.form.setFieldsValue({slug: normalizedFromName});
 			}
 		}
 	};
 
-	onFinish = (values) => {
+	onFinish = async (values) => {
 		const payload = {
 			...values,
 			name      : (values.name || "").trim(),
@@ -99,7 +126,7 @@ class Create extends Component {
 		};
 
 		if( payload.slug ) {
-			payload.slug = normalizeSlug(payload.slug);
+			payload.slug = normalizeSlugSubmit(payload.slug);
 		}
 
 		if( !payload.name || !payload.owner_uuid ) {
@@ -115,12 +142,14 @@ class Create extends Component {
 
 		if( avatar?.files?.length ) {
 			const avatarFile = avatar.files[0];
-			if( !avatarFile.uuid ) payload.avatar = avatarFile;
+			const avatarToUpload = await extractUploadFile(avatarFile, "community-avatar");
+			if( avatarToUpload ) payload.avatar = avatarToUpload;
 		}
 
 		if( cover?.files?.length ) {
 			const coverFile = cover.files[0];
-			if( !coverFile.uuid ) payload.cover = coverFile;
+			const coverToUpload = await extractUploadFile(coverFile, "community-cover");
+			if( coverToUpload ) payload.cover = coverToUpload;
 		}
 
 		this.setState({isSending: true});

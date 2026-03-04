@@ -83,7 +83,7 @@ class CommunitiesController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'owner_uuid' => ['required', 'uuid', Rule::exists('users', 'uuid')],
+            'owner_uuid' => ['required', 'string'],
             'avatar' => ['sometimes', 'nullable', 'image', 'mimes:jpeg,png,webp', 'max:5120'],
             'cover' => ['sometimes', 'nullable', 'image', 'mimes:jpeg,png,webp', 'max:10240'],
             'name' => ['required', 'string', 'max:255', Rule::unique('organizations', 'name')],
@@ -95,7 +95,7 @@ class CommunitiesController extends Controller
             'is_active' => ['sometimes', 'boolean'],
         ]);
 
-        $owner = User::query()->where('uuid', $validated['owner_uuid'])->firstOrFail();
+        $owner = $this->findUserByUuidOrId((string) $validated['owner_uuid']);
         $slug = $this->resolveUniqueSlug($validated['slug'] ?? $validated['name']);
 
         $community = DB::transaction(function () use ($request, $validated, $owner, $slug): Organization {
@@ -157,7 +157,7 @@ class CommunitiesController extends Controller
         $before = $community->replicate();
 
         $validated = $request->validate([
-            'owner_uuid' => ['sometimes', 'nullable', 'uuid', Rule::exists('users', 'uuid')],
+            'owner_uuid' => ['sometimes', 'nullable', 'string'],
             'avatar' => ['sometimes', 'nullable', 'image', 'mimes:jpeg,png,webp', 'max:5120'],
             'cover' => ['sometimes', 'nullable', 'image', 'mimes:jpeg,png,webp', 'max:10240'],
             'remove_avatar' => ['sometimes', 'boolean'],
@@ -173,7 +173,7 @@ class CommunitiesController extends Controller
 
         DB::transaction(function () use ($request, $validated, $community): void {
             if (array_key_exists('owner_uuid', $validated) && ! empty($validated['owner_uuid'])) {
-                $owner = User::query()->where('uuid', $validated['owner_uuid'])->firstOrFail();
+                $owner = $this->findUserByUuidOrId((string) $validated['owner_uuid']);
 
                 $community->owner_user_id = $owner->id;
 
@@ -361,11 +361,11 @@ class CommunitiesController extends Controller
     public function addFollower(Request $request, string $communityId): JsonResponse
     {
         $validated = $request->validate([
-            'user_uuid' => ['required', 'uuid', Rule::exists('users', 'uuid')],
+            'user_uuid' => ['required', 'string'],
         ]);
 
         $community = $this->findCommunityById($communityId, true);
-        $user = User::query()->where('uuid', $validated['user_uuid'])->firstOrFail();
+        $user = $this->findUserByUuidOrId((string) $validated['user_uuid']);
 
         if (! $user->is_active) {
             return response()->json([
@@ -404,7 +404,7 @@ class CommunitiesController extends Controller
     public function removeFollower(string $communityId, string $userUuid): JsonResponse
     {
         $community = $this->findCommunityById($communityId, true);
-        $user = User::query()->withTrashed()->where('uuid', $userUuid)->firstOrFail();
+        $user = $this->findUserByUuidOrId($userUuid, true);
 
         $follower = OrganizationFollow::query()
             ->where('organization_id', $community->id)
@@ -438,7 +438,7 @@ class CommunitiesController extends Controller
         ]);
 
         $community = $this->findCommunityById($communityId, true);
-        $user = User::query()->withTrashed()->where('uuid', $userUuid)->firstOrFail();
+        $user = $this->findUserByUuidOrId($userUuid, true);
 
         $follower = OrganizationFollow::query()
             ->where('organization_id', $community->id)
@@ -756,7 +756,7 @@ class CommunitiesController extends Controller
         }
 
         $community = $this->findCommunityById($communityId, true);
-        $user = User::query()->withTrashed()->where('uuid', $userUuid)->firstOrFail();
+        $user = $this->findUserByUuidOrId($userUuid, true);
 
         $collaborator = OrganizationMember::query()
             ->where('organization_id', $community->id)
@@ -816,7 +816,7 @@ class CommunitiesController extends Controller
     public function removeCollaborator(string $communityId, string $userUuid): JsonResponse
     {
         $community = $this->findCommunityById($communityId, true);
-        $user = User::query()->withTrashed()->where('uuid', $userUuid)->firstOrFail();
+        $user = $this->findUserByUuidOrId($userUuid, true);
 
         $collaborator = OrganizationMember::query()
             ->where('organization_id', $community->id)
@@ -896,7 +896,7 @@ class CommunitiesController extends Controller
             'is_public' => ['sometimes', 'integer', 'in:0,1'],
             'is_verified' => ['sometimes', 'integer', 'in:0,1'],
             'is_active' => ['sometimes', 'integer', 'in:0,1'],
-            'owner_uuid' => ['sometimes', 'nullable', 'uuid'],
+            'owner_uuid' => ['sometimes', 'nullable', 'string'],
             'with_deleted' => ['sometimes', 'boolean'],
             'created_at' => ['sometimes', 'array'],
             'created_at.*' => ['sometimes', 'date_format:Y-m-d\TH:i:sP'],
@@ -949,7 +949,7 @@ class CommunitiesController extends Controller
         }
 
         if ($request->filled('owner_uuid')) {
-            $ownerId = User::query()->where('uuid', $request->string('owner_uuid')->toString())->value('id');
+            $ownerId = $this->resolveUserIdByUuidOrId($request->string('owner_uuid')->toString());
             if ($ownerId) {
                 $query->where('owner_user_id', $ownerId);
             } else {
@@ -1001,5 +1001,35 @@ class CommunitiesController extends Controller
         }
 
         return $candidate;
+    }
+
+    private function findUserByUuidOrId(string $uuidOrId, bool $withDeleted = false): User
+    {
+        $query = User::query();
+
+        if ($withDeleted) {
+            $query->withTrashed();
+        }
+
+        return $query->where(function (Builder $builder) use ($uuidOrId): void {
+            $builder->where('uuid', $uuidOrId);
+
+            if (ctype_digit($uuidOrId)) {
+                $builder->orWhere('id', (int) $uuidOrId);
+            }
+        })->firstOrFail();
+    }
+
+    private function resolveUserIdByUuidOrId(string $uuidOrId): ?int
+    {
+        return User::query()
+            ->where(function (Builder $builder) use ($uuidOrId): void {
+                $builder->where('uuid', $uuidOrId);
+
+                if (ctype_digit($uuidOrId)) {
+                    $builder->orWhere('id', (int) $uuidOrId);
+                }
+            })
+            ->value('id');
     }
 }

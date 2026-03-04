@@ -19,7 +19,6 @@ import {
 // -----------------------------------------------------------------------------
 export const API_HEADER_DEFAULT = {
 	Accept        : "application/json",
-	"Content-Type": "application/json",
 	Language      : "pt",
 };
 
@@ -80,6 +79,22 @@ const setRequestAuthorizationHeader = (config, value) => {
 // Errors
 // -----------------------------------------------------------------------------
 api.interceptors.request.use((config) => {
+	const isFormDataRequest = typeof FormData !== "undefined" && config?.data instanceof FormData;
+
+	if( isFormDataRequest )
+	{
+		if( typeof config?.headers?.delete === "function" )
+		{
+			config.headers.delete("Content-Type");
+			config.headers.delete("content-type");
+		}
+		else if( config?.headers )
+		{
+			delete config.headers["Content-Type"];
+			delete config.headers["content-type"];
+		}
+	}
+
 	if( !getRequestAuthorizationHeader(config) )
 	{
 		const access_token = store.getState().auth.access_token;
