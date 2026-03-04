@@ -6,6 +6,7 @@ import { Film, Layers3, Mic2, PencilLine, UserPlus } from "lucide-react";
 import { FollowOrganizationButton } from "@/components/community/follow-organization-button";
 import { PostCard } from "@/components/feed/post-card";
 import { OrganizationDubbingTestsList } from "@/components/opportunity/organization-dubbing-tests-list";
+import { Avatar } from "@/components/ui/avatar";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -154,15 +155,12 @@ export default async function OrganizationPage({
           <div className="-mt-10 flex flex-col gap-3 sm:-mt-14 sm:flex-row sm:items-end sm:justify-between">
             <div className="flex min-w-0 flex-col items-start gap-2">
               <ImageFancybox src={avatarImage} alt={`Avatar da comunidade ${organization.name}`} className="rounded-[10px]">
-                <span className="relative inline-flex h-20 w-20 overflow-hidden rounded-[10px] border-2 border-white bg-white shadow-lg transition hover:brightness-110 sm:h-24 sm:w-24">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={avatarImage}
-                    alt={`Avatar da comunidade ${organization.name}`}
-                    className="h-full w-full object-cover"
-                    loading="eager"
-                  />
-                </span>
+                <Avatar
+                  src={avatarImage}
+                  name={organization.name}
+                  size="lg"
+                  className="h-20 w-20 rounded-[10px] border-2 border-white bg-white shadow-lg transition hover:brightness-110 sm:h-24 sm:w-24"
+                />
               </ImageFancybox>
               <div className="min-w-0">
                 <p className="line-clamp-3 break-words text-xl font-semibold leading-tight text-[var(--color-ink)] sm:text-2xl">
