@@ -12,7 +12,8 @@ REVERB_SERVICE="${REVERB_SERVICE:-dubflow-reverb}"
 BACKEND_SERVICE="${BACKEND_SERVICE:-}"
 RUN_BACKEND_TESTS="${RUN_BACKEND_TESTS:-0}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-1}"
-RUN_ADMIN_BUILD="${RUN_ADMIN_BUILD:-1}"
+RUN_ADMIN_BUILD="${RUN_ADMIN_BUILD:-0}"
+NODE_BUILD_OPTIONS="${NODE_BUILD_OPTIONS:---max-old-space-size=1024}"
 FORCE_GIT_RESTORE="${FORCE_GIT_RESTORE:-1}"
 ALLOW_SERVICE_RESTART_FAILURE="${ALLOW_SERVICE_RESTART_FAILURE:-1}"
 
@@ -20,6 +21,19 @@ is_truthy() {
   local value="${1:-}"
   value="${value,,}"
   [[ "$value" == "1" || "$value" == "true" || "$value" == "yes" || "$value" == "on" ]]
+}
+
+apply_node_options() {
+  local extra_options="${1:-}"
+  if [[ -z "$extra_options" ]]; then
+    return 0
+  fi
+
+  if [[ -n "${NODE_OPTIONS:-}" ]]; then
+    export NODE_OPTIONS="${extra_options} ${NODE_OPTIONS}"
+  else
+    export NODE_OPTIONS="${extra_options}"
+  fi
 }
 
 run_systemctl() {
@@ -100,6 +114,7 @@ if is_truthy "$RUN_ADMIN_BUILD"; then
     exit 1
   fi
 
+  apply_node_options "$NODE_BUILD_OPTIONS"
   echo "[backend] Building admin assets"
   $NPM_BIN --prefix admin ci
   $NPM_BIN --prefix admin run build

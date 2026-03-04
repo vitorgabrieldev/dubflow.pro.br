@@ -169,6 +169,8 @@ jobs:
             export QUEUE_SERVICE="${{ secrets.QUEUE_SERVICE }}"
             export REVERB_SERVICE="${{ secrets.REVERB_SERVICE }}"
             export BACKEND_SERVICE="${{ secrets.BACKEND_SERVICE }}"
+            export RUN_ADMIN_BUILD=0
+            export NODE_BUILD_OPTIONS="${{ secrets.NODE_BUILD_OPTIONS }}"
             export ALLOW_SERVICE_RESTART_FAILURE=1
             bash "${{ secrets.REPO_DIR }}/deploy/backend.sh"
 
@@ -187,6 +189,8 @@ jobs:
             export QUEUE_SERVICE="${{ secrets.QUEUE_SERVICE }}"
             export REVERB_SERVICE="${{ secrets.REVERB_SERVICE }}"
             export BACKEND_SERVICE="${{ secrets.BACKEND_SERVICE }}"
+            export RUN_ADMIN_BUILD=0
+            export NODE_BUILD_OPTIONS="${{ secrets.NODE_BUILD_OPTIONS }}"
             export ALLOW_SERVICE_RESTART_FAILURE=1
             bash "${{ secrets.REPO_DIR }}/deploy/backend.sh"
 
@@ -232,10 +236,13 @@ jobs:
             export DEPLOY_REF="${{ github.event.inputs.deploy_ref }}"
             export REPO_DIR="${{ secrets.REPO_DIR }}"
             export FRONTEND_DIR="${{ secrets.FRONTEND_DIR }}"
+            export ADMIN_DIR="${{ secrets.REPO_DIR }}/admin"
             export REPO_REMOTE="${{ secrets.DEPLOY_GIT_REMOTE }}"
             export FRONTEND_SERVICE="${{ secrets.FRONTEND_SERVICE }}"
             export PM2_APP="${{ secrets.FRONTEND_PM2_APP }}"
             export SKIP_GIT_SYNC=1
+            export RUN_ADMIN_BUILD=1
+            export NODE_BUILD_OPTIONS="${{ secrets.NODE_BUILD_OPTIONS }}"
             bash "${{ secrets.REPO_DIR }}/deploy/frontend.sh"
 
       - name: Deploy frontend via SSH password
@@ -250,10 +257,13 @@ jobs:
             export DEPLOY_REF="${{ github.event.inputs.deploy_ref }}"
             export REPO_DIR="${{ secrets.REPO_DIR }}"
             export FRONTEND_DIR="${{ secrets.FRONTEND_DIR }}"
+            export ADMIN_DIR="${{ secrets.REPO_DIR }}/admin"
             export REPO_REMOTE="${{ secrets.DEPLOY_GIT_REMOTE }}"
             export FRONTEND_SERVICE="${{ secrets.FRONTEND_SERVICE }}"
             export PM2_APP="${{ secrets.FRONTEND_PM2_APP }}"
             export SKIP_GIT_SYNC=1
+            export RUN_ADMIN_BUILD=1
+            export NODE_BUILD_OPTIONS="${{ secrets.NODE_BUILD_OPTIONS }}"
             bash "${{ secrets.REPO_DIR }}/deploy/frontend.sh"
 
   smoke:
