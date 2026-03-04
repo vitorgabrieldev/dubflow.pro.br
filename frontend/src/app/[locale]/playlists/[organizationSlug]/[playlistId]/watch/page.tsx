@@ -31,7 +31,7 @@ export default async function PlaylistWatchPage({
 
   const cookieStore = await cookies();
   const token = cookieStore.get("ed_token")?.value;
-  const apiBase = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3030/api/v1";
+  const apiBase = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api/v1";
 
   const initialEpisodeIdValue = Number.parseInt(query.episode ?? "", 10);
   const initialEpisodeId = Number.isFinite(initialEpisodeIdValue) ? initialEpisodeIdValue : null;

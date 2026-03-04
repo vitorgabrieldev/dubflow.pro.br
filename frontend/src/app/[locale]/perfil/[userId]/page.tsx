@@ -196,7 +196,7 @@ export default async function PublicProfilePage({
   const isExternalPreview = requestedExternalPreview && isProfileOwner;
   const isOwnerView = requestedOwnerView && isProfileOwner;
   const requestToken = isExternalPreview ? undefined : token;
-  const apiBase = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3030/api/v1";
+  const apiBase = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api/v1";
 
   const response = await fetch(`${apiBase}/users/${userId}?per_page=20`, {
     headers: {

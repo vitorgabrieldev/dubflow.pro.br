@@ -317,15 +317,7 @@ class Index extends Component {
 						data={this.state.data}
 						pagination={this.state.pagination}
 						columns={this.columns()}
-						buttons={[
-							{
-								visible: this.props.permissions.includes(config.permissionPrefix + ".export"),
-								onClick: () => this.fetchGetAll(true, true),
-								title  : this.state.isExporting ? "Exportando" : "Exportar",
-								icon   : <i className="fal fa-file-export" />,
-								loading: this.state.isExporting,
-							},
-						]}
+						buttons={[]}
 					/>
 				</div>
 				<ModalShow

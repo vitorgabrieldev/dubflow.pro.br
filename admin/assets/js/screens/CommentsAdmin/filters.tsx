@@ -1,7 +1,8 @@
 import React, { Component } from "react";
 import * as PropTypes from "prop-types";
-import { Button, DatePicker, Form, Input, Modal, Radio } from "antd";
+import { Button, DatePicker, Form, Input, Modal, Radio, Select } from "antd";
 import moment from "moment";
+import { commentsAdminService } from "./../../redux/services";
 
 class Filters extends Component {
 	static propTypes = {
@@ -19,18 +20,54 @@ class Filters extends Component {
 			is_reply   : null,
 			with_deleted: null,
 		};
-		this.state = {filters: {...this.filtersClean}};
+		this.state = {
+			filters      : {...this.filtersClean},
+			posts        : [],
+			postsLoading : false,
+		};
 	}
 
-	onOpen = (filters) => this.setState({filters});
+	onOpen = (filters) => this.setState({filters}, () => this.fetchPostsAutocomplete("", filters.post_id || null));
 	cleanFilters = () => this.setState({filters: this.filtersClean}, () => this.props.onComplete({...this.state.filters}));
 	onClose = () => this.props.onClose();
 	filtersOnConfirm = () => this.props.onComplete({...this.state.filters});
 	setFilter = (name, value) => this.setState(state => ({filters: {...state.filters, [name]: value}}));
 
+	fetchPostsAutocomplete = (search = "", postId = null) => {
+		this.setState({postsLoading: true});
+
+		return commentsAdminService.getPostsAutocomplete({
+			search,
+			orderBy: "id:desc",
+			post_id: postId || undefined,
+		})
+		.then((response) => {
+			const posts = response.data.data || [];
+			this.setState((state) => {
+				const map = new Map();
+				state.posts.forEach((post) => map.set(post.id, post));
+				posts.forEach((post) => map.set(post.id, post));
+
+				return {
+					postsLoading: false,
+					posts: Array.from(map.values()),
+				};
+			});
+		})
+		.catch(() => {
+			this.setState({postsLoading: false});
+		});
+	};
+
+	renderPostOption = (post) => {
+		const title = post.title || "Sem título";
+		const organization = post.organization?.name ? ` - ${post.organization.name}` : "";
+		return `[${post.id}] ${title}${organization}`;
+	};
+
 	render() {
 		const {visible} = this.props;
-		const {filters} = this.state;
+		const {filters, posts, postsLoading} = this.state;
 
 		return (
 			<Modal
@@ -60,7 +97,24 @@ class Filters extends Component {
 				<div className="filter-group">
 					<div className="filter-group-title"><h3>Relacionamentos</h3></div>
 					<div className="filter-group-filters">
-						<Form.Item label="ID do post"><Input value={filters.post_id || ""} onChange={(e) => this.setFilter("post_id", e.target.value || null)} /></Form.Item>
+						<Form.Item label="Post">
+							<Select
+								showSearch
+								allowClear
+								filterOption={false}
+								placeholder="Selecione o post"
+								value={filters.post_id || undefined}
+								onChange={(value) => this.setFilter("post_id", value || null)}
+								onSearch={this.fetchPostsAutocomplete}
+								loading={postsLoading}
+								notFoundContent={postsLoading ? "Buscando..." : "Nenhum post encontrado"}>
+								{posts.map((post) => (
+									<Select.Option key={post.id} value={post.id}>
+										{this.renderPostOption(post)}
+									</Select.Option>
+								))}
+							</Select>
+						</Form.Item>
 						<Form.Item label="UUID do usuário"><Input value={filters.user_uuid || ""} onChange={(e) => this.setFilter("user_uuid", e.target.value || null)} /></Form.Item>
 					</div>
 				</div>

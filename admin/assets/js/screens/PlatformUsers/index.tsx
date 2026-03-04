@@ -97,12 +97,12 @@ class Index extends Component {
 			{ title: "ID", className: "id", visible: !listTypeCard, render: (item) => <span title={item.id}>{item.id}</span> },
 			{ title: "Nome", render: (item) => {
 				if( listTypeCard ) {
-					return <h3 style={item.is_deleted ? {color: "#cf1322"} : {}}>{item.name}</h3>;
+					return <h3>{item.name}</h3>;
 				}
 
-				return <span style={item.is_deleted ? {color: "#cf1322", fontWeight: 600} : {}}>{item.name}</span>;
+				return <span style={{fontWeight: item.is_deleted ? 600 : 400}}>{item.name}</span>;
 			} },
-			{ title: "E-mail", render: (item) => <span style={item.is_deleted ? {color: "#cf1322"} : {}}>{item.email}</span> },
+			{ title: "E-mail", render: (item) => <span>{item.email}</span> },
 			{ title: "Username", render: (item) => item.username || "-" },
 			{ title: "Localização", render: (item) => [item.city, item.state].filter(Boolean).join("/") || "-" },
 			{
@@ -122,6 +122,11 @@ class Index extends Component {
 				render   : (item) => <Tag color={item.is_private ? "#f7b84b" : "#39afd1"}>{item.is_private ? "Privado" : "Público"}</Tag>
 			},
 			{
+				title    : "Admin",
+				className: "no-ellipsis",
+				render   : (item) => item.is_admin_panel_user ? <Tag color="#8f66ff">Admin</Tag> : "-"
+			},
+			{
 				title    : "Criação",
 				className: "datetime",
 				render   : (item) => listTypeCard ? <Fragment><i className="fal fa-plus-circle" style={{marginRight: 5}} />{moment(item.created_at).format("DD/MM/YYYY HH:mm")}</Fragment> : moment(item.created_at).format("DD/MM/YYYY HH:mm"),
@@ -137,6 +142,24 @@ class Index extends Component {
 				),
 			},
 		];
+	};
+
+	getRowStyle = (item) => {
+		if( item.is_deleted ) {
+			return {
+				background: "#fff1f0",
+				borderLeft: "3px solid #ff4d4f",
+			};
+		}
+
+		if( item.is_admin_panel_user ) {
+			return {
+				background: "#f3edff",
+				borderLeft: "3px solid #8f66ff",
+			};
+		}
+
+		return {};
 	};
 
 	fetchGetAll = (init = false, exportItems = false) => {
@@ -355,6 +378,7 @@ class Index extends Component {
 						data={this.state.data}
 						pagination={this.state.pagination}
 						columns={this.columns()}
+						rowStyle={this.getRowStyle}
 						showFilters
 						totalFilters={this.state.totalFilters}
 						buttons={[

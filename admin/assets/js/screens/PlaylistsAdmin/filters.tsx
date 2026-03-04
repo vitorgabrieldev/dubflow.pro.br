@@ -1,6 +1,6 @@
 import React, { Component } from "react";
 import * as PropTypes from "prop-types";
-import { Button, DatePicker, Form, Input, Modal, Radio } from "antd";
+import { Button, DatePicker, Form, Modal, Radio } from "antd";
 import moment from "moment";
 
 class Filters extends Component {
@@ -14,9 +14,7 @@ class Filters extends Component {
 		super(props);
 		this.filtersClean = {
 			created_at  : null,
-			organization_id: null,
 			visibility  : null,
-			release_year: null,
 			with_deleted: null,
 		};
 
@@ -57,17 +55,6 @@ class Filters extends Component {
 							<div className="filter-group-radio"><Radio onChange={() => this.setFilter("visibility", "private")} checked={filters.visibility === "private"}>Privadas</Radio></div>
 							<div className="filter-group-radio"><Radio onChange={() => this.setFilter("visibility", "internal")} checked={filters.visibility === "internal"}>Internas</Radio></div>
 						</div>
-					</div>
-				</div>
-				<div className="filter-group">
-					<div className="filter-group-title"><h3>Comunidade</h3></div>
-					<div className="filter-group-filters">
-						<Form.Item label="ID da comunidade">
-							<Input value={filters.organization_id || ""} onChange={(e) => this.setFilter("organization_id", e.target.value || null)} />
-						</Form.Item>
-						<Form.Item label="Ano de lançamento">
-							<Input value={filters.release_year || ""} onChange={(e) => this.setFilter("release_year", e.target.value || null)} />
-						</Form.Item>
 					</div>
 				</div>
 				<div className="filter-group">

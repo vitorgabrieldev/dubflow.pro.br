@@ -11,6 +11,7 @@ const buildQuery = (options) => {
 	if( options.hasOwnProperty("search") ) params.push(`search=${options.search}`);
 	if( options.hasOwnProperty("orderBy") ) params.push(`orderBy=${options.orderBy}`);
 	if( options.hasOwnProperty("post_id") ) params.push(`post_id=${options.post_id}`);
+	if( options.hasOwnProperty("organization_id") ) params.push(`organization_id=${options.organization_id}`);
 	if( options.hasOwnProperty("user_uuid") ) params.push(`user_uuid=${options.user_uuid}`);
 	if( options.hasOwnProperty("is_reply") ) params.push(`is_reply=${options.is_reply}`);
 	if( options.hasOwnProperty("with_deleted") ) params.push(`with_deleted=${options.with_deleted ? 1 : 0}`);
@@ -66,4 +67,10 @@ export const getAutocomplete = (options = {}) => {
 	const query = buildQuery(options);
 
 	return api.get(`${basePath}/autocomplete${query}`);
+};
+
+export const getPostsAutocomplete = (options = {}) => {
+	const query = buildQuery(options);
+
+	return api.get(`${basePath}/posts/autocomplete${query}`);
 };

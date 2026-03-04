@@ -316,7 +316,7 @@ class Index extends Component {
 				</div>
 				<ModalCreate ref={(el) => this.createScreen = el} visible={this.state.createModalVisible} onComplete={this.createOnComplete} onClose={this.createOnClose} />
 				<ModalEdit ref={(el) => this.editScreen = el} visible={this.state.editModalVisible} onComplete={this.editOnComplete} onClose={this.editOnClose} />
-				<ModalShow ref={(el) => this.showScreen = el} visible={this.state.showModalVisible} onClose={this.showOnClose} />
+				<ModalShow ref={(el) => this.showScreen = el} visible={this.state.showModalVisible} onClose={this.showOnClose} permissions={this.props.permissions} />
 				<ModalFilters ref={(el) => this.filtersScreen = el} visible={this.state.filtersModalVisible} onComplete={this.filtersOnComplete} onClose={this.filtersOnClose} />
 			</QueueAnim>
 		)

@@ -40,6 +40,7 @@ import * as platformUsersService from "./platformUsersService";
 import * as communitiesService from "./communitiesService";
 import * as playlistsAdminService from "./playlistsAdminService";
 import * as opportunitiesService from "./opportunitiesService";
+import * as postsAdminService from "./postsAdminService";
 import * as commentsAdminService from "./commentsAdminService";
 import * as notificationsAdminService from "./notificationsAdminService";
 
@@ -86,6 +87,7 @@ export {
 	communitiesService,
 	playlistsAdminService,
 	opportunitiesService,
+	postsAdminService,
 	commentsAdminService,
 	notificationsAdminService,
 };

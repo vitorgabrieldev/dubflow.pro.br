@@ -4,9 +4,35 @@ import { Card, Checkbox, Col, Form, Input, message, Modal, Row, Select, Switch, 
 
 import { roleAndPermissionService, userService } from "./../../redux/services";
 
-import { UIDrawerForm } from "./../../components";
+import { UIDrawerForm, UIUpload } from "./../../components";
 
 const formId = `form-drawer-${Math.floor(Math.random() * 10001)}`;
+
+const extractUploadFile = async (file, fallbackBaseName = "upload") => {
+	if( !file ) return null;
+	if( file instanceof File || file instanceof Blob ) return file;
+	if( file.originFileObj && (file.originFileObj instanceof File || file.originFileObj instanceof Blob) ) {
+		return file.originFileObj;
+	}
+
+	if( typeof file.url === "string" && /^blob:/i.test(file.url) ) {
+		try {
+			const response = await fetch(file.url);
+			const blob = await response.blob();
+			const extension = String(file.extension || "bin").toLowerCase();
+			const normalizedExtension = extension === "jpg" ? "jpeg" : extension;
+			const mimeFromFileType = `image/${normalizedExtension}`;
+			const type = blob.type || mimeFromFileType;
+			const fileName = `${fallbackBaseName}.${extension}`;
+
+			return new File([blob], fileName, {type});
+		} catch (error) {
+			return null;
+		}
+	}
+
+	return null;
+};
 
 class Create extends Component {
 	static propTypes = {
@@ -40,6 +66,10 @@ class Create extends Component {
 				isLoading: false,
 				roles    : response.data.data,
 			});
+
+			if( this.avatarUpload ) {
+				this.avatarUpload.reset();
+			}
 		})
 		.catch((data) => {
 			Modal.error({
@@ -68,7 +98,7 @@ class Create extends Component {
 		this.props.onClose();
 	};
 
-	onFinish = (values) => {
+	onFinish = async (values) => {
 		const {rolesSelected} = this.state;
 
 		if( !rolesSelected.length )
@@ -89,6 +119,15 @@ class Create extends Component {
 
 		// Roles
 		data.roles = rolesSelected;
+
+		const avatar = this.avatarUpload?.getFiles();
+		if( avatar?.files?.length ) {
+			const avatarFile = avatar.files[0];
+			const avatarToUpload = await extractUploadFile(avatarFile, "admin-avatar");
+			if( avatarToUpload ) {
+				data.avatar = avatarToUpload;
+			}
+		}
 
 		userService.create(data)
 		.then((response) => {
@@ -173,6 +212,15 @@ class Create extends Component {
 					<Form.Item name="email" label="E-mail" hasFeedback rules={[{required: true, message: "Campo obrigatório."}, {type: "email", message: "Informe um e-mail válido."}]}>
 						<Input />
 					</Form.Item>
+					<UIUpload
+						ref={(el) => this.avatarUpload = el}
+						label="Avatar"
+						labelError="avatar"
+						maxFiles={1}
+						maxFileSize={4}
+						acceptedFiles={["jpg", "jpeg", "png"]}
+						help="Opcional. Foto do usuário administrador."
+					/>
 					<Form.Item name="password_random" label="Gerar senha aleatória" valuePropName="checked">
 						<Switch onChange={(checked) => this.setState({passwordRandom: checked})} />
 					</Form.Item>

@@ -10,6 +10,14 @@ class PlatformUserResource extends JsonResource
     public function toArray(Request $request): array
     {
         $avatarUrl = $this->avatar_path ? $this->normalizeMediaUrl((string) $this->avatar_path) : null;
+        $isAdminPanelUser = $this->relationLoaded('roles') ? $this->roles->isNotEmpty() : false;
+        $adminRoles = $this->relationLoaded('roles')
+            ? $this->roles->map(fn ($role): array => [
+                'uuid' => $role->uuid,
+                'key' => $role->key,
+                'name' => $role->name,
+            ])->values()
+            : collect();
 
         return [
             'id' => $this->id,
@@ -25,6 +33,8 @@ class PlatformUserResource extends JsonResource
             'is_active' => (bool) $this->is_active,
             'is_private' => (bool) $this->is_private,
             'is_deleted' => (bool) $this->trashed(),
+            'is_admin_panel_user' => $isAdminPanelUser,
+            'admin_roles' => $adminRoles,
             'created_at' => $this->created_at?->toAtomString(),
             'updated_at' => $this->updated_at?->toAtomString(),
             'deleted_at' => $this->deleted_at?->toAtomString(),

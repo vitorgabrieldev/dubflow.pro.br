@@ -27,7 +27,35 @@ class Edit extends Component {
 			permissionsIndeterminate: [],
 			uuid                    : 0,
 		};
+
+		this.form = null;
+		this.pendingFormValues = null;
 	}
+
+	setFormRef = (formRef) => {
+		this.form = formRef;
+
+		if( this.form?.setFieldsValue && this.pendingFormValues ) {
+			this.form.setFieldsValue(this.pendingFormValues);
+			this.pendingFormValues = null;
+		}
+	};
+
+	applyFormValues = (values) => {
+		if( this.form?.setFieldsValue ) {
+			this.form.setFieldsValue(values);
+			return;
+		}
+
+		this.pendingFormValues = values;
+
+		window.requestAnimationFrame(() => {
+			if( this.form?.setFieldsValue && this.pendingFormValues ) {
+				this.form.setFieldsValue(this.pendingFormValues);
+				this.pendingFormValues = null;
+			}
+		});
+	};
 
 	onOpen = (uuid) => {
 		this.setState({
@@ -69,7 +97,7 @@ class Edit extends Component {
 	};
 
 	fillForm = (data, permissions) => {
-		this.form.setFieldsValue({
+		this.applyFormValues({
 			name       : data.name,
 			description: data.description,
 		});
@@ -328,7 +356,7 @@ class Edit extends Component {
 				formId={formId}
 				title={`Editar registro [${uuid}]`}>
 				<Form
-					ref={el => this.form = el}
+					ref={this.setFormRef}
 					id={formId}
 					layout="vertical"
 					scrollToFirstError

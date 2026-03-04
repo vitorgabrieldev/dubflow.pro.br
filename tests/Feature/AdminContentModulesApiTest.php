@@ -150,6 +150,59 @@ class AdminContentModulesApiTest extends TestCase
             ->assertJsonPath('data.0.deleted_at', fn ($value) => ! empty($value));
     }
 
+    public function test_super_admin_can_list_and_view_publications_module(): void
+    {
+        $admin = $this->createSuperAdminUser();
+        $author = User::factory()->create([
+            'email' => 'post.author@example.com',
+            'password' => Hash::make('password123'),
+            'is_active' => true,
+        ]);
+
+        $token = $this->loginAndGetToken($admin->email, 'password123');
+
+        $community = $this->withToken($token)->postJson('/api/v1/admin/communities', [
+            'owner_uuid' => $author->uuid,
+            'name' => 'Comunidade Publicações',
+            'slug' => 'comunidade-publicacoes',
+            'is_public' => true,
+            'is_verified' => false,
+        ])->assertCreated();
+
+        $communityId = (int) $community->json('data.uuid');
+
+        $post = DubbingPost::query()->create([
+            'organization_id' => $communityId,
+            'author_user_id' => $author->id,
+            'title' => 'Publicação do módulo admin',
+            'description' => 'Descrição da publicação de teste',
+            'media_path' => 'posts/teste-admin.mp4',
+            'media_type' => 'video',
+            'media_size_bytes' => 1024,
+            'thumbnail_path' => 'thumbs/teste-admin.jpg',
+            'duration_seconds' => 30,
+            'visibility' => 'public',
+            'allow_comments' => true,
+            'language_code' => 'pt-BR',
+            'content_license' => 'all_rights_reserved',
+            'published_at' => now(),
+            'metadata' => [
+                'work_title' => 'Obra de Teste',
+            ],
+        ]);
+
+        $this->withToken($token)->getJson('/api/v1/admin/posts?search=Publicação%20do%20módulo%20admin')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $post->id);
+
+        $this->withToken($token)->getJson('/api/v1/admin/posts/'.$post->id)
+            ->assertOk()
+            ->assertJsonPath('data.id', $post->id)
+            ->assertJsonPath('data.title', 'Publicação do módulo admin')
+            ->assertJsonPath('data.site_preview_url', fn ($value) => is_string($value) && str_contains($value, '/pt-BR/post/'.$post->id));
+    }
+
     public function test_super_admin_can_crud_opportunities_comments_and_notifications(): void
     {
         $admin = $this->createSuperAdminUser();

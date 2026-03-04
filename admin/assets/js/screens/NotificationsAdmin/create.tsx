@@ -5,6 +5,7 @@ import moment from "moment";
 
 import { notificationsAdminService, platformUsersService } from "./../../redux/services";
 import { UIDrawerForm } from "./../../components";
+import { NOTIFICATION_TYPE_OPTIONS } from "./../../config/notificationTypes";
 
 const formId = `form-drawer-${Math.floor(Math.random() * 10001)}`;
 
@@ -65,7 +66,15 @@ class Create extends Component {
 							{users.map((item) => <Select.Option key={item.uuid} value={item.uuid}>{item.name} ({item.email})</Select.Option>)}
 						</Select>
 					</Form.Item>
-					<Form.Item name="type" label="Tipo" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}><Input /></Form.Item>
+					<Form.Item name="type" label="Tipo" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}>
+						<Select showSearch optionFilterProp="children" placeholder="Selecione o tipo">
+							{NOTIFICATION_TYPE_OPTIONS.map((type) => (
+								<Select.Option key={type.value} value={type.value}>
+									{type.label}
+								</Select.Option>
+							))}
+						</Select>
+					</Form.Item>
 					<Form.Item name="title" label="Título" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}><Input /></Form.Item>
 					<Form.Item name="message" label="Mensagem" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}><Input.TextArea rows={4} /></Form.Item>
 					<Form.Item name="is_read" label="Marcar como lida" valuePropName="checked"><Switch /></Form.Item>

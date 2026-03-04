@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -126,6 +127,8 @@ class UsersController extends Controller
         }
 
         $validated = $request->validate([
+            'avatar' => ['sometimes', 'nullable', 'image', 'mimes:jpeg,png', 'max:4000'],
+            'remove_avatar' => ['sometimes', 'boolean'],
             'is_active' => ['sometimes', 'required', 'boolean'],
             'roles' => ['sometimes', 'required', 'array', 'min:1'],
             'roles.*' => ['required', 'uuid'],
@@ -142,6 +145,24 @@ class UsersController extends Controller
                 if ((bool) $user->is_active !== $newIsActive) {
                     $shouldInvalidateTokens = true;
                     $user->is_active = $newIsActive;
+                    $user->save();
+                }
+            }
+
+            if ($request->boolean('remove_avatar') && $user->avatar_path) {
+                Storage::disk('public')->delete($user->avatar_path);
+                $user->avatar_path = null;
+                $user->save();
+            }
+
+            if ($request->hasFile('avatar')) {
+                if ($user->avatar_path) {
+                    Storage::disk('public')->delete($user->avatar_path);
+                }
+
+                $path = $request->file('avatar')?->store('admin/avatars', 'public');
+                if ($path) {
+                    $user->avatar_path = $path;
                     $user->save();
                 }
             }

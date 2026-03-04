@@ -71,6 +71,7 @@ class PlatformUsersController extends Controller
     public function show(string $userUuid): PlatformUserResource
     {
         $user = $this->findUserByUuid($userUuid, true);
+        $user->load('roles:id,uuid,key,name');
 
         return new PlatformUserResource($user);
     }
@@ -280,7 +281,9 @@ class PlatformUsersController extends Controller
             'is_active' => ['sometimes', 'integer', 'in:0,1'],
         ]);
 
-        $query = User::query()->withTrashed();
+        $query = User::query()
+            ->withTrashed()
+            ->with('roles:id,uuid,key,name');
 
         $isActive = $request->input('is_active');
         if ($isActive !== null && $isActive !== '') {
@@ -334,7 +337,9 @@ class PlatformUsersController extends Controller
 
     private function buildIndexQuery(Request $request): Builder
     {
-        $query = User::query()->withTrashed();
+        $query = User::query()
+            ->withTrashed()
+            ->with('roles:id,uuid,key,name');
 
         $isActive = $request->input('is_active');
         if ($isActive !== null && $isActive !== '') {

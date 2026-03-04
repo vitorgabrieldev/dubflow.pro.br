@@ -8,6 +8,7 @@ import { generalActions } from "./../../redux/actions";
 import { downloadPrivateFile } from "./../../helpers/download";
 import { notificationsAdminService } from "./../../redux/services";
 import { UIPageListing } from "./../../components";
+import { getNotificationTypeLabel } from "./../../config/notificationTypes";
 
 import ModalCreate from "./create";
 import ModalEdit from "./edit";
@@ -80,7 +81,7 @@ class Index extends Component {
 		return [
 			{ title: "ID", className: "id", visible: !listTypeCard, render: (item) => <span title={item.uuid}>{item.uuid}</span> },
 			{ title: "Usuário", render: (item) => item.user?.name || "-" },
-			{ title: "Tipo", render: (item) => item.type },
+			{ title: "Tipo", render: (item) => getNotificationTypeLabel(item.type) },
 			{ title: "Título", className: "no-ellipsis", render: (item) => <Typography.Paragraph ellipsis={{rows: 1}}>{item.data?.title || "-"}</Typography.Paragraph> },
 			{ title: "Mensagem", className: "no-ellipsis", render: (item) => <Typography.Paragraph ellipsis={{rows: 2, expandable: true}}>{item.data?.message || "-"}</Typography.Paragraph> },
 			{ title: "Leitura", className: "no-ellipsis", render: (item) => <Tag color={item.is_read ? "#0acf97" : "#fa5c7c"}>{item.is_read ? "Lida" : "Não lida"}</Tag> },

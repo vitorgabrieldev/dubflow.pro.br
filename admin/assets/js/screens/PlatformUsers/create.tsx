@@ -3,9 +3,35 @@ import * as PropTypes from "prop-types";
 import { Alert, Col, Form, Input, message, Modal, Row, Switch } from "antd";
 
 import { platformUsersService } from "./../../redux/services";
-import { UIDrawerForm } from "./../../components";
+import { UIDrawerForm, UIUpload } from "./../../components";
 
 const formId = `form-drawer-${Math.floor(Math.random() * 10001)}`;
+
+const extractUploadFile = async (file, fallbackBaseName = "upload") => {
+	if( !file ) return null;
+	if( file instanceof File || file instanceof Blob ) return file;
+	if( file.originFileObj && (file.originFileObj instanceof File || file.originFileObj instanceof Blob) ) {
+		return file.originFileObj;
+	}
+
+	if( typeof file.url === "string" && /^blob:/i.test(file.url) ) {
+		try {
+			const response = await fetch(file.url);
+			const blob = await response.blob();
+			const extension = String(file.extension || "bin").toLowerCase();
+			const normalizedExtension = extension === "jpg" ? "jpeg" : extension;
+			const mimeFromFileType = `image/${normalizedExtension}`;
+			const type = blob.type || mimeFromFileType;
+			const fileName = `${fallbackBaseName}.${extension}`;
+
+			return new File([blob], fileName, {type});
+		} catch (error) {
+			return null;
+		}
+	}
+
+	return null;
+};
 
 class Create extends Component {
 	static propTypes = {
@@ -29,14 +55,28 @@ class Create extends Component {
 			isLoading     : false,
 			passwordRandom: false,
 		});
+
+		if( this.avatarUpload ) {
+			this.avatarUpload.reset();
+		}
 	};
 
 	onClose = () => this.props.onClose();
 
-	onFinish = (values) => {
+	onFinish = async (values) => {
 		this.setState({isSending: true});
 
-		platformUsersService.create(values)
+		const payload = {...values};
+		const avatar = this.avatarUpload?.getFiles();
+		if( avatar?.files?.length ) {
+			const avatarFile = avatar.files[0];
+			const avatarToUpload = await extractUploadFile(avatarFile, "platform-user-avatar");
+			if( avatarToUpload ) {
+				payload.avatar = avatarToUpload;
+			}
+		}
+
+		platformUsersService.create(payload)
 		.then(() => {
 			this.setState({isSending: false});
 			message.success("Usuário cadastrado com sucesso.");
@@ -77,6 +117,15 @@ class Create extends Component {
 					<Form.Item name="email" label="E-mail" hasFeedback rules={[{required: true, message: "Campo obrigatório."}, {type: "email", message: "Informe um e-mail válido."}]}> 
 						<Input />
 					</Form.Item>
+					<UIUpload
+						ref={(el) => this.avatarUpload = el}
+						label="Avatar"
+						labelError="avatar"
+						maxFiles={1}
+						maxFileSize={4}
+						acceptedFiles={["jpg", "jpeg", "png", "webp"]}
+						help="Opcional. Foto de perfil do usuário."
+					/>
 					<Row gutter={16}>
 						<Col xs={24} sm={12}>
 							<Form.Item name="username" label="Username">

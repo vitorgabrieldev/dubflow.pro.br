@@ -2,6 +2,7 @@ import React, { Component } from "react";
 import * as PropTypes from "prop-types";
 import { Button, DatePicker, Form, Input, Modal, Radio } from "antd";
 import moment from "moment";
+import { OPPORTUNITY_STATUS_OPTIONS } from "./../../config/opportunities";
 
 class Filters extends Component {
 	static propTypes = {
@@ -52,12 +53,16 @@ class Filters extends Component {
 				<div className="filter-group">
 					<div className="filter-group-title" style={{paddingTop: 0}}><h3>Status</h3></div>
 					<div className="filter-group-filters" style={{paddingBottom: 5}}>
-						<div className="filter-group-radios">
-							<div className="filter-group-radio"><Radio onChange={() => this.setFilter("status", null)} checked={filters.status === null}>Todos</Radio></div>
-							{["draft", "published", "closed", "results_released", "archived"].map((status) => <div className="filter-group-radio" key={status}><Radio onChange={() => this.setFilter("status", status)} checked={filters.status === status}>{status}</Radio></div>)}
+							<div className="filter-group-radios">
+								<div className="filter-group-radio"><Radio onChange={() => this.setFilter("status", null)} checked={filters.status === null}>Todos</Radio></div>
+								{OPPORTUNITY_STATUS_OPTIONS.map((status) => (
+									<div className="filter-group-radio" key={status.value}>
+										<Radio onChange={() => this.setFilter("status", status.value)} checked={filters.status === status.value}>{status.label}</Radio>
+									</div>
+								))}
+							</div>
 						</div>
 					</div>
-				</div>
 				<div className="filter-group">
 					<div className="filter-group-title" style={{paddingTop: 0}}><h3>Visibilidade</h3></div>
 					<div className="filter-group-filters" style={{paddingBottom: 5}}>
