@@ -244,7 +244,6 @@ jobs:
             export SKIP_GIT_SYNC=1
             export RUN_ADMIN_BUILD=1
             export NODE_BUILD_OPTIONS="${{ secrets.NODE_BUILD_OPTIONS }}"
-            export SUDO_PASSWORD="${{ secrets.DEPLOY_PASSWORD }}"
             bash "${{ secrets.REPO_DIR }}/deploy/frontend.sh"
 
       - name: Deploy frontend via SSH password
@@ -266,7 +265,6 @@ jobs:
             export SKIP_GIT_SYNC=1
             export RUN_ADMIN_BUILD=1
             export NODE_BUILD_OPTIONS="${{ secrets.NODE_BUILD_OPTIONS }}"
-            export SUDO_PASSWORD="${{ secrets.DEPLOY_PASSWORD }}"
             bash "${{ secrets.REPO_DIR }}/deploy/frontend.sh"
 
   smoke:
