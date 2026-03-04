@@ -249,7 +249,7 @@ jobs:
               bash "${REPO_DIR}/deploy/frontend.sh"
             else
               echo "[frontend] deploy/frontend.sh ausente no working tree; carregando script do ref ${DEPLOY_REF}"
-              git -C "${REPO_DIR}" show "${DEPLOY_REF}:deploy/frontend.sh" | tr -d '\015' > /tmp/dubflow-frontend.sh
+              git -C "${REPO_DIR}" show "${DEPLOY_REF}:deploy/frontend.sh" | tr -d '\r' > /tmp/dubflow-frontend.sh
               chmod +x /tmp/dubflow-frontend.sh
               bash /tmp/dubflow-frontend.sh
             fi
@@ -278,7 +278,7 @@ jobs:
               bash "${REPO_DIR}/deploy/frontend.sh"
             else
               echo "[frontend] deploy/frontend.sh ausente no working tree; carregando script do ref ${DEPLOY_REF}"
-              git -C "${REPO_DIR}" show "${DEPLOY_REF}:deploy/frontend.sh" | tr -d '\015' > /tmp/dubflow-frontend.sh
+              git -C "${REPO_DIR}" show "${DEPLOY_REF}:deploy/frontend.sh" | tr -d '\r' > /tmp/dubflow-frontend.sh
               chmod +x /tmp/dubflow-frontend.sh
               bash /tmp/dubflow-frontend.sh
             fi
