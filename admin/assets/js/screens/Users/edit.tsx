@@ -1,12 +1,37 @@
 import React, { Component } from "react";
 import * as PropTypes from "prop-types";
-import { Card, Checkbox, Form, Input, message, Modal, Select, Switch, Tag } from "antd";
+import { Card, Checkbox, Form, Input, message, Modal, Switch } from "antd";
 
 import { roleAndPermissionService, userService } from "./../../redux/services";
-
-import { UIDrawerForm } from "./../../components";
+import { UIDrawerForm, UIUpload } from "./../../components";
 
 const formId = `form-drawer-${Math.floor(Math.random() * 10001)}`;
+
+const extractUploadFile = async (file, fallbackBaseName = "upload") => {
+	if( !file ) return null;
+	if( file instanceof File || file instanceof Blob ) return file;
+	if( file.originFileObj && (file.originFileObj instanceof File || file.originFileObj instanceof Blob) ) {
+		return file.originFileObj;
+	}
+
+	if( typeof file.url === "string" && /^blob:/i.test(file.url) ) {
+		try {
+			const response = await fetch(file.url);
+			const blob = await response.blob();
+			const extension = String(file.extension || "bin").toLowerCase();
+			const normalizedExtension = extension === "jpg" ? "jpeg" : extension;
+			const mimeFromFileType = `image/${normalizedExtension}`;
+			const type = blob.type || mimeFromFileType;
+			const fileName = `${fallbackBaseName}.${extension}`;
+
+			return new File([blob], fileName, {type});
+		} catch (error) {
+			return null;
+		}
+	}
+
+	return null;
+};
 
 class Edit extends Component {
 	static propTypes = {
@@ -25,12 +50,40 @@ class Edit extends Component {
 			rolesSelected: [],
 			uuid         : 0,
 		};
+
+		this.form = null;
+		this.pendingFormValues = null;
 	}
+
+	setFormRef = (formRef) => {
+		this.form = formRef;
+
+		if( this.form?.setFieldsValue && this.pendingFormValues ) {
+			this.form.setFieldsValue(this.pendingFormValues);
+			this.pendingFormValues = null;
+		}
+	};
+
+	applyFormValues = (values) => {
+		if( this.form?.setFieldsValue ) {
+			this.form.setFieldsValue(values);
+			return;
+		}
+
+		this.pendingFormValues = values;
+
+		window.requestAnimationFrame(() => {
+			if( this.form?.setFieldsValue && this.pendingFormValues ) {
+				this.form.setFieldsValue(this.pendingFormValues);
+				this.pendingFormValues = null;
+			}
+		});
+	};
 
 	onOpen = (uuid) => {
 		this.setState({
 			isLoading: true,
-			uuid     : uuid,
+			uuid,
 		});
 
 		let item;
@@ -47,32 +100,32 @@ class Edit extends Component {
 			this.setState({
 				isLoading: false,
 				roles    : response.data.data,
-			});
+				rolesSelected: item.roles.map(role => role.uuid),
+			}, () => {
+				this.applyFormValues({
+					name     : item.name,
+					email    : item.email,
+					is_active: item.is_active,
+				});
 
-			// Fill form
-			this.fillForm(item);
+				if( this.avatarUpload ) {
+					this.avatarUpload.reset();
+					if( item.avatar ) {
+						this.avatarUpload.setFiles([{
+							uuid: `avatar-${uuid}`,
+							url : item.avatar,
+							type: "image/jpeg",
+						}]);
+					}
+				}
+			});
 		})
 		.catch((data) => {
 			Modal.error({
 				title  : "Ocorreu um erro!",
 				content: String(data),
-				onOk   : () => {
-					// Force close
-					return this.onClose();
-				}
+				onOk   : () => this.onClose(),
 			});
-		});
-	};
-
-	fillForm = (data) => {
-		this.form.setFieldsValue({
-			name     : data.name,
-			email    : data.email,
-			is_active: data.is_active,
-		});
-
-		this.setState({
-			rolesSelected: data.roles.map(role => role.uuid),
 		});
 	};
 
@@ -84,18 +137,14 @@ class Edit extends Component {
 	};
 
 	onClose = () => {
-		// Reset fields
 		this.resetFields();
-
-		// Callback
 		this.props.onClose();
 	};
 
-	onFinish = (values) => {
+	onFinish = async (values) => {
 		const {rolesSelected} = this.state;
 
-		if( !rolesSelected.length )
-		{
+		if( !rolesSelected.length ) {
 			Modal.error({
 				title  : "Ocorreu um erro!",
 				content: "Selecione pelo menos um papél.",
@@ -109,38 +158,43 @@ class Edit extends Component {
 		});
 
 		const {uuid} = this.state;
-
 		const data = {...values};
 
-		// uuid
 		data.uuid = uuid;
-
-		// Roles
 		data.roles = rolesSelected;
 
+		const avatar = this.avatarUpload?.getFiles();
+
+		if( avatar?.filesDeleted?.length ) {
+			data.remove_avatar = true;
+		}
+
+		if( avatar?.files?.length ) {
+			const avatarFile = avatar.files[0];
+			const avatarToUpload = await extractUploadFile(avatarFile, "admin-avatar");
+			if( avatarToUpload ) {
+				data.avatar = avatarToUpload;
+			}
+		}
+
 		userService.edit(data)
-		.then((response) => {
+		.then(() => {
 			this.setState({
 				isSending: false,
 			});
 
-			// Reset fields
 			this.resetFields();
-
-			// Success message
 			message.success("Registro atualizado com sucesso.");
-
-			// Callback
 			this.props.onComplete();
 		})
-		.catch((data) => {
+		.catch((error) => {
 			this.setState({
 				isSending: false,
 			});
 
 			Modal.error({
 				title  : "Ocorreu um erro!",
-				content: String(data),
+				content: String(error),
 			});
 		});
 	};
@@ -151,19 +205,12 @@ class Edit extends Component {
 		let newRolesSelected = [...rolesSelected];
 		const indexSelected  = newRolesSelected.indexOf(uuid);
 
-		if( checked )
-		{
-			if( indexSelected === -1 )
-			{
+		if( checked ) {
+			if( indexSelected === -1 ) {
 				newRolesSelected.push(uuid);
 			}
-		}
-		else
-		{
-			if( indexSelected !== -1 )
-			{
-				newRolesSelected.splice(indexSelected, 1);
-			}
+		} else if( indexSelected !== -1 ) {
+			newRolesSelected.splice(indexSelected, 1);
 		}
 
 		this.setState({
@@ -172,7 +219,7 @@ class Edit extends Component {
 	};
 
 	render() {
-		const {visible}                                          = this.props;
+		const {visible} = this.props;
 		const {uuid, isLoading, isSending, roles, rolesSelected} = this.state;
 
 		return (
@@ -185,7 +232,7 @@ class Edit extends Component {
 				formId={formId}
 				title={`Editar registro [${uuid}]`}>
 				<Form
-					ref={el => this.form = el}
+					ref={this.setFormRef}
 					id={formId}
 					layout="vertical"
 					scrollToFirstError
@@ -196,6 +243,15 @@ class Edit extends Component {
 					<Form.Item name="email" label="E-mail" hasFeedback>
 						<Input disabled />
 					</Form.Item>
+					<UIUpload
+						ref={(el) => this.avatarUpload = el}
+						label="Avatar"
+						labelError="avatar"
+						maxFiles={1}
+						maxFileSize={4}
+						acceptedFiles={["jpg", "jpeg", "png"]}
+						help="Opcional. Atualiza a foto do usuário administrador."
+					/>
 					<Form.Item name="is_active" label="Ativo" valuePropName="checked">
 						<Switch />
 					</Form.Item>

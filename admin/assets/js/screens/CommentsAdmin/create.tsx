@@ -16,14 +16,54 @@ class Create extends Component {
 
 	constructor(props) {
 		super(props);
-		this.state = {isLoading: true, isSending: false, users: []};
+		this.state = {
+			isLoading    : true,
+			isSending    : false,
+			users        : [],
+			posts        : [],
+			postsLoading : false,
+		};
 	}
 
 	onOpen = () => {
 		this.setState({isLoading: true});
-		platformUsersService.getAutocomplete({is_active: 1, orderBy: "name:asc"})
-		.then((response) => this.setState({isLoading: false, users: response.data.data || []}))
+		Promise.all([
+			platformUsersService.getAutocomplete({is_active: 1, orderBy: "name:asc"}),
+			this.fetchPostsAutocomplete(""),
+		]).then(([usersResponse]) => {
+			this.setState({
+				isLoading: false,
+				users: usersResponse.data.data || [],
+			});
+		})
 		.catch((data) => Modal.error({title: "Ocorreu um erro!", content: String(data), onOk: () => this.onClose()}));
+	};
+
+	fetchPostsAutocomplete = (search = "") => {
+		this.setState({postsLoading: true});
+
+		return commentsAdminService.getPostsAutocomplete({
+			search,
+			orderBy: "id:desc",
+		})
+		.then((response) => {
+			this.setState({
+				postsLoading: false,
+				posts: response.data.data || [],
+			});
+		})
+		.catch(() => {
+			this.setState({
+				postsLoading: false,
+				posts: [],
+			});
+		});
+	};
+
+	renderPostOption = (post) => {
+		const title = post.title || "Sem título";
+		const organization = post.organization?.name ? ` - ${post.organization.name}` : "";
+		return `[${post.id}] ${title}${organization}`;
 	};
 
 	onClose = () => this.props.onClose();
@@ -53,7 +93,22 @@ class Create extends Component {
 		return (
 			<UIDrawerForm visible={visible} width={560} onClose={this.onClose} isLoading={isLoading} isSending={isSending} formId={formId} title="Inserir novo comentário">
 				<Form id={formId} layout="vertical" scrollToFirstError onFinish={this.onFinish}>
-					<Form.Item name="post_id" label="ID do post" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}><Input /></Form.Item>
+					<Form.Item name="post_id" label="Post" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}>
+						<Select
+							showSearch
+							allowClear
+							filterOption={false}
+							placeholder="Selecione o post"
+							onSearch={this.fetchPostsAutocomplete}
+							loading={this.state.postsLoading}
+							notFoundContent={this.state.postsLoading ? "Buscando..." : "Nenhum post encontrado"}>
+							{this.state.posts.map((post) => (
+								<Select.Option key={post.id} value={post.id}>
+									{this.renderPostOption(post)}
+								</Select.Option>
+							))}
+						</Select>
+					</Form.Item>
 					<Form.Item name="user_uuid" label="Usuário" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}> 
 						<Select showSearch optionFilterProp="children" placeholder="Selecione um usuário">
 							{users.map((item) => <Select.Option key={item.uuid} value={item.uuid}>{item.name} ({item.email})</Select.Option>)}

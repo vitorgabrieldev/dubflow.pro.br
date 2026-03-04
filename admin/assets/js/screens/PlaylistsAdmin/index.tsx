@@ -51,11 +51,9 @@ class Index extends Component {
 			isExporting        : false,
 			totalFilters       : 0,
 			filters            : {
-				created_at     : null,
-				organization_id: null,
-				visibility     : null,
-				release_year   : null,
-				with_deleted   : null,
+				created_at  : null,
+				visibility  : null,
+				with_deleted: null,
 			},
 		};
 	}
@@ -116,9 +114,7 @@ class Index extends Component {
 			data.limit = pagination.pageSize;
 		}
 
-		if( filters.organization_id ) data.organization_id = filters.organization_id;
 		if( filters.visibility ) data.visibility = filters.visibility;
-		if( filters.release_year ) data.release_year = filters.release_year;
 		if( filters.with_deleted ) data.with_deleted = filters.with_deleted;
 		if( filters.created_at ) {
 			data.created_at = [

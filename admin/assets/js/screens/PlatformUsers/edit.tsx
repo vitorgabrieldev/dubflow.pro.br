@@ -3,9 +3,35 @@ import * as PropTypes from "prop-types";
 import { Col, Form, Input, message, Modal, Row, Switch } from "antd";
 
 import { platformUsersService } from "./../../redux/services";
-import { UIDrawerForm } from "./../../components";
+import { UIDrawerForm, UIUpload } from "./../../components";
 
 const formId = `form-drawer-${Math.floor(Math.random() * 10001)}`;
+
+const extractUploadFile = async (file, fallbackBaseName = "upload") => {
+	if( !file ) return null;
+	if( file instanceof File || file instanceof Blob ) return file;
+	if( file.originFileObj && (file.originFileObj instanceof File || file.originFileObj instanceof Blob) ) {
+		return file.originFileObj;
+	}
+
+	if( typeof file.url === "string" && /^blob:/i.test(file.url) ) {
+		try {
+			const response = await fetch(file.url);
+			const blob = await response.blob();
+			const extension = String(file.extension || "bin").toLowerCase();
+			const normalizedExtension = extension === "jpg" ? "jpeg" : extension;
+			const mimeFromFileType = `image/${normalizedExtension}`;
+			const type = blob.type || mimeFromFileType;
+			const fileName = `${fallbackBaseName}.${extension}`;
+
+			return new File([blob], fileName, {type});
+		} catch (error) {
+			return null;
+		}
+	}
+
+	return null;
+};
 
 class Edit extends Component {
 	static propTypes = {
@@ -22,7 +48,35 @@ class Edit extends Component {
 			isSending: false,
 			uuid     : 0,
 		};
+
+		this.form = null;
+		this.pendingFormValues = null;
 	}
+
+	setFormRef = (formRef) => {
+		this.form = formRef;
+
+		if( this.form?.setFieldsValue && this.pendingFormValues ) {
+			this.form.setFieldsValue(this.pendingFormValues);
+			this.pendingFormValues = null;
+		}
+	};
+
+	applyFormValues = (values) => {
+		if( this.form?.setFieldsValue ) {
+			this.form.setFieldsValue(values);
+			return;
+		}
+
+		this.pendingFormValues = values;
+
+		window.requestAnimationFrame(() => {
+			if( this.form?.setFieldsValue && this.pendingFormValues ) {
+				this.form.setFieldsValue(this.pendingFormValues);
+				this.pendingFormValues = null;
+			}
+		});
+	};
 
 	onOpen = (uuid) => {
 		this.setState({isLoading: true, uuid});
@@ -32,7 +86,7 @@ class Edit extends Component {
 			const item = response.data.data;
 
 			this.setState({isLoading: false}, () => {
-				this.form.setFieldsValue({
+				this.applyFormValues({
 					name      : item.name,
 					email     : item.email,
 					username  : item.username,
@@ -43,6 +97,17 @@ class Edit extends Component {
 					is_active : item.is_active,
 					is_private: item.is_private,
 				});
+
+				if( this.avatarUpload ) {
+					this.avatarUpload.reset();
+					if( item.avatar ) {
+						this.avatarUpload.setFiles([{
+							uuid: `avatar-${uuid}`,
+							url : item.avatar,
+							type: "image/jpeg",
+						}]);
+					}
+				}
 			});
 		})
 		.catch((data) => {
@@ -56,13 +121,29 @@ class Edit extends Component {
 
 	onClose = () => this.props.onClose();
 
-	onFinish = (values) => {
+	onFinish = async (values) => {
 		this.setState({isSending: true});
 
-		platformUsersService.edit({
+		const payload = {
 			uuid: this.state.uuid,
 			...values,
-		})
+		};
+
+		const avatar = this.avatarUpload?.getFiles();
+
+		if( avatar?.filesDeleted?.length ) {
+			payload.remove_avatar = true;
+		}
+
+		if( avatar?.files?.length ) {
+			const avatarFile = avatar.files[0];
+			const avatarToUpload = await extractUploadFile(avatarFile, "platform-user-avatar");
+			if( avatarToUpload ) {
+				payload.avatar = avatarToUpload;
+			}
+		}
+
+		platformUsersService.edit(payload)
 		.then(() => {
 			this.setState({isSending: false});
 			message.success("Usuário atualizado com sucesso.");
@@ -87,13 +168,22 @@ class Edit extends Component {
 				isSending={isSending}
 				formId={formId}
 				title={`Editar usuário [${uuid}]`}>
-				<Form ref={(el) => this.form = el} id={formId} layout="vertical" scrollToFirstError onFinish={this.onFinish}>
+				<Form ref={this.setFormRef} id={formId} layout="vertical" scrollToFirstError onFinish={this.onFinish}>
 					<Form.Item name="name" label="Nome" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}>
 						<Input />
 					</Form.Item>
 					<Form.Item name="email" label="E-mail" hasFeedback rules={[{required: true, message: "Campo obrigatório."}, {type: "email", message: "Informe um e-mail válido."}]}> 
 						<Input />
 					</Form.Item>
+					<UIUpload
+						ref={(el) => this.avatarUpload = el}
+						label="Avatar"
+						labelError="avatar"
+						maxFiles={1}
+						maxFileSize={4}
+						acceptedFiles={["jpg", "jpeg", "png", "webp"]}
+						help="Opcional. Foto de perfil do usuário."
+					/>
 					<Row gutter={16}>
 						<Col xs={24} sm={12}><Form.Item name="username" label="Username"><Input /></Form.Item></Col>
 						<Col xs={24} sm={12}><Form.Item name="stage_name" label="Nome artístico"><Input /></Form.Item></Col>

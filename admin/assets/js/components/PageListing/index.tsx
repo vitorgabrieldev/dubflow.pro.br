@@ -57,6 +57,8 @@ class UIPageListing extends Component {
 		renderOnItemsSelected: PropTypes.any,
 		emptyProps           : PropTypes.object,
 		appendSearch         : PropTypes.any,
+		rowClassName         : PropTypes.func,
+		rowStyle             : PropTypes.func,
 	};
 
 	static defaultProps = {
@@ -89,6 +91,8 @@ class UIPageListing extends Component {
 		renderOnItemsSelected: null,
 		emptyProps           : {},
 		appendSearch         : null,
+		rowClassName         : () => "",
+		rowStyle             : () => ({}),
 	};
 
 	_renderEmpty = () => {
@@ -134,7 +138,10 @@ class UIPageListing extends Component {
 				</div>}
 				<QueueAnim type="bottom" className="list-items-body">
 					{this.props.data.map((item, index) => (
-						<div key={index} className={`list-items-item ${selectedItems.indexOf(item.id) !== -1 ? "selected" : ""}`}>
+						<div
+							key={index}
+							className={`list-items-item ${selectedItems.indexOf(item.id) !== -1 ? "selected" : ""} ${this.props.rowClassName(item) || ""}`}
+							style={this.props.rowStyle(item) || {}}>
 							<div className="row">
 								{allowSelect && <div className="col col-select" data-title="">
 									<div>

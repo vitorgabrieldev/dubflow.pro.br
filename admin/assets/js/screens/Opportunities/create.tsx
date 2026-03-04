@@ -4,6 +4,7 @@ import { DatePicker, Form, Input, message, Modal, Select } from "antd";
 
 import { communitiesService, opportunitiesService, platformUsersService } from "./../../redux/services";
 import { UIDrawerForm } from "./../../components";
+import { OPPORTUNITY_STATUS_OPTIONS, OPPORTUNITY_VISIBILITY_OPTIONS } from "./../../config/opportunities";
 
 const formId = `form-drawer-${Math.floor(Math.random() * 10001)}`;
 
@@ -82,8 +83,16 @@ class Create extends Component {
 					</Form.Item>
 					<Form.Item name="title" label="Título" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}> <Input /></Form.Item>
 					<Form.Item name="description" label="Descrição"><Input.TextArea rows={4} /></Form.Item>
-					<Form.Item name="status" label="Status" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}> <Select><Select.Option value="draft">draft</Select.Option><Select.Option value="published">published</Select.Option><Select.Option value="closed">closed</Select.Option><Select.Option value="results_released">results_released</Select.Option><Select.Option value="archived">archived</Select.Option></Select></Form.Item>
-					<Form.Item name="visibility" label="Visibilidade" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}> <Select><Select.Option value="external">external</Select.Option><Select.Option value="internal">internal</Select.Option></Select></Form.Item>
+					<Form.Item name="status" label="Status" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}>
+						<Select>
+							{OPPORTUNITY_STATUS_OPTIONS.map((status) => <Select.Option key={status.value} value={status.value}>{status.label}</Select.Option>)}
+						</Select>
+					</Form.Item>
+					<Form.Item name="visibility" label="Visibilidade" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}>
+						<Select>
+							{OPPORTUNITY_VISIBILITY_OPTIONS.map((visibility) => <Select.Option key={visibility.value} value={visibility.value}>{visibility.label}</Select.Option>)}
+						</Select>
+					</Form.Item>
 					<Form.Item name="starts_at" label="Início" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}> <DatePicker showTime style={{width: "100%"}} format="DD/MM/YYYY HH:mm" /></Form.Item>
 					<Form.Item name="ends_at" label="Fim" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}> <DatePicker showTime style={{width: "100%"}} format="DD/MM/YYYY HH:mm" /></Form.Item>
 					<Form.Item name="results_release_at" label="Liberação de resultados" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}> <DatePicker showTime style={{width: "100%"}} format="DD/MM/YYYY HH:mm" /></Form.Item>

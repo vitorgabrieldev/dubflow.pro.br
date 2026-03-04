@@ -8,6 +8,7 @@ import { generalActions } from "./../../redux/actions";
 import { downloadPrivateFile } from "./../../helpers/download";
 import { opportunitiesService } from "./../../redux/services";
 import { UIPageListing } from "./../../components";
+import { getOpportunityStatusLabel, getOpportunityVisibilityLabel } from "./../../config/opportunities";
 
 import ModalCreate from "./create";
 import ModalEdit from "./edit";
@@ -87,8 +88,8 @@ class Index extends Component {
 			{ title: "Título", render: (item) => listTypeCard ? <h3>{item.title}</h3> : item.title },
 			{ title: "Comunidade", render: (item) => item.organization?.name || "-" },
 			{ title: "Criador", render: (item) => item.creator?.name || "-" },
-			{ title: "Status", className: "no-ellipsis", render: (item) => <Tag color={item.status === "published" ? "#0acf97" : "#f7b84b"}>{item.status}</Tag> },
-			{ title: "Visibilidade", className: "no-ellipsis", render: (item) => <Tag color={item.visibility === "external" ? "#39afd1" : "#f7b84b"}>{item.visibility}</Tag> },
+			{ title: "Status", className: "no-ellipsis", render: (item) => <Tag color={item.status === "published" ? "#0acf97" : "#f7b84b"}>{getOpportunityStatusLabel(item.status)}</Tag> },
+			{ title: "Visibilidade", className: "no-ellipsis", render: (item) => <Tag color={item.visibility === "external" ? "#39afd1" : "#f7b84b"}>{getOpportunityVisibilityLabel(item.visibility)}</Tag> },
 			{ title: "Início", className: "datetime", render: (item) => item.starts_at ? moment(item.starts_at).format("DD/MM/YYYY HH:mm") : "-" },
 			{
 				title    : "Criação",

@@ -122,7 +122,7 @@ class Filters extends Component {
 				<div className="filter-group">
 					<div className="filter-group-title"><h3>Dono da comunidade</h3></div>
 					<div className="filter-group-filters">
-						<Form.Item label="UUID do usuário dono">
+						<Form.Item label="Dono">
 							<Select
 								showSearch
 								allowClear
@@ -134,7 +134,7 @@ class Filters extends Component {
 								loading={isLoadingOwners}>
 								{owners.filter((item) => !!item.uuid).map((item) => (
 									<Select.Option key={item.uuid} value={item.uuid}>
-										{`${item.uuid} - ${item.name} (${item.email})`}
+										{`${item.name} (${item.email})`}
 									</Select.Option>
 								))}
 							</Select>

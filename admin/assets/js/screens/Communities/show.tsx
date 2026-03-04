@@ -53,8 +53,13 @@ const collaboratorStatusLabel = (status) => {
 
 class Show extends Component {
 	static propTypes = {
-		visible: PropTypes.bool.isRequired,
-		onClose: PropTypes.func.isRequired,
+		visible    : PropTypes.bool.isRequired,
+		onClose    : PropTypes.func.isRequired,
+		permissions: PropTypes.array,
+	};
+
+	static defaultProps = {
+		permissions: [],
 	};
 
 	constructor(props) {
@@ -724,12 +729,12 @@ class Show extends Component {
 					Visualizar episódio
 				</a>
 			</Menu.Item>
-			<Menu.Item key="toggle" className={`${item.is_active ? "btn-delete" : ""}`}>
+			{this.props.permissions.includes("communities.edit") && <Menu.Item key="toggle" className={`${item.is_active ? "btn-delete" : ""}`}>
 				<a onClick={() => this.toggleEpisodeStatusConfirm(item)}>
 					<i className={`fal ${item.is_active ? "fa-toggle-off" : "fa-toggle-on"}`} />
 					{item.is_active ? "Inativar episódio" : "Ativar episódio"}
 				</a>
-			</Menu.Item>
+			</Menu.Item>}
 		</Menu>
 	);
 
@@ -768,6 +773,7 @@ class Show extends Component {
 		{
 			title    : "Ações",
 			className: "actions no-ellipsis",
+			visible  : this.props.permissions.includes("communities.edit"),
 			render   : (item) => (
 				<Dropdown overlay={this.followerMenu(item)} className="actions-dropdown" placement="bottomRight" trigger={["click"]}>
 					<Button icon={<i className="fal fa-ellipsis-v" />} />
@@ -806,6 +812,7 @@ class Show extends Component {
 		{
 			title    : "Ações",
 			className: "actions no-ellipsis",
+			visible  : this.props.permissions.includes("communities.edit"),
 			render   : (item) => item.role === "owner"
 				? <Tag color="#0acf97">Dono</Tag>
 				: (
@@ -896,7 +903,7 @@ class Show extends Component {
 				)}
 				buttons={[
 					{
-						visible: true,
+						visible: this.props.permissions.includes("communities.edit"),
 						onClick: this.openAddFollowerModal,
 						title  : "Adicionar seguidor",
 						icon   : <i className="far fa-user-plus" />,
@@ -1046,7 +1053,7 @@ class Show extends Component {
 
 		return (
 			<>
-				<UIDrawerForm visible={visible} width={1120} onClose={this.onClose} isLoading={isLoading} showBtnSave={false} title={`Visualizar comunidade [${uuid}]`}>
+				<UIDrawerForm visible={visible} width={1220} onClose={this.onClose} isLoading={isLoading} showBtnSave={false} title={`Visualizar comunidade [${uuid}]`}>
 					<Tabs activeKey={activeTab} onChange={this.onTabChange}>
 						<Tabs.TabPane forceRender tab="Sobre a comunidade" key="about">
 							{this.renderAbout()}

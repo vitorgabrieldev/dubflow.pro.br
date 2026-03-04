@@ -188,6 +188,88 @@ class CommentsController extends Controller
         return CommentResource::collection($query->limit(50)->get());
     }
 
+    public function postsAutocomplete(Request $request): JsonResponse
+    {
+        $request->validate([
+            'search' => ['sometimes', 'nullable', 'string'],
+            'orderBy' => ['sometimes', 'nullable', 'string'],
+            'organization_id' => ['sometimes', 'nullable', 'integer'],
+            'post_id' => ['sometimes', 'nullable', 'integer'],
+        ]);
+
+        $query = DubbingPost::query()
+            ->with([
+                'organization:id,name',
+                'author:id,uuid,name,email',
+            ])
+            ->select([
+                'id',
+                'organization_id',
+                'author_user_id',
+                'title',
+                'description',
+                'visibility',
+                'published_at',
+                'created_at',
+            ]);
+
+        if ($request->filled('organization_id')) {
+            $query->where('organization_id', $request->integer('organization_id'));
+        }
+
+        if ($request->filled('post_id')) {
+            $query->where('id', $request->integer('post_id'));
+        }
+
+        if ($search = trim($request->string('search')->toString())) {
+            $query->where(function (Builder $builder) use ($search): void {
+                $builder->where('id', 'like', '%'.$search.'%')
+                    ->orWhere('title', 'like', '%'.$search.'%')
+                    ->orWhere('description', 'like', '%'.$search.'%')
+                    ->orWhereHas('organization', fn (Builder $organizationBuilder) => $organizationBuilder
+                        ->where('name', 'like', '%'.$search.'%'))
+                    ->orWhereHas('author', fn (Builder $authorBuilder) => $authorBuilder
+                        ->where('name', 'like', '%'.$search.'%')
+                        ->orWhere('email', 'like', '%'.$search.'%'));
+            });
+        }
+
+        $orderBy = $this->parseOrderBy($request->input('orderBy'), [
+            'id', 'title', 'published_at', 'created_at',
+        ], 'id', 'desc');
+
+        foreach ($orderBy as $item) {
+            $query->orderBy($item['name'], $item['sort']);
+        }
+
+        $posts = $query
+            ->limit(50)
+            ->get()
+            ->map(static function (DubbingPost $post): array {
+                return [
+                    'id' => $post->id,
+                    'title' => $post->title,
+                    'organization' => $post->organization ? [
+                        'id' => $post->organization->id,
+                        'name' => $post->organization->name,
+                    ] : null,
+                    'author' => $post->author ? [
+                        'uuid' => $post->author->uuid,
+                        'name' => $post->author->name,
+                        'email' => $post->author->email,
+                    ] : null,
+                    'visibility' => $post->visibility,
+                    'published_at' => $post->published_at?->toAtomString(),
+                    'created_at' => $post->created_at?->toAtomString(),
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'data' => $posts,
+        ]);
+    }
+
     public function export(Request $request): JsonResponse
     {
         $request->validate([

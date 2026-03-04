@@ -1,7 +1,8 @@
 import React, { Component } from "react";
 import * as PropTypes from "prop-types";
-import { Button, DatePicker, Form, Input, Modal, Radio } from "antd";
+import { Button, DatePicker, Form, Input, Modal, Radio, Select } from "antd";
 import moment from "moment";
+import { NOTIFICATION_TYPE_OPTIONS } from "./../../config/notificationTypes";
 
 class Filters extends Component {
 	static propTypes = {
@@ -60,7 +61,19 @@ class Filters extends Component {
 					<div className="filter-group-title"><h3>Relacionamento</h3></div>
 					<div className="filter-group-filters">
 						<Form.Item label="UUID do usuário"><Input value={filters.user_uuid || ""} onChange={(e) => this.setFilter("user_uuid", e.target.value || null)} /></Form.Item>
-						<Form.Item label="Tipo"><Input value={filters.type || ""} onChange={(e) => this.setFilter("type", e.target.value || null)} /></Form.Item>
+						<Form.Item label="Tipo">
+							<Select
+								showSearch
+								allowClear
+								optionFilterProp="children"
+								placeholder="Selecione o tipo"
+								value={filters.type || undefined}
+								onChange={(value) => this.setFilter("type", value || null)}>
+								{NOTIFICATION_TYPE_OPTIONS.map((type) => (
+									<Select.Option key={type.value} value={type.value}>{type.label}</Select.Option>
+								))}
+							</Select>
+						</Form.Item>
 					</div>
 				</div>
 				<div className="filter-group">

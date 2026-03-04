@@ -1,9 +1,10 @@
 import React, { Component } from "react";
 import * as PropTypes from "prop-types";
-import { Form, Input, message, Modal, Switch } from "antd";
+import { Form, Input, message, Modal, Select, Switch } from "antd";
 
 import { notificationsAdminService } from "./../../redux/services";
 import { UIDrawerForm } from "./../../components";
+import { NOTIFICATION_TYPE_OPTIONS } from "./../../config/notificationTypes";
 
 const formId = `form-drawer-${Math.floor(Math.random() * 10001)}`;
 
@@ -61,7 +62,15 @@ class Edit extends Component {
 		return (
 			<UIDrawerForm visible={visible} width={560} onClose={this.onClose} isLoading={isLoading} isSending={isSending} formId={formId} title={`Editar notificação [${uuid}]`}>
 				<Form ref={(el) => this.form = el} id={formId} layout="vertical" scrollToFirstError onFinish={this.onFinish}>
-					<Form.Item name="type" label="Tipo" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}><Input /></Form.Item>
+					<Form.Item name="type" label="Tipo" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}>
+						<Select showSearch optionFilterProp="children" placeholder="Selecione o tipo">
+							{NOTIFICATION_TYPE_OPTIONS.map((type) => (
+								<Select.Option key={type.value} value={type.value}>
+									{type.label}
+								</Select.Option>
+							))}
+						</Select>
+					</Form.Item>
 					<Form.Item name="title" label="Título" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}><Input /></Form.Item>
 					<Form.Item name="message" label="Mensagem" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}><Input.TextArea rows={4} /></Form.Item>
 					<Form.Item name="is_read" label="Marcar como lida" valuePropName="checked"><Switch /></Form.Item>

@@ -134,6 +134,8 @@ Route::prefix('v1')->group(function () {
             Route::post('/comments', [AdminCommentsController::class, 'store'])->middleware('permission:comments.create');
             Route::get('/comments/autocomplete', [AdminCommentsController::class, 'autocomplete'])
                 ->middleware('permission:comments.list,comments.show,comments.create,comments.edit');
+            Route::get('/comments/posts/autocomplete', [AdminCommentsController::class, 'postsAutocomplete'])
+                ->middleware('permission:comments.list,comments.show,comments.create,comments.edit');
             Route::get('/comments/export', [AdminCommentsController::class, 'export'])->middleware('permission:comments.export');
             Route::get('/comments/{commentId}', [AdminCommentsController::class, 'show'])->middleware('permission:comments.show');
             Route::post('/comments/{commentId}', [AdminCommentsController::class, 'update'])->middleware('permission:comments.edit');

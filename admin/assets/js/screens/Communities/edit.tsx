@@ -54,106 +54,20 @@ class Edit extends Component {
 	constructor(props) {
 		super(props);
 		this.state = {
-			isLoading: true,
-			isSending: false,
-			uuid     : 0,
-			owners   : [],
+			isLoading    : true,
+			isSending    : false,
+			uuid         : 0,
+			owners       : [],
 			ownersLoading: false,
-				formValues: {
-					owner_uuid : undefined,
-					community_name: "",
-					slug       : "",
-					website_url: "",
-					description: "",
-				is_public  : true,
-				is_verified: false,
-			},
 			selectedOwner: null,
-			slugTouched: false,
+			slugTouched  : false,
 		};
 
+		this.form = null;
+		this.pendingFormValues = null;
 		this.isAutoSlugUpdate = false;
 		this.ownerSearchTimeout = null;
-		this.form = null;
 	}
-
-	onOpen = (uuid) => {
-		this.setState({
-			isLoading: true,
-			uuid,
-			slugTouched: false,
-			owners: [],
-			selectedOwner: null,
-				formValues: {
-					owner_uuid : undefined,
-					community_name: "",
-					slug       : "",
-					website_url: "",
-					description: "",
-				is_public  : true,
-				is_verified: false,
-			},
-		});
-
-		let item;
-
-		communitiesService.show({uuid})
-		.then((response) => {
-			item = response.data.data;
-			return this.fetchOwners("", item.owner || null);
-		})
-			.then(() => {
-				const normalizedOwnerUuid = item.owner?.uuid || (item.owner?.id ? String(item.owner.id) : undefined);
-					const nextValues = {
-						owner_uuid : normalizedOwnerUuid,
-						community_name: item.name || "",
-						slug       : item.slug || "",
-						website_url: item.website_url || "",
-						description: item.description || "",
-					is_public  : !!item.is_public,
-					is_verified: !!item.is_verified,
-				};
-
-			this.setState({
-				isLoading: false,
-				formValues: nextValues,
-					selectedOwner: item.owner ? {
-						uuid : normalizedOwnerUuid,
-						name : item.owner.name,
-						email: item.owner.email,
-					} : null,
-				}, () => {
-						if( this.form ) {
-							this.form.resetFields();
-
-							window.requestAnimationFrame(() => {
-								this.form?.setFieldsValue(nextValues);
-								this.form?.setFieldsValue({community_name: item.name || ""});
-								setTimeout(() => {
-									this.form?.setFieldsValue({community_name: item.name || ""});
-								}, 0);
-							});
-						}
-
-					if( this.avatarUpload ) {
-						this.avatarUpload.reset();
-						if( item.avatar ) {
-						this.avatarUpload.setFiles([{uuid: `avatar-${uuid}`, url: item.avatar, type: "image/jpeg"}]);
-					}
-				}
-
-				if( this.coverUpload ) {
-					this.coverUpload.reset();
-					if( item.cover ) {
-						this.coverUpload.setFiles([{uuid: `cover-${uuid}`, url: item.cover, type: "image/jpeg"}]);
-					}
-				}
-			});
-		})
-		.catch((data) => {
-			Modal.error({ title: "Ocorreu um erro!", content: String(data), onOk: () => this.onClose() });
-		});
-	};
 
 	componentWillUnmount() {
 		if( this.ownerSearchTimeout ) {
@@ -161,29 +75,52 @@ class Edit extends Component {
 		}
 	}
 
-	onClose = () => this.props.onClose();
+	setFormRef = (formRef) => {
+		this.form = formRef;
 
-		mergeOwners = (owners = [], selectedOwner = null) => {
-		const map = new Map();
-		const normalizeOwner = (owner) => {
-			const ownerUuid = owner?.uuid || (owner?.id ? String(owner.id) : null);
-			if( !ownerUuid ) return null;
+		if( this.form?.setFieldsValue && this.pendingFormValues ) {
+			this.form.setFieldsValue(this.pendingFormValues);
+			this.pendingFormValues = null;
+		}
+	};
 
-			return {
-				uuid : ownerUuid,
-				name : owner.name || "Sem nome",
-				email: owner.email || "sem-email",
-			};
+	applyFormValues = (values) => {
+		if( this.form?.setFieldsValue ) {
+			this.form.setFieldsValue(values);
+			return;
+		}
+
+		this.pendingFormValues = values;
+
+		window.requestAnimationFrame(() => {
+			if( this.form?.setFieldsValue && this.pendingFormValues ) {
+				this.form.setFieldsValue(this.pendingFormValues);
+				this.pendingFormValues = null;
+			}
+		});
+	};
+
+	normalizeOwner = (owner) => {
+		const ownerUuid = owner?.uuid || (owner?.id ? String(owner.id) : null);
+		if( !ownerUuid ) return null;
+
+		return {
+			uuid : ownerUuid,
+			name : owner.name || "Sem nome",
+			email: owner.email || "sem-email",
 		};
+	};
 
-		const normalizedSelectedOwner = normalizeOwner(selectedOwner);
+	mergeOwners = (owners = [], selectedOwner = null) => {
+		const map = new Map();
+		const normalizedSelectedOwner = this.normalizeOwner(selectedOwner);
 
 		if( normalizedSelectedOwner?.uuid ) {
 			map.set(normalizedSelectedOwner.uuid, normalizedSelectedOwner);
 		}
 
 		owners.forEach((owner) => {
-			const normalizedOwner = normalizeOwner(owner);
+			const normalizedOwner = this.normalizeOwner(owner);
 			if( normalizedOwner?.uuid ) {
 				map.set(normalizedOwner.uuid, normalizedOwner);
 			}
@@ -215,6 +152,61 @@ class Edit extends Component {
 			}));
 		});
 	};
+
+	onOpen = (uuid) => {
+		this.setState({
+			isLoading    : true,
+			uuid,
+			owners       : [],
+			selectedOwner: null,
+			slugTouched  : false,
+		});
+
+		communitiesService.show({uuid})
+		.then((response) => {
+			const item = response.data.data;
+			return this.fetchOwners("", item.owner || null).then(() => item);
+		})
+		.then((item) => {
+			const normalizedOwner = this.normalizeOwner(item.owner);
+			const values = {
+				owner_uuid : normalizedOwner?.uuid || undefined,
+				name       : item.name || "",
+				slug       : item.slug || "",
+				website_url: item.website_url || "",
+				description: item.description || "",
+				is_public  : !!item.is_public,
+				is_verified: !!item.is_verified,
+			};
+
+			this.setState({
+				isLoading    : false,
+				selectedOwner: normalizedOwner,
+			}, () => {
+				this.form?.resetFields();
+				this.applyFormValues(values);
+
+				if( this.avatarUpload ) {
+					this.avatarUpload.reset();
+					if( item.avatar ) {
+						this.avatarUpload.setFiles([{uuid: `avatar-${item.uuid || uuid}`, url: item.avatar, type: "image/jpeg"}]);
+					}
+				}
+
+				if( this.coverUpload ) {
+					this.coverUpload.reset();
+					if( item.cover ) {
+						this.coverUpload.setFiles([{uuid: `cover-${item.uuid || uuid}`, url: item.cover, type: "image/jpeg"}]);
+					}
+				}
+			});
+		})
+		.catch((error) => {
+			Modal.error({ title: "Ocorreu um erro!", content: String(error), onOk: () => this.onClose() });
+		});
+	};
+
+	onClose = () => this.props.onClose();
 
 	onOwnerSearch = (value) => {
 		if( this.ownerSearchTimeout ) {
@@ -249,11 +241,11 @@ class Edit extends Component {
 			return;
 		}
 
-			if( changedValues.hasOwnProperty("community_name") && !this.state.slugTouched && this.form ) {
-				const normalizedFromName = normalizeSlugInput(changedValues.community_name || "");
-				if( (allValues.slug || "") !== normalizedFromName ) {
-					this.isAutoSlugUpdate = true;
-					this.form.setFieldsValue({slug: normalizedFromName});
+		if( changedValues.hasOwnProperty("name") && !this.state.slugTouched && this.form ) {
+			const normalizedFromName = normalizeSlugInput(changedValues.name || "");
+			if( (allValues.slug || "") !== normalizedFromName ) {
+				this.isAutoSlugUpdate = true;
+				this.form.setFieldsValue({slug: normalizedFromName});
 			}
 		}
 	};
@@ -262,10 +254,9 @@ class Edit extends Component {
 		const payload = {
 			uuid: this.state.uuid,
 			...values,
-			name      : (values.community_name || "").trim(),
+			name      : (values.name || "").trim(),
 			owner_uuid: values.owner_uuid || null,
 		};
-		delete payload.community_name;
 
 		if( payload.slug ) {
 			payload.slug = normalizeSlugSubmit(payload.slug);
@@ -305,9 +296,9 @@ class Edit extends Component {
 			message.success("Comunidade atualizada com sucesso.");
 			this.props.onComplete();
 		})
-		.catch((data) => {
+		.catch((error) => {
 			this.setState({isSending: false});
-			Modal.error({ title: "Ocorreu um erro!", content: String(data) });
+			Modal.error({ title: "Ocorreu um erro!", content: String(error) });
 		});
 	};
 
@@ -319,14 +310,14 @@ class Edit extends Component {
 		return (
 			<UIDrawerForm visible={visible} width={560} onClose={this.onClose} isLoading={isLoading} isSending={isSending} formId={formId} title={`Editar comunidade [${uuid}]`}>
 				<Form
-					ref={(formRef) => this.form = formRef}
+					ref={this.setFormRef}
 					id={formId}
 					key={`community-edit-form-${uuid}`}
 					layout="vertical"
 					scrollToFirstError
 					onFinish={this.onFinish}
 					onValuesChange={this.onValuesChange}>
-					<Form.Item name="owner_uuid" label="Dono da comunidade" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}> 
+					<Form.Item name="owner_uuid" label="Dono da comunidade" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}>
 						<Select
 							showSearch
 							filterOption={false}
@@ -343,7 +334,9 @@ class Edit extends Component {
 							{ownerOptions.filter((item) => !!item.uuid).map((item) => <Select.Option key={item.uuid} value={item.uuid}>{item.name} ({item.email})</Select.Option>)}
 						</Select>
 					</Form.Item>
-						<Form.Item name="community_name" label="Nome" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}> <Input /></Form.Item>
+					<Form.Item name="name" label="Nome" hasFeedback rules={[{required: true, message: "Campo obrigatório."}]}>
+						<Input />
+					</Form.Item>
 					<Form.Item
 						name="slug"
 						label="Slug"
