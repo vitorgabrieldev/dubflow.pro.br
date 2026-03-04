@@ -198,7 +198,6 @@ jobs:
     name: Deploy Frontend
     runs-on: ubuntu-latest
     needs: deploy-backend
-    if: ${{ always() && needs.deploy-backend.result == 'success' }}
     environment: ${{ github.event.inputs.target }}
     env:
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -271,7 +270,6 @@ jobs:
     name: Smoke Test
     runs-on: ubuntu-latest
     needs: deploy-frontend
-    if: ${{ always() && needs.deploy-frontend.result == 'success' }}
     steps:
       - name: Check health endpoint
         run: |
