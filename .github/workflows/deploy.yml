@@ -245,7 +245,14 @@ jobs:
             export RUN_ADMIN_BUILD=1
             export NODE_BUILD_OPTIONS="${{ secrets.NODE_BUILD_OPTIONS }}"
             export SUDO_PASSWORD="${{ secrets.DEPLOY_PASSWORD }}"
-            bash "${{ secrets.REPO_DIR }}/deploy/frontend.sh"
+            if [ -f "${REPO_DIR}/deploy/frontend.sh" ]; then
+              bash "${REPO_DIR}/deploy/frontend.sh"
+            else
+              echo "[frontend] deploy/frontend.sh ausente no working tree; carregando script do ref ${DEPLOY_REF}"
+              git -C "${REPO_DIR}" show "${DEPLOY_REF}:deploy/frontend.sh" > /tmp/dubflow-frontend.sh
+              chmod +x /tmp/dubflow-frontend.sh
+              bash /tmp/dubflow-frontend.sh
+            fi
 
       - name: Deploy frontend via SSH password
         if: ${{ env.DEPLOY_SSH_KEY == '' && env.DEPLOY_PASSWORD != '' }}
@@ -267,7 +274,14 @@ jobs:
             export RUN_ADMIN_BUILD=1
             export NODE_BUILD_OPTIONS="${{ secrets.NODE_BUILD_OPTIONS }}"
             export SUDO_PASSWORD="${{ secrets.DEPLOY_PASSWORD }}"
-            bash "${{ secrets.REPO_DIR }}/deploy/frontend.sh"
+            if [ -f "${REPO_DIR}/deploy/frontend.sh" ]; then
+              bash "${REPO_DIR}/deploy/frontend.sh"
+            else
+              echo "[frontend] deploy/frontend.sh ausente no working tree; carregando script do ref ${DEPLOY_REF}"
+              git -C "${REPO_DIR}" show "${DEPLOY_REF}:deploy/frontend.sh" > /tmp/dubflow-frontend.sh
+              chmod +x /tmp/dubflow-frontend.sh
+              bash /tmp/dubflow-frontend.sh
+            fi
 
   smoke:
     name: Smoke Test
