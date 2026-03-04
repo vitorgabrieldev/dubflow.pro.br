@@ -22,6 +22,7 @@ import {
 import { PostCard } from "@/components/feed/post-card";
 import { FollowUserButton } from "@/components/profile/follow-user-button";
 import { MessageUserButton } from "@/components/profile/message-user-button";
+import { renderAchievementIcon } from "@/components/profile/profile-achievements";
 import { Avatar } from "@/components/ui/avatar";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Button } from "@/components/ui/button";
@@ -572,7 +573,7 @@ export default async function PublicProfilePage({
                     const icon =
                       achievement.level_definition?.icon
                       ?? achievement.definition?.icon
-                      ?? "🏆";
+                      ?? "trophy";
                     const colorStart =
                       achievement.level_definition?.color_start
                       ?? achievement.definition?.color_start
@@ -585,10 +586,15 @@ export default async function PublicProfilePage({
                     return (
                       <div
                         key={achievement.id}
-                        className="rounded-[8px] border border-black/10 px-2 py-2 text-sm text-white"
+                        className="rounded-[8px] border border-black/10 px-2 py-2 text-sm text-white shadow-[0_14px_24px_-18px_rgba(0,0,0,0.65)]"
                         style={{ backgroundImage: `linear-gradient(135deg, ${colorStart}, ${colorEnd})` }}
                       >
-                        <p className="line-clamp-1 font-semibold">{icon} {title}</p>
+                        <p className="line-clamp-1 flex items-center gap-1.5 font-semibold">
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/45 bg-white/18">
+                            {renderAchievementIcon(icon, 12)}
+                          </span>
+                          {title}
+                        </p>
                       </div>
                     );
                   })}

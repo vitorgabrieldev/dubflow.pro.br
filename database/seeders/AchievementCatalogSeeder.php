@@ -12,12 +12,12 @@ class AchievementCatalogSeeder extends Seeder
      * @var array<string, array{0: string, 1: string}>
      */
     private const RARITY_COLORS = [
-        'common' => ['#94A3B8', '#CBD5E1'],
-        'uncommon' => ['#34D399', '#6EE7B7'],
-        'rare' => ['#38BDF8', '#60A5FA'],
-        'epic' => ['#A78BFA', '#C084FC'],
-        'legendary' => ['#F59E0B', '#F97316'],
-        'mythic' => ['#F43F5E', '#EC4899'],
+        'common' => ['#64748B', '#94A3B8'],
+        'uncommon' => ['#2563EB', '#3B82F6'],
+        'rare' => ['#7C3AED', '#A855F7'],
+        'epic' => ['#C026D3', '#E879F9'],
+        'legendary' => ['#EA580C', '#F59E0B'],
+        'mythic' => ['#E11D48', '#EC4899'],
     ];
 
     public function run(): void

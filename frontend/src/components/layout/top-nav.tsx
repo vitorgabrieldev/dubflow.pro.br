@@ -98,6 +98,13 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
   const profileName = resolvedUser?.stage_name?.trim() || resolvedUser?.name || "Conta";
   const profileHandle = resolvedUser?.username ? `@${resolvedUser.username}` : null;
   const profileAvatar = resolveMediaUrl(resolvedUser?.avatar_path);
+  const isCreateOpportunityRoute =
+    pathname.startsWith(`${basePath}/organizations/`) && pathname.includes("/oportunidades/novo");
+  const publishActive =
+    isActivePath(pathname, `${basePath}/publicar`) ||
+    isActivePath(pathname, `${basePath}/nova-playlist`) ||
+    isActivePath(pathname, `${basePath}/nova-organizacao`) ||
+    isCreateOpportunityRoute;
   if (compactMode) {
     return (
       <header data-top-nav="1" className="sticky top-0 z-30 border-b border-white/10 bg-[#0a0c10]/95 backdrop-blur-xl">
@@ -251,11 +258,7 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
               <PublishDropdown
                 locale={locale}
                 label={t.nav.publish}
-                active={
-                  isActivePath(pathname, `${basePath}/publicar`) ||
-                  isActivePath(pathname, `${basePath}/oportunidades`) ||
-                  false
-                }
+                active={publishActive}
               />
             ) : null}
           </nav>

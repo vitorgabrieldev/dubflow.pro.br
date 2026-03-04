@@ -184,7 +184,7 @@ export default async function UserAchievementsPage({
                 const title = item.level_definition?.title || item.definition?.title || "Conquista";
                 const description = item.level_definition?.description || item.definition?.description || null;
                 const rarity = item.level_definition?.rarity || item.definition?.rarity || "common";
-                const icon = item.level_definition?.icon || item.definition?.icon || "🏆";
+                const icon = item.level_definition?.icon || item.definition?.icon || "trophy";
                 const colorStart = item.level_definition?.color_start || item.definition?.color_start || "#6d28d9";
                 const colorEnd = item.level_definition?.color_end || item.definition?.color_end || "#9333ea";
 
@@ -193,8 +193,8 @@ export default async function UserAchievementsPage({
                     key={item.id}
                     className="rounded-[12px] border border-black/10 p-3"
                     style={{
-                      boxShadow: `0 20px 36px -28px ${withAlpha(colorStart, 0.85)}`,
-                      background: `linear-gradient(145deg, ${withAlpha(colorStart, 0.14)} 0%, ${withAlpha(colorEnd, 0.1)} 35%, rgba(255,255,255,0.96) 100%)`,
+                      boxShadow: `0 28px 48px -30px ${withAlpha(colorStart, 0.94)}`,
+                      background: `linear-gradient(145deg, ${withAlpha(colorStart, 0.24)} 0%, ${withAlpha(colorEnd, 0.18)} 40%, rgba(255,255,255,0.96) 100%)`,
                     }}
                   >
                     <div className="flex items-start gap-3">

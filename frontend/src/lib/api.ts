@@ -284,6 +284,25 @@ export async function fetchNotifications(
   }
 }
 
+export async function markAllNotificationsAsRead(token?: string): Promise<void> {
+  if (!token) {
+    return;
+  }
+
+  try {
+    await fetch(`${API_BASE_URL}/notifications/read-all`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+  } catch {
+    // Ignore read-all failures on automatic read.
+  }
+}
+
 export async function fetchPublishOptions(token?: string): Promise<PublishOrganizationOption[]> {
   if (!token) {
     return [];
