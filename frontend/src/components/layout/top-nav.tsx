@@ -44,6 +44,15 @@ type TopNavProps = {
   compactMode?: boolean;
 };
 
+type AnimatedMenuIconProps = {
+  staticIcon: ReactNode;
+  gifSrc: string;
+  gifAlt: string;
+  size?: number;
+  playDurationMs?: number;
+  triggerKey?: number;
+};
+
 export function TopNav({ locale, isAuthenticated, currentUser, compactMode = false }: TopNavProps) {
   const t = getDictionary(locale);
   const pathname = usePathname() ?? "";
@@ -112,13 +121,27 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
     isActivePath(pathname, `${basePath}/nova-playlist`) ||
     isActivePath(pathname, `${basePath}/nova-organizacao`) ||
     isCreateOpportunityRoute;
+  const feedTabActive = pathname === basePath;
+  const communitiesTabActive = isActivePath(pathname, `${basePath}/comunidades`);
+  const opportunitiesTabActive = isActivePath(pathname, `${basePath}/oportunidades`);
+
+  useEffect(() => {
+    const routes = [`${basePath}`, `${basePath}/comunidades`, `${basePath}/oportunidades`];
+    if (hasSessionUser) {
+      routes.push(`${basePath}/mensagens`, `${basePath}/notificacoes`, `${basePath}/painel`, `${basePath}/publicar`);
+    }
+
+    routes.forEach((route) => {
+      void router.prefetch(route);
+    });
+  }, [basePath, hasSessionUser, router]);
   if (compactMode) {
     return (
       <header data-top-nav="1" className="sticky top-0 z-30 border-b border-white/10 bg-[#0a0c10]/95 backdrop-blur-xl">
         <div className="w-full px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-3">
             <Link href={basePath} className="inline-flex items-center">
-              <Image src="/logos/logo-cor.png" alt="DubFlow" width={126} height={40} className="h-8 w-auto" priority />
+              <Image src="/logos/logo-cor.png" alt="DubFlow" width={158} height={50} className="h-10 w-auto" priority />
               <span className="sr-only">{t.appName}</span>
             </Link>
 
@@ -156,15 +179,15 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
     <>
       <header
         data-top-nav="1"
-        className={`${hideOnMobile ? "hidden lg:block " : ""}sticky top-0 z-30 border-b border-[var(--color-border-soft)] bg-white/80 backdrop-blur-xl`}
+        className={`${hideOnMobile ? "hidden lg:block " : ""}sticky top-0 z-30 bg-white/80 backdrop-blur-xl`}
       >
-        <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-5">
+        <div className="mx-auto w-full max-w-7xl px-4 py-3 sm:px-6 lg:px-8 lg:py-4 lg:pb-0">
           <div className="flex items-center justify-between gap-3">
             <Link
               href={basePath}
-              className="inline-flex items-center gap-2 rounded-[8px] bg-transparent px-0 py-0 text-lg font-semibold tracking-tight text-[var(--color-ink)] ring-0 sm:bg-white sm:px-2 sm:py-1 sm:ring-1 sm:ring-[var(--color-border-soft)]"
+              className="inline-flex items-center gap-2 bg-transparent px-0 py-0 text-lg font-semibold tracking-tight text-[var(--color-ink)] lg:mr-4"
             >
-              <Image src="/logos/logo-cor.png" alt="DubFlow" width={126} height={40} className="h-8 w-auto" priority />
+              <Image src="/logos/logo-cor.png" alt="DubFlow" width={158} height={50} className="h-10 w-auto" priority />
               <span className="sr-only">{t.appName}</span>
             </Link>
 
@@ -226,9 +249,15 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
                     </Link>
                     <Link
                       href={`${basePath}/criar-conta`}
-                      className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-[linear-gradient(135deg,var(--color-primary)_0%,var(--color-primary-strong)_100%)] px-3 text-sm font-semibold text-white shadow-[0_10px_24px_-14px_rgba(147,51,234,0.8)] transition hover:opacity-95"
+                      className="group inline-flex h-10 items-center gap-2 rounded-[8px] bg-[linear-gradient(135deg,var(--color-primary)_0%,var(--color-primary-strong)_100%)] px-3 text-[15px] font-semibold text-white shadow-[0_10px_24px_-14px_rgba(147,51,234,0.8)] transition hover:opacity-95"
                     >
-                      <UserPlus size={15} />
+                      <AnimatedMenuIcon
+                        staticIcon={<UserPlus size={16} className="text-white" />}
+                        gifSrc="/nav-gifs/create.gif"
+                        gifAlt="Criar conta"
+                        size={16}
+                        playDurationMs={1700}
+                      />
                       {t.auth.signup}
                     </Link>
                   </div>
@@ -246,27 +275,48 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
             </div>
           </div>
 
-          <nav className="mt-4 hidden items-center gap-1 lg:flex">
+          <nav className="mt-3 hidden items-end gap-2 border-b border-[var(--color-border-soft)] lg:flex">
             <NavItem
               href={basePath}
-              icon={<RadioTower size={15} />}
+              animatedIcon={{
+                staticIcon: <RadioTower size={22} className="text-[#f97316]" />,
+                gifSrc: "/nav-gifs/feed.gif",
+                gifAlt: "Feed",
+                size: 22,
+                playDurationMs: 1700,
+                selected: feedTabActive,
+              }}
               label={t.nav.feed}
               tourId="home-nav-feed"
-              active={pathname === basePath}
+              active={feedTabActive}
             />
             <NavItem
               href={`${basePath}/comunidades`}
-              icon={<Users size={15} />}
+              animatedIcon={{
+                staticIcon: <Users size={22} className="text-[#0ea5e9]" />,
+                gifSrc: "/nav-gifs/communities.gif",
+                gifAlt: "Comunidades",
+                size: 22,
+                playDurationMs: 1700,
+                selected: communitiesTabActive,
+              }}
               label={t.nav.organizations}
               tourId="home-nav-communities"
-              active={isActivePath(pathname, `${basePath}/comunidades`)}
+              active={communitiesTabActive}
             />
             <NavItem
               href={`${basePath}/oportunidades`}
-              icon={<Mic2 size={15} />}
+              animatedIcon={{
+                staticIcon: <Mic2 size={22} className="text-[#ef4444]" />,
+                gifSrc: "/nav-gifs/opportunities.gif",
+                gifAlt: "Oportunidades",
+                size: 22,
+                playDurationMs: 1700,
+                selected: opportunitiesTabActive,
+              }}
               label={t.nav.opportunities}
               tourId="home-nav-opportunities"
-              active={isActivePath(pathname, `${basePath}/oportunidades`)}
+              active={opportunitiesTabActive}
             />
             {hasSessionUser ? (
               <PublishDropdown
@@ -282,6 +332,150 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
 
       <MobileBottomBar locale={locale} pathname={pathname} hide={hideOnMobile} hasSessionUser={hasSessionUser} />
     </>
+  );
+}
+
+function AnimatedMenuIcon({
+  gifSrc,
+  gifAlt,
+  size = 16,
+  playDurationMs = 1400,
+  triggerKey = 0,
+}: AnimatedMenuIconProps) {
+  const [posterSrc, setPosterSrc] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playCount, setPlayCount] = useState(0);
+  const playTimeoutRef = useRef<number | null>(null);
+  const isLockedRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    let cancelled = false;
+    const image = new window.Image();
+    image.decoding = "async";
+    image.src = gifSrc;
+    image.onload = () => {
+      if (cancelled) {
+        return;
+      }
+
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, image.naturalWidth || size);
+        canvas.height = Math.max(1, image.naturalHeight || size);
+        const context = canvas.getContext("2d");
+        if (!context) {
+          return;
+        }
+
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        const pixels = imageData.data;
+        for (let index = 0; index < pixels.length; index += 4) {
+          const red = pixels[index];
+          const green = pixels[index + 1];
+          const blue = pixels[index + 2];
+          if (red > 245 && green > 245 && blue > 245) {
+            pixels[index + 3] = 0;
+          }
+        }
+        context.putImageData(imageData, 0, 0);
+        setPosterSrc(canvas.toDataURL("image/png"));
+      } catch {
+        setPosterSrc(null);
+      }
+    };
+
+    return () => {
+      cancelled = true;
+    };
+  }, [gifSrc, size]);
+
+  useEffect(() => {
+    return () => {
+      if (playTimeoutRef.current !== null) {
+        window.clearTimeout(playTimeoutRef.current);
+        playTimeoutRef.current = null;
+      }
+      isLockedRef.current = false;
+    };
+  }, []);
+
+  const playOnce = useCallback(() => {
+    if (isLockedRef.current) {
+      return;
+    }
+
+    isLockedRef.current = true;
+    setIsPlaying(true);
+    setPlayCount((current) => current + 1);
+
+    if (playTimeoutRef.current !== null) {
+      window.clearTimeout(playTimeoutRef.current);
+    }
+
+    playTimeoutRef.current = window.setTimeout(() => {
+      setIsPlaying(false);
+      isLockedRef.current = false;
+      playTimeoutRef.current = null;
+    }, playDurationMs);
+  }, [playDurationMs]);
+
+  useEffect(() => {
+    if (triggerKey <= 0) {
+      return;
+    }
+
+    const triggerId = window.setTimeout(() => {
+      playOnce();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(triggerId);
+    };
+  }, [playOnce, triggerKey]);
+
+  return (
+    <span className="relative inline-flex shrink-0 items-center justify-center overflow-hidden" style={{ width: size, height: size }}>
+      <span
+        className={`absolute inset-0 inline-flex items-center justify-center transition-all duration-200 ease-out ${
+          isPlaying ? "scale-90 opacity-0" : "scale-100 opacity-100"
+        }`}
+      >
+        {posterSrc ? (
+          <Image
+            src={posterSrc}
+            alt={gifAlt}
+            width={size}
+            height={size}
+            unoptimized
+            className="h-full w-full object-contain mix-blend-multiply"
+          />
+        ) : (
+          <span
+            aria-hidden
+            className="skeleton-shimmer inline-flex rounded-[6px] bg-black/10"
+            style={{ width: Math.max(12, size - 2), height: Math.max(12, size - 2) }}
+          />
+        )}
+      </span>
+      {isPlaying ? (
+        <span className="absolute inset-0 inline-flex items-center justify-center opacity-100">
+          <Image
+            key={`${gifSrc}-${playCount}`}
+            src={`${gifSrc}?play=${playCount}`}
+            alt={gifAlt}
+            width={size}
+            height={size}
+            unoptimized
+            className="h-full w-full object-contain mix-blend-multiply"
+          />
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -333,28 +527,33 @@ function SearchHeaderInput({
 
 function NavItem({
   href,
-  icon,
+  animatedIcon,
   label,
   active,
   tourId,
 }: {
   href: string;
-  icon: ReactNode;
+  animatedIcon: Omit<AnimatedMenuIconProps, "triggerKey">;
   label: string;
   active: boolean;
   tourId?: string;
 }) {
+  const [hoverTick, setHoverTick] = useState(0);
+
   return (
     <Link
+      prefetch
       href={href}
       data-tour-id={tourId}
-      className={`inline-flex items-center gap-2 rounded-[8px] px-3 py-2 text-sm ring-1 transition ${
+      onMouseEnter={() => setHoverTick((current) => current + 1)}
+      onFocus={() => setHoverTick((current) => current + 1)}
+      className={`group inline-flex -mb-px items-center gap-2.5 rounded-t-[10px] border-x border-t px-3.5 pb-[7px] pt-[7px] text-[17px] transition-colors duration-200 ease-out ${
         active
-          ? "bg-[var(--color-primary-soft)] text-[var(--color-ink)] ring-[var(--color-border-soft)]"
-          : "text-black/70 ring-transparent hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-ink)] hover:ring-[var(--color-border-soft)]"
+          ? "border-[var(--color-border-soft)] bg-[var(--color-page)] text-[var(--color-ink)]"
+          : "border-transparent bg-transparent text-black/70 hover:text-[var(--color-ink)]"
       }`}
     >
-      {icon}
+      <AnimatedMenuIcon {...animatedIcon} triggerKey={hoverTick} />
       <span>{label}</span>
     </Link>
   );
@@ -375,6 +574,7 @@ function IconLink({
 }) {
   return (
     <Link
+      prefetch
       href={href}
       aria-label={label}
       title={label}
@@ -1179,6 +1379,9 @@ function PublishDropdown({
   const [isLoadingOrganizations, setIsLoadingOrganizations] = useState(false);
   const [organizationsError, setOrganizationsError] = useState<string | null>(null);
   const [manageableOrganizations, setManageableOrganizations] = useState<OrganizationOption[]>([]);
+  const [hoverTick, setHoverTick] = useState(0);
+  const [submenuEpisodeHoverTick, setSubmenuEpisodeHoverTick] = useState(0);
+  const [submenuOpportunityHoverTick, setSubmenuOpportunityHoverTick] = useState(0);
 
   const closeDropdown = useCallback(() => {
     if (!isOpen || isClosing) {
@@ -1342,14 +1545,23 @@ function PublishDropdown({
       <button
         type="button"
         onClick={handleToggle}
+        onMouseEnter={() => setHoverTick((current) => current + 1)}
+        onFocus={() => setHoverTick((current) => current + 1)}
         aria-expanded={isOpen}
-        className={`inline-flex h-10 cursor-pointer items-center gap-2 rounded-[8px] px-3 py-2 text-sm ring-1 transition ${
+        className={`group inline-flex h-9 -mb-px cursor-pointer items-center gap-2.5 rounded-t-[10px] border-x border-t px-3.5 pb-[7px] pt-[7px] text-[17px] transition-colors duration-200 ease-out ${
           active
-            ? "bg-[var(--color-primary-soft)] text-[var(--color-ink)] ring-[var(--color-border-soft)]"
-            : "text-black/70 ring-transparent hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-ink)] hover:ring-[var(--color-border-soft)]"
+            ? "border-[var(--color-border-soft)] bg-[var(--color-page)] text-[var(--color-ink)]"
+            : "border-transparent bg-transparent text-black/70 hover:text-[var(--color-ink)]"
         }`}
       >
-        <Clapperboard size={15} />
+        <AnimatedMenuIcon
+          staticIcon={<Clapperboard size={22} className="text-[#22c55e]" />}
+          gifSrc="/nav-gifs/create.gif"
+          gifAlt="Criar"
+          size={22}
+          playDurationMs={1700}
+          triggerKey={hoverTick}
+        />
         <span>{label}</span>
         <ChevronDown size={14} />
       </button>
@@ -1411,18 +1623,36 @@ function PublishDropdown({
               <Link
                 href={`/${locale}/publicar`}
                 onClick={(event) => handleNavigate(event, `/${locale}/publicar`)}
+                onMouseEnter={() => setSubmenuEpisodeHoverTick((current) => current + 1)}
+                onFocus={() => setSubmenuEpisodeHoverTick((current) => current + 1)}
                 className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm text-black/80 hover:bg-black/5"
               >
-                <Clapperboard size={14} className="text-black/55" />
+                <AnimatedMenuIcon
+                  staticIcon={<Clapperboard size={16} className="text-[#22c55e]" />}
+                  gifSrc="/nav-gifs/submenu-create-episode.gif"
+                  gifAlt="Criar episódio"
+                  size={16}
+                  playDurationMs={1600}
+                  triggerKey={submenuEpisodeHoverTick}
+                />
                 Episódio
               </Link>
 
               <button
                 type="button"
                 onClick={() => handleOpenOrganizations()}
+                onMouseEnter={() => setSubmenuOpportunityHoverTick((current) => current + 1)}
+                onFocus={() => setSubmenuOpportunityHoverTick((current) => current + 1)}
                 className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-3 py-2 text-left text-sm text-black/80 hover:bg-black/5"
               >
-                <Mic2 size={14} className="text-black/55" />
+                <AnimatedMenuIcon
+                  staticIcon={<Mic2 size={16} className="text-[#ef4444]" />}
+                  gifSrc="/nav-gifs/submenu-create-opportunity.gif"
+                  gifAlt="Criar oportunidade"
+                  size={16}
+                  playDurationMs={1600}
+                  triggerKey={submenuOpportunityHoverTick}
+                />
                 Oportunidade
               </button>
             </>
