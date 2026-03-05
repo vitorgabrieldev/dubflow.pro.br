@@ -32,7 +32,6 @@ permissions:
 
 jobs:
   quality-gates:
-    if: ${{ github.event.inputs.skip_quality_gates != 'true' }}
     name: Quality Gates
     runs-on: ubuntu-latest
     services:
@@ -49,17 +48,24 @@ jobs:
           --health-timeout=5s
           --health-retries=12
     steps:
+      - name: Skip quality gates by input
+        if: ${{ github.event.inputs.skip_quality_gates == 'true' }}
+        run: echo "Quality gates pulados por skip_quality_gates=true"
+
       - uses: actions/checkout@v4
+        if: ${{ github.event.inputs.skip_quality_gates != 'true' }}
         with:
           ref: ${{ github.event.inputs.deploy_ref }}
 
       - uses: shivammathur/setup-php@v2
+        if: ${{ github.event.inputs.skip_quality_gates != 'true' }}
         with:
           php-version: "8.3"
           coverage: pcov
           tools: composer:v2
 
       - uses: actions/setup-node@v4
+        if: ${{ github.event.inputs.skip_quality_gates != 'true' }}
         with:
           node-version: "22"
           cache: "npm"
@@ -68,12 +74,14 @@ jobs:
             admin/package-lock.json
 
       - name: Install dependencies
+        if: ${{ github.event.inputs.skip_quality_gates != 'true' }}
         run: |
           composer install --no-interaction --prefer-dist
           npm --prefix frontend ci
           npm --prefix admin ci
 
       - name: Prepare backend testing env
+        if: ${{ github.event.inputs.skip_quality_gates != 'true' }}
         run: |
           cp .env.testing.example .env.testing
           sed -i 's/^DB_HOST=.*/DB_HOST=127.0.0.1/' .env.testing
@@ -84,21 +92,26 @@ jobs:
           php artisan jwt:secret --force --env=testing
 
       - name: Run backend tests
+        if: ${{ github.event.inputs.skip_quality_gates != 'true' }}
         run: php artisan test --env=testing --coverage-text
 
       - name: Run frontend lint + build
+        if: ${{ github.event.inputs.skip_quality_gates != 'true' }}
         run: |
           npm --prefix frontend run lint
           npm --prefix frontend run build
           npm --prefix admin run build
 
       - name: Install Playwright browser
+        if: ${{ github.event.inputs.skip_quality_gates != 'true' }}
         run: npx --prefix frontend playwright install --with-deps chromium
 
       - name: Prepare e2e testing database
+        if: ${{ github.event.inputs.skip_quality_gates != 'true' }}
         run: php artisan migrate:fresh --seed --env=testing
 
       - name: Run frontend e2e smoke
+        if: ${{ github.event.inputs.skip_quality_gates != 'true' }}
         run: |
           unset CI
           export E2E_BACKEND_URL="http://127.0.0.1:18000"
@@ -114,7 +127,7 @@ jobs:
           npm --prefix frontend run test:e2e -- tests/e2e/smoke.spec.ts
 
       - name: Upload Playwright report on failure
-        if: failure()
+        if: ${{ failure() && github.event.inputs.skip_quality_gates != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: deploy-playwright-report
@@ -127,7 +140,7 @@ jobs:
     name: Deploy Backend
     runs-on: ubuntu-latest
     needs: quality-gates
-    if: ${{ always() && (needs.quality-gates.result == 'success' || needs.quality-gates.result == 'skipped') }}
+    if: ${{ always() && needs.quality-gates.result == 'success' }}
     environment: ${{ github.event.inputs.target }}
     env:
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
