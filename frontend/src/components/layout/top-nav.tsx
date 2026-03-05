@@ -284,7 +284,6 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
                 gifAlt: "Feed",
                 size: 22,
                 playDurationMs: 1700,
-                selected: feedTabActive,
               }}
               label={t.nav.feed}
               tourId="home-nav-feed"
@@ -298,7 +297,6 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
                 gifAlt: "Comunidades",
                 size: 22,
                 playDurationMs: 1700,
-                selected: communitiesTabActive,
               }}
               label={t.nav.organizations}
               tourId="home-nav-communities"
@@ -312,7 +310,6 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
                 gifAlt: "Oportunidades",
                 size: 22,
                 playDurationMs: 1700,
-                selected: opportunitiesTabActive,
               }}
               label={t.nav.opportunities}
               tourId="home-nav-opportunities"
