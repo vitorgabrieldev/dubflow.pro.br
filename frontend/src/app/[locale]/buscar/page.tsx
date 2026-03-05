@@ -82,7 +82,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
 
   const search = await searchParams;
   const query = search.q?.trim() ?? "";
-  const activeTab = TAB_ORDER.some((tab) => tab.key === search.tab) ? (search.tab as SearchTab) : "all";
+  const requestedTab = TAB_ORDER.some((tab) => tab.key === search.tab) ? (search.tab as SearchTab) : "all";
 
   if (query.length < 2) {
     return (
@@ -131,7 +131,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
     seasons: seasonsCount,
   };
 
-  const allSections = [
+  const sections = [
     { key: "users" as const, count: usersCount, label: "Usuários", content: <UsersList locale={locale} users={users} /> },
     {
       key: "playlists" as const,
@@ -157,16 +157,22 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
       label: "Temporadas",
       content: <SeasonsList locale={locale} seasons={seasons} />,
     },
-  ]
-    .filter((section) => section.count > 0)
-    .sort((a, b) => {
-      if (a.count !== b.count) {
-        return a.count - b.count;
-      }
-      const aIndex = TAB_ORDER.findIndex((tab) => tab.key === a.key);
-      const bIndex = TAB_ORDER.findIndex((tab) => tab.key === b.key);
-      return aIndex - bIndex;
-    });
+  ].filter((section) => section.count > 0);
+
+  const visibleTabs = sections.length === 0
+    ? []
+    : [
+        TAB_ORDER[0],
+        ...TAB_ORDER.filter((tab) => tab.key !== "all" && sections.some((section) => section.key === tab.key)),
+      ];
+
+  const activeTab =
+    visibleTabs.length === 0
+      ? "all"
+      : visibleTabs.some((tab) => tab.key === requestedTab)
+        ? requestedTab
+        : "all";
+  const selectedSection = sections.find((section) => section.key === activeTab);
 
   return (
     <main className="mx-auto w-full max-w-7xl space-y-4 px-4 py-8 sm:px-6 lg:px-8">
@@ -175,8 +181,9 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
           Resultado para: <strong>{query}</strong>
         </p>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          {TAB_ORDER.map((tab) => {
+        {visibleTabs.length > 0 ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {visibleTabs.map((tab) => {
             const href = `/${locale}/buscar?q=${encodeURIComponent(query)}&tab=${tab.key}`;
             const isActive = activeTab === tab.key;
 
@@ -195,16 +202,21 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
                 <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[10px]">{counts[tab.key]}</span>
               </Link>
             );
-          })}
-        </div>
+            })}
+          </div>
+        ) : null}
       </section>
 
-      {activeTab === "all" ? (
-        allSections.length > 0 ? (
-          <div className="space-y-4">
-            {allSections.map((section) => (
-              <section key={section.key} className="rounded-[12px] border border-[var(--color-border-soft)] bg-white p-4 shadow-sm">
-                <header className="mb-3 flex items-center justify-between">
+      {sections.length === 0 ? (
+        <section className="rounded-[12px] border border-[var(--color-border-soft)] bg-white p-4 shadow-sm">
+          <p className="text-sm text-black/60">Nenhum resultado encontrado para: {query}</p>
+        </section>
+      ) : activeTab === "all" ? (
+        <section className="rounded-[12px] border border-[var(--color-border-soft)] bg-white p-4 shadow-sm">
+          <div className="space-y-5">
+            {sections.map((section) => (
+              <section key={section.key} className="space-y-2">
+                <header className="flex items-center justify-between">
                   <h2 className="text-sm font-semibold text-[var(--color-ink)]">{section.label}</h2>
                   <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs font-medium text-black/65">{section.count}</span>
                 </header>
@@ -212,39 +224,17 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
               </section>
             ))}
           </div>
-        ) : (
-          <section className="rounded-[12px] border border-[var(--color-border-soft)] bg-white p-4 shadow-sm">
-            <p className="text-sm text-black/60">Nenhum resultado encontrado.</p>
-          </section>
-        )
+        </section>
+      ) : selectedSection ? (
+        <section className="rounded-[12px] border border-[var(--color-border-soft)] bg-white p-4 shadow-sm">
+          <header className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-[var(--color-ink)]">{selectedSection.label}</h2>
+            <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs font-medium text-black/65">{selectedSection.count}</span>
+          </header>
+          {selectedSection.content}
+        </section>
       ) : null}
-
-      {activeTab === "users" ? <SingleSection title="Usuários" count={usersCount}><UsersList locale={locale} users={users} /></SingleSection> : null}
-      {activeTab === "playlists" ? <SingleSection title="Playlists" count={playlistsCount}><PlaylistsList locale={locale} playlists={playlists} /></SingleSection> : null}
-      {activeTab === "organizations" ? <SingleSection title="Comunidades" count={organizationsCount}><OrganizationsList locale={locale} organizations={organizations} /></SingleSection> : null}
-      {activeTab === "episodes" ? <SingleSection title="Episódios" count={episodesCount}><EpisodesList locale={locale} episodes={episodes} /></SingleSection> : null}
-      {activeTab === "seasons" ? <SingleSection title="Temporadas" count={seasonsCount}><SeasonsList locale={locale} seasons={seasons} /></SingleSection> : null}
     </main>
-  );
-}
-
-function SingleSection({
-  title,
-  count,
-  children,
-}: {
-  title: string;
-  count: number;
-  children: ReactNode;
-}) {
-  return (
-    <section className="rounded-[12px] border border-[var(--color-border-soft)] bg-white p-4 shadow-sm">
-      <header className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-[var(--color-ink)]">{title}</h2>
-        <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs font-medium text-black/65">{count}</span>
-      </header>
-      {children}
-    </section>
   );
 }
 

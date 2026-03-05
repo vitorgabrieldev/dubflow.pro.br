@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { TopNav } from "@/components/layout/top-nav";
 import { MainShell } from "@/components/layout/main-shell";
+import { HomeTour } from "@/components/onboarding/home-tour";
 import { fetchCurrentUser } from "@/lib/api";
 import { isLocale, type Locale } from "@/lib/i18n";
 import {
@@ -290,6 +291,7 @@ export default async function LocaleLayout({
         currentUser={currentUser}
       />
       <MainShell>{children}</MainShell>
+      <HomeTour locale={locale as Locale} isAuthenticated={isAuthenticated} />
     </div>
   );
 }

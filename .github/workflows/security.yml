@@ -35,14 +35,18 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             frontend/package-lock.json
+            admin/package-lock.json
 
       - name: Install deps
         run: |
           composer install --no-interaction --prefer-dist
           npm --prefix frontend ci
+          npm --prefix admin ci
 
       - name: Composer audit
         run: composer audit --locked
 
       - name: NPM audit
-        run: npm --prefix frontend audit --omit=dev --audit-level=high
+        run: |
+          npm --prefix frontend audit --omit=dev --audit-level=high
+          npm --prefix admin audit --omit=dev --audit-level=high

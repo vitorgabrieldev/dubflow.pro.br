@@ -271,14 +271,15 @@ export async function fetchCurrentUser(token?: string): Promise<UserPreview | nu
 }
 
 export async function fetchNotifications(
-  token?: string
+  token?: string,
+  perPage = 100
 ): Promise<{ items: ApiList<NotificationItem>; unread_count: number } | null> {
   if (!token) {
     return null;
   }
 
   try {
-    return await getJson<{ items: ApiList<NotificationItem>; unread_count: number }>("/notifications?per_page=40", token);
+    return await getJson<{ items: ApiList<NotificationItem>; unread_count: number }>(`/notifications?per_page=${perPage}`, token);
   } catch {
     return null;
   }

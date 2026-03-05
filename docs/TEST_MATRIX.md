@@ -1,80 +1,87 @@
 # Test Matrix
 
-This document defines automated test coverage targets by domain to keep business rules stable and prevent regressions during deploys.
+Documento de cobertura automatizada real do projeto (`backend`, `frontend` e `admin`) com foco em regras de negócio e regressões funcionais.
 
-## Current Automated Coverage
+## Suite Atual (Automatizada)
 
-- Unit tests:
-  - `tests/Unit/OrganizationAccessTest.php`
-- Backend feature/API tests:
-  - `tests/Feature/AuthApiTest.php`
-  - `tests/Feature/OrganizationApiTest.php`
-  - `tests/Feature/OrganizationInviteApiTest.php`
-  - `tests/Feature/PostPublishingApiTest.php`
-  - `tests/Feature/PostPermissionMatrixApiTest.php`
-  - `tests/Feature/NotificationApiTest.php`
-  - `tests/Feature/UserProfileApiTest.php`
+### Backend Unit (`tests/Unit`)
+- `AchievementEngineTest.php`
+- `ExampleTest.php`
+- `OrganizationAccessTest.php`
 
-## Coverage Targets (100% Business-Rule Oriented)
+### Backend Feature/API (`tests/Feature`)
+- `AchievementApiTest.php`
+- `AdminContentModulesApiTest.php`
+- `AdminCoreApiTest.php`
+- `AuthApiTest.php`
+- `ChatApiTest.php`
+- `DashboardApiTest.php`
+- `DubbingTestApiTest.php`
+- `ExampleTest.php`
+- `MediaAccessApiTest.php`
+- `NotificationApiTest.php`
+- `OrganizationApiTest.php`
+- `OrganizationInviteApiTest.php`
+- `PlaylistApiTest.php`
+- `PostPermissionMatrixApiTest.php`
+- `PostPublishingApiTest.php`
+- `UnifiedSearchApiTest.php`
+- `UserProfileApiTest.php`
 
-### Auth
-- Register validation and uniqueness
-- Login success/failure
-- Refresh/logout lifecycle
-- Change password invalidates active sessions
-- Forgot/reset password flow and invalid token paths
+### Frontend E2E (`frontend/tests/e2e`)
+- `account-community-post-lifecycle.spec.ts`
+- `achievements-flow.spec.ts`
+- `chat-flow.spec.ts` (inclui anexos de áudio inline no chat)
+- `comments-notifications.spec.ts` (inclui dropdown do sino, busca/filtro e remoção)
+- `community-invite-transfer.spec.ts`
+- `opportunities-flow.spec.ts`
+- `pages-and-filters.spec.ts`
+- `password-recovery.spec.ts`
+- `player-and-api.spec.ts`
+- `playlist-watch-screen.spec.ts`
+- `publish-edit-delete.spec.ts`
+- `smoke.spec.ts`
+- `uptime-status.spec.ts`
 
-### User Profile
-- Profile update validation (text + arrays + media)
-- Private profile visibility rules
-- Follow/unfollow user rules
+## Matriz por Módulo e Funções
 
-### Communities
-- Create/update organization validation (including unique name)
-- Visibility rules for public/private communities
-- Follow/unfollow community
-- Join request and ban constraints
+Legenda:
+- `C` Criar
+- `E` Editar
+- `V` Visualizar/Listar
+- `X` Exportar
+- `I` Inativar/Bloquear/Arquivar
+- `D` Deletar/Limpar
+- `F` Filtrar/Buscar
+- `R` Funções específicas/regras
 
-### Members & Roles
-- Invite by user search
-- Invite accept/reject/cancel/re-send
-- Role changes (owner-only)
-- Ban vs expel rules
-- Collaborator limitations against collaborator
-- Owner transfer request/accept/reject flows
+### Core da Plataforma
+- Auth: `C V E D F R` coberto (API + E2E)
+- Perfil de usuário: `E V F R` coberto (API + E2E)
+- Feed/Postagens: `C E V D F R` coberto (API + E2E)
+- Comentários: `C V D R` coberto (API + E2E)
+- Notificações: `V D F R` coberto (API + E2E)
+- Chat: `C E V D I F R` coberto (API + E2E, com player de áudio inline)
 
-### Invite Links
-- Create/list/revoke invite links
-- Accept active invite
-- Reject expired/revoked/exhausted invite
+### Comunidades e Colaboração
+- Comunidades: `C E V I D F R` coberto (API + E2E)
+- Convites/membros/transferência: `C E V D F R` coberto (API + E2E)
 
-### Playlists
-- Role-based creation/update/deletion
-- Required year and validation boundaries
-- Season creation rules
-- Prevent deleting playlists with episodes
+### Conteúdo e Catálogo
+- Playlists/temporadas/episódios: `C E V D F R` coberto (API + E2E)
+- Oportunidades/Dubbing tests: `C E V I D F R` coberto (API + E2E)
+- Conquistas: `V R` coberto (Unit + API + E2E)
 
-### Posts
-- Publish with media assets
-- Publish standalone and with playlist/season constraints
-- Edit/delete permission matrix by role and ownership
-- Media validation and limits
-- Visibility and feed access rules
+### Admin
+- Usuários, comunidades, posts, playlists, oportunidades, comentários, notificações, roles/permissões, logs e system logs:
+  - `C E V X I D F R` coberto por API (`AdminCoreApiTest.php` + `AdminContentModulesApiTest.php`)
 
-### Comments
-- Creation and moderation permissions
-- Two-level nesting limit
-- Reply notifications to root-comment author
-- Community comment notifications
+## Qualidade e Segurança no Pipeline
 
-### Notifications
-- Listing + unread count
-- Mark read/mark all read
-- Invite accepted state transition
-- Delete one / clear all
-- Invalid notification action paths
-
-### Frontend Quality Gates
-- `eslint` and production build
-- Playwright smoke flow during CI/deploy quality gates
-
+- Lint/build frontend.
+- Feature/unit backend.
+- E2E frontend (Playwright).
+- Security audit:
+  - `composer audit --locked`
+  - `npm --prefix frontend audit --omit=dev --audit-level=high`
+  - `npm --prefix admin audit --omit=dev --audit-level=high`
