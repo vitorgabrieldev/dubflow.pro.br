@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Bell,
   Building2,
+  CheckCircle2,
   Clapperboard,
   ChevronDown,
   KeyRound,
@@ -15,20 +16,32 @@ import {
   Loader2,
   LogIn,
   LogOut,
+  MoreHorizontal,
   MessageCircle,
   Mic2,
   RadioTower,
   Search,
+  Trash2,
+  Trophy,
   UserRound,
   UserPlus,
   Users,
+  UsersRound,
+  XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
 import { Avatar } from "@/components/ui/avatar";
 import { resolveMediaUrl } from "@/lib/api";
 import { LOCALE_META, SUPPORTED_LOCALES, type Locale, getDictionary } from "@/lib/i18n";
-import type { UserPreview } from "@/types/api";
+import {
+  filterNotifications,
+  resolveNotificationAction,
+  resolveNotificationContext,
+  resolveNotificationIconKey,
+  resolveNotificationType,
+} from "@/lib/notifications";
+import type { NotificationItem, UserPreview } from "@/types/api";
 
 type TopNavProps = {
   locale: Locale;
@@ -481,13 +494,10 @@ function BottomNavItem({
   );
 }
 
-type LiveNotificationsPayload = {
+type NotificationsListPayload = {
   unread_count?: number;
-  latest_unread?: {
-    id?: string;
-    title?: string | null;
-    message?: string | null;
-  } | null;
+  items?: NotificationItem[];
+  total?: number;
 };
 
 const NOTIFICATIONS_POLL_INTERVAL_MS = 15_000;
@@ -505,11 +515,20 @@ function NotificationsIconLink({
   label: string;
   active: boolean;
 }) {
+  const router = useRouter();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [isPinnedOpen, setIsPinnedOpen] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [contextFilter, setContextFilter] = useState<"all" | "chat" | "community" | "opportunity" | "other">("all");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [unreadCount, setUnreadCount] = useState(0);
+  const [allNotifications, setAllNotifications] = useState<NotificationItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const hasHydrated = useRef(false);
   const lastUnreadCount = useRef(0);
-  const lastToastNotificationId = useRef<string | null>(null);
+  const lastToastNotificationId = useRef<string | number | null>(null);
   const isPolling = useRef(false);
 
   const pollNotifications = useCallback(async () => {
@@ -520,7 +539,7 @@ function NotificationsIconLink({
     isPolling.current = true;
 
     try {
-      const response = await fetch("/api/notifications/live", {
+      const response = await fetch("/api/notifications/list?limit=40", {
         method: "GET",
         cache: "no-store",
       });
@@ -529,9 +548,10 @@ function NotificationsIconLink({
         return;
       }
 
-      const payload = (await response.json()) as LiveNotificationsPayload;
+      const payload = (await response.json()) as NotificationsListPayload;
       const nextUnreadCount = Number(payload.unread_count ?? 0);
-      const latestUnreadId = payload.latest_unread?.id ?? null;
+      const latestUnread = (payload.items ?? []).find((item) => !item.read_at) ?? null;
+      const latestUnreadId = latestUnread?.id ?? null;
 
       if (
         hasHydrated.current &&
@@ -540,10 +560,11 @@ function NotificationsIconLink({
         latestUnreadId !== lastToastNotificationId.current &&
         !active
       ) {
-        setToastMessage(payload.latest_unread?.title?.trim() || notificationToastLabel(locale));
+        setToastMessage(latestUnread?.data?.title?.trim() || notificationToastLabel(locale));
       }
 
       setUnreadCount(nextUnreadCount);
+      setAllNotifications(payload.items ?? []);
       lastUnreadCount.current = nextUnreadCount;
       if (latestUnreadId) {
         lastToastNotificationId.current = latestUnreadId;
@@ -555,6 +576,26 @@ function NotificationsIconLink({
       isPolling.current = false;
     }
   }, [active, locale]);
+
+  const typeOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        allNotifications
+          .map((notification) => resolveNotificationType(notification))
+          .filter((item) => item.trim().length > 0)
+      )
+    ).sort((left, right) => left.localeCompare(right));
+  }, [allNotifications]);
+
+  const filteredNotifications = useMemo(() => {
+    return filterNotifications(allNotifications, {
+      query: searchQuery,
+      context: contextFilter,
+      type: typeFilter,
+    }).slice(0, 9);
+  }, [allNotifications, contextFilter, searchQuery, typeFilter]);
+
+  const isOpen = isPinnedOpen || isHovering;
 
   useEffect(() => {
     const bootstrapId = window.setTimeout(() => {
@@ -584,6 +625,35 @@ function NotificationsIconLink({
   }, [pollNotifications]);
 
   useEffect(() => {
+    if (!isPinnedOpen) {
+      return;
+    }
+
+    const handleOutside = (event: globalThis.MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target || !rootRef.current?.contains(target)) {
+        setIsPinnedOpen(false);
+        setIsActionsOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsPinnedOpen(false);
+        setIsActionsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isPinnedOpen]);
+
+  useEffect(() => {
     if (!toastMessage) {
       return;
     }
@@ -597,27 +667,248 @@ function NotificationsIconLink({
     };
   }, [toastMessage]);
 
-  const badgeLabel = unreadCount > 99 ? "99+" : String(unreadCount);
+  const badgeLabel = unreadCount > 9 ? "9+" : String(unreadCount);
+
+  async function handleReadAll() {
+    const formData = new FormData();
+    formData.set("locale", locale);
+
+    await fetch("/api/notifications/read-all", {
+      method: "POST",
+      body: formData,
+    }).catch(() => undefined);
+
+    setUnreadCount(0);
+    setAllNotifications((current) => current.map((item) => ({ ...item, read_at: item.read_at ?? new Date().toISOString() })));
+    setIsActionsOpen(false);
+  }
+
+  async function handleClearAll() {
+    const formData = new FormData();
+    formData.set("locale", locale);
+
+    await fetch("/api/notifications/clear", {
+      method: "POST",
+      body: formData,
+    }).catch(() => undefined);
+
+    setUnreadCount(0);
+    setAllNotifications([]);
+    setIsActionsOpen(false);
+  }
+
+  async function handleRemoveNotification(notificationId: string, isUnread: boolean) {
+    const formData = new FormData();
+    formData.set("locale", locale);
+    formData.set("redirect_to", `/${locale}/notificacoes`);
+
+    await fetch(`/api/notifications/${notificationId}/delete`, {
+      method: "POST",
+      body: formData,
+    }).catch(() => undefined);
+
+    setAllNotifications((current) => current.filter((notification) => notification.id !== notificationId));
+    if (isUnread) {
+      setUnreadCount((current) => Math.max(0, current - 1));
+    }
+  }
+
+  async function handleNotificationClick(notification: NotificationItem) {
+    const action = resolveNotificationAction(locale, notification);
+    if (!action) {
+      return;
+    }
+
+    if (!notification.read_at) {
+      const formData = new FormData();
+      formData.set("locale", locale);
+      formData.set("redirect_to", action);
+
+      await fetch(`/api/notifications/${notification.id}/read`, {
+        method: "POST",
+        body: formData,
+      }).catch(() => undefined);
+
+      setUnreadCount((current) => Math.max(0, current - 1));
+      setAllNotifications((current) =>
+        current.map((item) => (item.id === notification.id ? { ...item, read_at: new Date().toISOString() } : item))
+      );
+    }
+
+    setIsPinnedOpen(false);
+    setIsActionsOpen(false);
+    router.push(action);
+  }
 
   return (
     <>
-      <Link
-        href={href}
-        aria-label={label}
-        title={label}
-        className={`relative inline-flex h-10 w-10 items-center justify-center rounded-[8px] ring-1 transition ${
-          active
-            ? "bg-[var(--color-primary-soft)] text-[var(--color-ink)] ring-[var(--color-border-soft)]"
-            : "bg-white text-black/75 ring-[var(--color-border-soft)] hover:bg-[var(--color-primary-soft)]"
-        }`}
+      <div
+        ref={rootRef}
+        className="relative"
+        onMouseEnter={() => {
+          setIsHovering(true);
+          void pollNotifications();
+        }}
+        onMouseLeave={() => {
+          setIsHovering(false);
+          if (!isPinnedOpen) {
+            setIsActionsOpen(false);
+          }
+        }}
       >
-        {icon}
-        {unreadCount > 0 ? (
-          <span className="absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--color-primary)] px-1.5 py-0.5 text-[10px] font-bold text-white">
-            {badgeLabel}
-          </span>
+        <button
+          type="button"
+          aria-label={label}
+          title={label}
+          aria-expanded={isOpen}
+          onClick={() => {
+            setIsPinnedOpen((current) => !current);
+            setIsActionsOpen(false);
+            void pollNotifications();
+          }}
+          className={`relative inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-[8px] ring-1 transition ${
+            active || isOpen
+              ? "bg-[var(--color-primary-soft)] text-[var(--color-ink)] ring-[var(--color-border-soft)]"
+              : "bg-white text-black/75 ring-[var(--color-border-soft)] hover:bg-[var(--color-primary-soft)]"
+          }`}
+        >
+          {icon}
+          {unreadCount > 0 ? (
+            <span className="absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--color-primary)] px-1.5 py-0.5 text-[10px] font-bold text-white">
+              {badgeLabel}
+            </span>
+          ) : null}
+        </button>
+
+        {isOpen ? (
+          <div className="absolute right-0 top-12 z-50 w-[360px] rounded-[10px] border border-[var(--color-border-soft)] bg-white shadow-[0_20px_44px_-26px_rgba(76,16,140,0.5)]">
+            <div className="flex items-center justify-between border-b border-[var(--color-border-soft)] px-3 py-2">
+              <p className="text-sm font-semibold text-[var(--color-ink)]">Notificações</p>
+              <div className="flex items-center gap-2">
+                <Link href={href} className="text-xs font-semibold text-[var(--color-primary)] underline">
+                  Ver mais
+                </Link>
+                <div className="relative">
+                  <button
+                    type="button"
+                    className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-[8px] border border-[var(--color-border-soft)] bg-white text-black/70 hover:bg-black/5"
+                    onClick={() => setIsActionsOpen((current) => !current)}
+                    aria-label="Ações de notificações"
+                  >
+                    <MoreHorizontal size={14} />
+                  </button>
+                  {isActionsOpen ? (
+                    <div className="absolute right-0 top-9 z-10 w-36 rounded-[8px] border border-[var(--color-border-soft)] bg-white p-1 shadow-lg">
+                      <button
+                        type="button"
+                        className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-2 text-left text-xs font-semibold text-black/75 hover:bg-black/5"
+                        onClick={() => void handleReadAll()}
+                      >
+                        <CheckCircle2 size={12} />
+                        Ler todas
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-50"
+                        onClick={() => void handleClearAll()}
+                      >
+                        <Trash2 size={12} />
+                        Limpar
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 border-b border-[var(--color-border-soft)] p-3">
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Buscar notificação..."
+                className="h-9 w-full rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 text-xs text-[var(--color-ink)] outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={contextFilter}
+                  onChange={(event) => setContextFilter(event.target.value as "all" | "chat" | "community" | "opportunity" | "other")}
+                  className="h-8 rounded-[8px] border border-[var(--color-border-soft)] bg-white px-2 text-xs text-[var(--color-ink)] outline-none"
+                >
+                  <option value="all">Todos contextos</option>
+                  <option value="chat">Chat</option>
+                  <option value="community">Comunidade</option>
+                  <option value="opportunity">Oportunidade</option>
+                  <option value="other">Outros</option>
+                </select>
+                <select
+                  value={typeFilter}
+                  onChange={(event) => setTypeFilter(event.target.value)}
+                  className="h-8 rounded-[8px] border border-[var(--color-border-soft)] bg-white px-2 text-xs text-[var(--color-ink)] outline-none"
+                >
+                  <option value="all">Todos tipos</option>
+                  {typeOptions.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="max-h-[320px] overflow-y-auto p-2">
+              {filteredNotifications.length === 0 ? (
+                <p className="px-2 py-6 text-center text-xs text-black/60">Nenhuma notificação encontrada.</p>
+              ) : (
+                filteredNotifications.map((notification, index) => {
+                  const action = resolveNotificationAction(locale, notification);
+                  const isUnread = !notification.read_at;
+                  const context = resolveNotificationContext(notification);
+                  const iconKey = resolveNotificationIconKey(notification);
+
+                  return (
+                    <div key={notification.id}>
+                      <div className="flex items-start gap-2 px-2 py-2">
+                        <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-black/5 text-black/75">
+                          {renderNotificationIcon(iconKey)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void handleNotificationClick(notification)}
+                          disabled={!action}
+                          className={`min-w-0 flex-1 text-left ${
+                            action ? "cursor-pointer" : "cursor-default"
+                          }`}
+                        >
+                          <p className={`line-clamp-1 text-xs font-semibold ${isUnread ? "text-[var(--color-ink)]" : "text-black/70"}`}>
+                            {notification.data?.title ?? "Notificação"}
+                          </p>
+                          <p className="line-clamp-2 text-xs text-black/60">{notification.data?.message ?? "Sem detalhes."}</p>
+                          <p className="mt-1 text-[10px] uppercase tracking-wide text-black/45">
+                            {context} · {formatNotificationDate(notification.created_at)}
+                          </p>
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-black/55 hover:bg-black/5 hover:text-red-700"
+                          aria-label="Remover notificação"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleRemoveNotification(String(notification.id), isUnread);
+                          }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                      {index < filteredNotifications.length - 1 ? <hr className="border-black/10" /> : null}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         ) : null}
-      </Link>
+      </div>
 
       {toastMessage ? (
         <span className="pointer-events-none fixed right-4 top-20 z-50 inline-flex max-w-[280px] rounded-[8px] bg-[var(--color-ink)] px-3 py-2 text-xs font-semibold text-white shadow-xl">
@@ -641,6 +932,41 @@ function notificationToastLabel(locale: Locale): string {
     default:
       return "Você tem novas notificações";
   }
+}
+
+function renderNotificationIcon(icon: string) {
+  switch (icon) {
+    case "user-plus":
+      return <UserPlus size={13} />;
+    case "check-circle-2":
+      return <CheckCircle2 size={13} />;
+    case "x-circle":
+      return <XCircle size={13} />;
+    case "users-round":
+      return <UsersRound size={13} />;
+    case "clapperboard":
+      return <Clapperboard size={13} />;
+    case "message-circle":
+      return <MessageCircle size={13} />;
+    case "trophy":
+      return <Trophy size={13} />;
+    default:
+      return <Bell size={13} />;
+  }
+}
+
+function formatNotificationDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function ProfileDropdown({

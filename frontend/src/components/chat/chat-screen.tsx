@@ -14,6 +14,8 @@ import {
   MessageCircle,
   Pencil,
   Paperclip,
+  Pause,
+  Play,
   Reply,
   RotateCcw,
   ShieldCheck,
@@ -22,7 +24,16 @@ import {
 } from "lucide-react";
 import Pusher from "pusher-js";
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -93,8 +104,7 @@ type IncomingTypingPayload = {
   };
 };
 
-const CHAT_POLL_CONNECTED_MS = 20_000;
-const CHAT_POLL_FALLBACK_MS = 3_000;
+const CHAT_POLL_FALLBACK_MS = 20_000;
 const CHAT_CONVERSATIONS_PER_PAGE = 20;
 const CHAT_MAX_ATTACHMENTS = 8;
 const CHAT_REPLY_MARKER_PATTERN = /^\[\[reply:(\d+)]]\s*\n?/;
@@ -135,6 +145,7 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
   const isLoadingMessagesRef = useRef(false);
   const composerFileInputRef = useRef<HTMLInputElement | null>(null);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
+  const pendingInitialScrollConversationRef = useRef<number | null>(null);
 
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId;
@@ -356,10 +367,15 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
           ...current,
           [conversationId]: items,
         }));
+        if (!silent) {
+          pendingInitialScrollConversationRef.current = conversationId;
+        }
 
-        await fetch(`/api/chat/conversations/${conversationId}/read`, {
-          method: "POST",
-        });
+        if (!silent) {
+          await fetch(`/api/chat/conversations/${conversationId}/read`, {
+            method: "POST",
+          });
+        }
 
         setConversations((current) =>
           current.map((conversation) =>
@@ -513,6 +529,7 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
       return;
     }
 
+    pendingInitialScrollConversationRef.current = activeConversationId;
     setOpenConversationMenu(false);
     setOpenMessageMenuId(null);
     setReplyingToMessageId(null);
@@ -522,6 +539,24 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
 
     void loadMessages(activeConversationId);
   }, [activeConversationId, loadMessages]);
+
+  useLayoutEffect(() => {
+    if (!activeConversationId || loadingMessages) {
+      return;
+    }
+
+    if (pendingInitialScrollConversationRef.current !== activeConversationId) {
+      return;
+    }
+
+    const viewport = messagesViewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    viewport.scrollTop = viewport.scrollHeight;
+    pendingInitialScrollConversationRef.current = null;
+  }, [activeConversationId, activeMessages.length, loadingMessages]);
 
   useEffect(() => {
     if (!activeConversationIdRef.current) {
@@ -653,12 +688,17 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
   }, [applyMessageStatus, currentUserId, loadConversations, patchMessageInState, sortConversations]);
 
   useEffect(() => {
+    // When realtime socket is connected, avoid fallback polling to prevent request storms.
+    if (socketState !== "disconnected") {
+      return;
+    }
+
     const interval = window.setInterval(() => {
       void loadConversations({ mode: "refresh" });
       if (activeConversationIdRef.current) {
         void loadMessages(activeConversationIdRef.current, true);
       }
-    }, socketState === "connected" ? CHAT_POLL_CONNECTED_MS : CHAT_POLL_FALLBACK_MS);
+    }, CHAT_POLL_FALLBACK_MS);
 
     return () => {
       window.clearInterval(interval);
@@ -1256,7 +1296,10 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
                           (mine ? "Você" : "Usuário");
                         const senderAvatar = resolveMediaUrl(message.sender?.avatar_path);
                         const imageAttachments = message.attachments.filter((attachment) => attachment.media_type === "image");
-                        const nonImageAttachments = message.attachments.filter((attachment) => attachment.media_type !== "image");
+                        const audioAttachments = message.attachments.filter((attachment) => attachment.media_type === "audio");
+                        const nonImageNonAudioAttachments = message.attachments.filter(
+                          (attachment) => attachment.media_type !== "image" && attachment.media_type !== "audio"
+                        );
 
                         return (
                           <div key={message.id} className={`group flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}>
@@ -1385,16 +1428,20 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
                                       }`}
                                     >
                                       <p className="font-semibold uppercase tracking-wide text-[10px]">Resposta</p>
-                                      <p className="line-clamp-2 whitespace-pre-wrap">{replyPreview}</p>
+                                      <p className="line-clamp-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                                        {replyPreview}
+                                      </p>
                                     </div>
                                   ) : null}
 
                                   {message.is_deleted ? (
-                                    <p className="whitespace-pre-wrap text-[var(--color-ink)]">
+                                    <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[var(--color-ink)]">
                                       <strong>Mensagem removida</strong>
                                     </p>
                                   ) : messageBody.trim().length > 0 ? (
-                                    <p className="whitespace-pre-wrap text-[var(--color-ink)]">{messageBody}</p>
+                                    <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[var(--color-ink)]">
+                                      {messageBody}
+                                    </p>
                                   ) : null}
 
                                   {!message.is_deleted && imageAttachments.length > 0 ? (
@@ -1409,9 +1456,17 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
                                     />
                                   ) : null}
 
-                                  {!message.is_deleted && nonImageAttachments.length > 0 ? (
+                                  {!message.is_deleted && audioAttachments.length > 0 ? (
+                                    <div className="mt-2 space-y-2">
+                                      {audioAttachments.map((attachment) => (
+                                        <ChatAudioAttachmentPlayer key={attachment.id} attachment={attachment} />
+                                      ))}
+                                    </div>
+                                  ) : null}
+
+                                  {!message.is_deleted && nonImageNonAudioAttachments.length > 0 ? (
                                     <div className="mt-2 space-y-1">
-                                      {nonImageAttachments.map((attachment) => (
+                                      {nonImageNonAudioAttachments.map((attachment) => (
                                         <a
                                           key={attachment.id}
                                           href={resolveMediaUrl(attachment.media_path) ?? undefined}
@@ -1473,7 +1528,7 @@ export function ChatScreen({ currentUserId, initialPeerUserId, initialConversati
                           </div>
                           <button
                             type="button"
-                            className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-[var(--color-border-soft)] bg-white text-black/60 hover:bg-black/5"
+                            className="inline-flex h-6 w-6 shrink-0 aspect-square cursor-pointer items-center justify-center rounded-full border border-[var(--color-border-soft)] bg-white p-0 text-black/60 hover:bg-black/5"
                             onClick={() => setReplyingToMessageId(null)}
                             aria-label="Cancelar resposta"
                           >
@@ -1718,6 +1773,128 @@ function ChatImageAttachmentGrid({ attachments, onOpen }: ChatImageAttachmentGri
   );
 }
 
+type ChatAudioAttachmentPlayerProps = {
+  attachment: ChatAttachment;
+};
+
+function ChatAudioAttachmentPlayer({ attachment }: ChatAudioAttachmentPlayerProps) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const mediaUrl = resolveMediaUrl(attachment.media_path);
+  const canPlay = Boolean(mediaUrl);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    const handleLoadedMetadata = () => {
+      setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+    };
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(Number.isFinite(audio.currentTime) ? audio.currentTime : 0);
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+    };
+    const handlePlay = () => {
+      setIsPlaying(true);
+    };
+    const handlePause = () => {
+      setIsPlaying(false);
+    };
+
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+
+    return () => {
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+    };
+  }, []);
+
+  async function togglePlayback() {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    if (audio.paused) {
+      try {
+        await audio.play();
+      } catch {
+        setIsPlaying(false);
+      }
+      return;
+    }
+
+    audio.pause();
+  }
+
+  function handleSeek(nextValue: number) {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    audio.currentTime = nextValue;
+    setCurrentTime(nextValue);
+  }
+
+  if (!canPlay) {
+    return (
+      <div className="rounded-[10px] border border-[var(--color-border-soft)] bg-black/[0.03] px-3 py-2 text-xs text-black/60">
+        Áudio indisponível
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-[10px] border border-[var(--color-border-soft)] bg-black/[0.03] px-3 py-2.5">
+      <audio ref={audioRef} src={mediaUrl ?? undefined} preload="metadata" />
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void togglePlayback()}
+          className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--color-border-soft)] bg-white text-black/75 hover:bg-black/5"
+          aria-label={isPlaying ? "Pausar áudio" : "Reproduzir áudio"}
+        >
+          {isPlaying ? <Pause size={14} /> : <Play size={14} />}
+        </button>
+
+        <input
+          type="range"
+          min={0}
+          max={duration > 0 ? duration : 0}
+          step={0.1}
+          value={Math.min(currentTime, duration || 0)}
+          onChange={(event) => handleSeek(Number(event.target.value))}
+          className="h-1.5 w-full cursor-pointer accent-[var(--color-primary)]"
+          aria-label="Progresso do áudio"
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-black/65">
+        <span>
+          {formatAudioClock(currentTime)} / {formatAudioClock(duration)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function parseReplyBody(body: string | null | undefined): { replyToMessageId: number | null; text: string } {
   if (!body) {
     return { replyToMessageId: null, text: "" };
@@ -1733,6 +1910,17 @@ function parseReplyBody(body: string | null | undefined): { replyToMessageId: nu
     replyToMessageId: Number.isFinite(parsedReplyId) && parsedReplyId > 0 ? parsedReplyId : null,
     text: body.replace(CHAT_REPLY_MARKER_PATTERN, ""),
   };
+}
+
+function formatAudioClock(value: number) {
+  if (!Number.isFinite(value) || value < 0) {
+    return "00:00";
+  }
+
+  const totalSeconds = Math.floor(value);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 function buildReplyBody(body: string, replyToMessageId: number | null): string | null {

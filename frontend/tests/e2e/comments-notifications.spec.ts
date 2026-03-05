@@ -59,8 +59,28 @@ test("comentarios paginados e notificacao de resposta em comentario", async ({ b
 
   const memberContext = await createAuthenticatedContext(browser, member.token);
   const memberPage = await memberContext.newPage();
+  await memberPage.goto("/pt-BR");
+
+  const notificationsBell = memberPage.locator('button[aria-label="Notificações"]').first();
+  await notificationsBell.hover();
+  await expect(memberPage.getByText("Notificações", { exact: true })).toBeVisible();
+  await memberPage.mouse.move(0, 0);
+  await expect(memberPage.getByText("Notificações", { exact: true })).toHaveCount(0);
+
+  await notificationsBell.click();
+  await memberPage.mouse.move(0, 0);
+  await expect(memberPage.getByText("Notificações", { exact: true })).toBeVisible();
+  await memberPage.mouse.click(5, 5);
+  await expect(memberPage.getByText("Notificações", { exact: true })).toHaveCount(0);
+
   await memberPage.goto("/pt-BR/notificacoes");
 
+  await expect(memberPage.getByPlaceholder("Buscar notificação...")).toBeVisible();
+  await expect(memberPage.getByRole("button", { name: "Filtrar" })).toBeVisible();
+  await expect(memberPage.getByLabel("Remover notificação").first()).toBeVisible();
+
+  await memberPage.getByPlaceholder("Buscar notificação...").fill("Responderam seu comentário");
+  await memberPage.getByRole("button", { name: "Filtrar" }).click();
   await expect(memberPage.getByText("Responderam seu comentário")).toBeVisible();
   await expect(memberPage.getByText(/Resposta do dono E2E|respondeu seu comentário/i)).toBeVisible();
 
