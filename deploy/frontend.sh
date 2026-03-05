@@ -36,18 +36,18 @@ apply_node_options() {
 
 run_systemctl() {
   if command -v sudo >/dev/null 2>&1; then
-    if sudo -n true >/dev/null 2>&1; then
-      sudo -n systemctl "$@"
+    if sudo -n /usr/bin/systemctl "$@" >/dev/null 2>&1; then
+      sudo -n /usr/bin/systemctl "$@"
       return 0
     fi
 
     if [[ -n "$SUDO_PASSWORD" ]]; then
-      printf '%s\n' "$SUDO_PASSWORD" | sudo -S -p '' systemctl "$@"
+      printf '%s\n' "$SUDO_PASSWORD" | sudo -S -p '' /usr/bin/systemctl "$@"
       return 0
     fi
   fi
 
-  systemctl "$@"
+  /usr/bin/systemctl "$@"
 }
 
 cd "$REPO_DIR"
