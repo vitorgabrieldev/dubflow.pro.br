@@ -34,10 +34,10 @@ apply_node_options() {
 }
 
 run_systemctl() {
-  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
-    sudo -n systemctl "$@"
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -n /usr/bin/systemctl "$@"
   else
-    systemctl "$@"
+    /usr/bin/systemctl "$@"
   fi
 }
 
