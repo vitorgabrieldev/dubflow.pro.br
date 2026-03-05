@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
@@ -15,13 +16,13 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { NotificationFilters } from "@/components/notification/notification-filters";
 import { fetchNotifications } from "@/lib/api";
 import {
   filterNotifications,
   resolveNotificationAction,
   resolveNotificationContext,
   resolveNotificationIconKey,
-  resolveNotificationType,
   sortNotifications,
   type NotificationContext,
 } from "@/lib/notifications";
@@ -32,7 +33,6 @@ type NotificationsPageSearch = {
   invite?: string;
   owner_transfer?: string;
   q?: string;
-  type?: string;
   context?: NotificationContext | "all";
 };
 
@@ -66,23 +66,15 @@ export default async function NotificationsPage({
   const searchText = (query.q ?? "").trim();
   const contextFilter = query.context ?? "all";
   const sortedNotifications = sortNotifications(payload.items.data);
-  const typeOptions = Array.from(new Set(sortedNotifications.map((notification) => resolveNotificationType(notification)))).sort(
-    (left, right) => left.localeCompare(right)
-  );
-
-  const typeFilter = query.type && typeOptions.includes(query.type) ? query.type : "all";
   const filteredNotifications = filterNotifications(sortedNotifications, {
     query: searchText,
-    type: typeFilter,
     context: contextFilter,
   });
+  const hasAnyNotifications = sortedNotifications.length > 0;
 
   const currentSearchParams = new URLSearchParams();
   if (searchText.length > 0) {
     currentSearchParams.set("q", searchText);
-  }
-  if (typeFilter !== "all") {
-    currentSearchParams.set("type", typeFilter);
   }
   if (contextFilter !== "all") {
     currentSearchParams.set("context", contextFilter);
@@ -135,48 +127,7 @@ export default async function NotificationsPage({
         </details>
       </header>
 
-      <form action={`/${locale}/notificacoes`} method="get" className="grid gap-2 sm:grid-cols-3">
-        <input
-          type="search"
-          name="q"
-          defaultValue={searchText}
-          placeholder="Buscar notificação..."
-          className="h-10 rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 text-sm text-[var(--color-ink)] outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-        />
-
-        <select
-          name="context"
-          defaultValue={contextFilter}
-          className="h-10 rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 text-sm text-[var(--color-ink)] outline-none"
-        >
-          <option value="all">Todos contextos</option>
-          <option value="chat">Chat</option>
-          <option value="community">Comunidade</option>
-          <option value="opportunity">Oportunidade</option>
-          <option value="other">Outros</option>
-        </select>
-
-        <div className="flex items-center gap-2">
-          <select
-            name="type"
-            defaultValue={typeFilter}
-            className="h-10 min-w-0 flex-1 rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 text-sm text-[var(--color-ink)] outline-none"
-          >
-            <option value="all">Todos tipos</option>
-            {typeOptions.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            className="inline-flex h-10 shrink-0 cursor-pointer items-center rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 text-sm font-semibold text-[var(--color-ink)] hover:bg-black/5"
-          >
-            Filtrar
-          </button>
-        </div>
-      </form>
+      <NotificationFilters locale={locale} initialQuery={searchText} initialContext={contextFilter} />
 
       {query.invite === "accept" ? <p className="text-sm text-emerald-700">Convite aceito com sucesso.</p> : null}
       {query.invite === "reject" ? <p className="text-sm text-[var(--color-ink)]">Convite recusado.</p> : null}
@@ -189,7 +140,19 @@ export default async function NotificationsPage({
         <p className="text-sm text-red-700">Não foi possível responder à transferência de propriedade.</p>
       ) : null}
 
-      {filteredNotifications.length === 0 ? (
+      {!hasAnyNotifications ? (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-[10px] bg-white py-8 text-center">
+          <Image
+            src="/empty-states/notifications-empty.gif"
+            alt="Sem notificações"
+            width={220}
+            height={220}
+            unoptimized
+            className="h-auto w-[180px] brightness-125 contrast-75 saturate-90 sm:w-[220px]"
+          />
+          <p className="text-sm font-semibold text-black/65">Não há nada aqui.</p>
+        </div>
+      ) : filteredNotifications.length === 0 ? (
         <p className="text-sm text-black/60">
           Nenhuma notificação encontrada
           {searchText ? ` para: ${searchText}` : "."}

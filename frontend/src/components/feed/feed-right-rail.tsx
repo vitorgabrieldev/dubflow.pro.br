@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Flame, MessageCircle, Trophy, UsersRound } from "lucide-react";
 
@@ -33,7 +34,7 @@ export function FeedRightRail({ locale, posts, risingDubbers = [] }: FeedRightRa
 
   return (
     <aside className="space-y-3 xl:sticky xl:top-24">
-      <Card>
+      <Card data-tour-id="home-rail-30days">
         <CardBody className="space-y-3 p-4">
           <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
             <UsersRound size={15} />
@@ -48,15 +49,28 @@ export function FeedRightRail({ locale, posts, risingDubbers = [] }: FeedRightRa
                 <Link
                   key={dubber.id}
                   href={`/${locale}/perfil/${dubber.id}`}
-                  className="flex items-center gap-2 rounded-[8px] border border-black/10 bg-white px-2.5 py-2 hover:bg-black/[0.02]"
+                  className={`flex items-center gap-2 rounded-[8px] px-2.5 py-2 transition ${
+                    index < 3
+                      ? "relative isolate overflow-hidden border border-[var(--color-primary)]/35 bg-[linear-gradient(90deg,rgba(255,237,213,0.55)_0%,rgba(255,255,255,0.95)_65%)] shadow-[0_10px_24px_-18px_rgba(249,115,22,0.8)] hover:bg-[linear-gradient(90deg,rgba(255,237,213,0.75)_0%,rgba(255,255,255,0.95)_65%)]"
+                      : "border border-black/10 bg-white hover:bg-black/[0.02]"
+                  }`}
                 >
-                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] bg-[var(--color-primary-soft)] text-xs font-semibold text-[var(--color-ink)]">
+                  {index < 3 ? (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-y-0 left-0 w-full bg-[linear-gradient(90deg,rgba(255,255,255,0)_0%,rgba(251,146,60,0.18)_45%,rgba(253,186,116,0.28)_65%,rgba(255,255,255,0)_100%)] blur-[2px] animate-[skeleton-wave_2.6s_linear_infinite]"
+                    />
+                  ) : null}
+
+                  <span className="relative z-[1] inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] bg-[var(--color-primary-soft)] text-xs font-semibold text-[var(--color-ink)]">
                     {index + 1}
                   </span>
 
-                  <Avatar src={resolveMediaUrl(dubber.avatarPath)} name={dubber.name} size="sm" />
+                  <span className="relative z-[1]">
+                    <Avatar src={resolveMediaUrl(dubber.avatarPath)} name={dubber.name} size="sm" />
+                  </span>
 
-                  <span className="min-w-0 flex-1">
+                  <span className="relative z-[1] min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-[var(--color-ink)]">{dubber.name}</span>
                     <span className="block truncate text-xs text-black/55">
                       {dubber.username ? `@${dubber.username}` : "sem @"} • {dubber.episodesLaunched} episódios
@@ -66,8 +80,19 @@ export function FeedRightRail({ locale, posts, risingDubbers = [] }: FeedRightRa
                     </span>
                   </span>
 
-                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-primary)]">
-                    <Flame size={12} />
+                  <span className="relative z-[1] inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-primary)]">
+                    {index < 3 ? (
+                      <Image
+                        src="/badges/top-fire.gif"
+                        alt="Top destaque"
+                        width={14}
+                        height={14}
+                        unoptimized
+                        className="h-[14px] w-[14px]"
+                      />
+                    ) : (
+                      <Flame size={13} className="text-[var(--color-primary)]" />
+                    )}
                     {Math.round(dubber.score)}
                   </span>
                 </Link>
@@ -77,7 +102,7 @@ export function FeedRightRail({ locale, posts, risingDubbers = [] }: FeedRightRa
         </CardBody>
       </Card>
 
-      <Card>
+      <Card data-tour-id="home-rail-top-week">
         <CardBody className="space-y-3 p-4">
           <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
             <Trophy size={15} />

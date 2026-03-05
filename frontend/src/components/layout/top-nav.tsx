@@ -29,18 +29,12 @@ import {
   UsersRound,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
 import { Avatar } from "@/components/ui/avatar";
 import { resolveMediaUrl } from "@/lib/api";
 import { LOCALE_META, SUPPORTED_LOCALES, type Locale, getDictionary } from "@/lib/i18n";
-import {
-  filterNotifications,
-  resolveNotificationAction,
-  resolveNotificationContext,
-  resolveNotificationIconKey,
-  resolveNotificationType,
-} from "@/lib/notifications";
+import { resolveNotificationAction, resolveNotificationContext, resolveNotificationIconKey } from "@/lib/notifications";
 import type { NotificationItem, UserPreview } from "@/types/api";
 
 type TopNavProps = {
@@ -177,6 +171,7 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
             <SearchHeaderInput
               locale={locale}
               className="hidden flex-1 lg:flex"
+              tourId="home-search"
               onSubmit={(term) => {
                 router.push(`${basePath}/buscar?q=${encodeURIComponent(term)}`);
               }}
@@ -189,24 +184,27 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
 
               {hasSessionUser ? (
                 <>
-                  <div className="hidden lg:contents">
+                  <div className="hidden items-center gap-2 lg:flex" data-tour-id="home-nav-actions">
                     <NotificationsIconLink
                       href={`${basePath}/notificacoes`}
                       locale={locale}
                       icon={<Bell size={16} />}
                       label={t.nav.notifications}
+                      tourId="home-nav-notifications"
                       active={isActivePath(pathname, `${basePath}/notificacoes`)}
                     />
                     <IconLink
                       href={`${basePath}/mensagens`}
                       icon={<MessageCircle size={16} />}
                       label="Mensagens"
+                      tourId="home-nav-messages"
                       active={isActivePath(pathname, `${basePath}/mensagens`)}
                     />
                     <IconLink
                       href={`${basePath}/painel`}
                       icon={<LayoutDashboard size={16} />}
                       label={t.nav.dashboard}
+                      tourId="home-nav-dashboard"
                       active={isActivePath(pathname, `${basePath}/painel`)}
                     />
                   </div>
@@ -218,7 +216,7 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
                 </span>
               ) : (
                 <>
-                  <div className="hidden items-center gap-2 lg:flex">
+                  <div className="hidden items-center gap-2 lg:flex" data-tour-id="home-auth-actions">
                     <Link
                       href={`${basePath}/entrar`}
                       className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-[var(--color-ink)] ring-1 ring-[var(--color-border-soft)] transition hover:bg-[var(--color-primary-soft)]"
@@ -253,24 +251,28 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
               href={basePath}
               icon={<RadioTower size={15} />}
               label={t.nav.feed}
+              tourId="home-nav-feed"
               active={pathname === basePath}
             />
             <NavItem
               href={`${basePath}/comunidades`}
               icon={<Users size={15} />}
               label={t.nav.organizations}
+              tourId="home-nav-communities"
               active={isActivePath(pathname, `${basePath}/comunidades`)}
             />
             <NavItem
               href={`${basePath}/oportunidades`}
               icon={<Mic2 size={15} />}
               label={t.nav.opportunities}
+              tourId="home-nav-opportunities"
               active={isActivePath(pathname, `${basePath}/oportunidades`)}
             />
             {hasSessionUser ? (
               <PublishDropdown
                 locale={locale}
                 label={t.nav.publish}
+                tourId="home-nav-publish"
                 active={publishActive}
               />
             ) : null}
@@ -286,10 +288,12 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
 function SearchHeaderInput({
   locale,
   className,
+  tourId,
   onSubmit,
 }: {
   locale: Locale;
   className?: string;
+  tourId?: string;
   onSubmit: (term: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -309,7 +313,10 @@ function SearchHeaderInput({
       <label htmlFor={`global-search-${locale}`} className="sr-only">
         Buscar
       </label>
-      <div className="flex h-10 w-full items-center gap-2 rounded-[10px] border border-[var(--color-border-soft)] bg-white px-3 shadow-sm">
+      <div
+        data-tour-id={tourId}
+        className="flex h-10 w-full items-center gap-2 rounded-[10px] border border-[var(--color-border-soft)] bg-white px-3 shadow-sm"
+      >
         <Search size={16} className="text-black/45" />
         <input
           id={`global-search-${locale}`}
@@ -324,10 +331,23 @@ function SearchHeaderInput({
   );
 }
 
-function NavItem({ href, icon, label, active }: { href: string; icon: ReactNode; label: string; active: boolean }) {
+function NavItem({
+  href,
+  icon,
+  label,
+  active,
+  tourId,
+}: {
+  href: string;
+  icon: ReactNode;
+  label: string;
+  active: boolean;
+  tourId?: string;
+}) {
   return (
     <Link
       href={href}
+      data-tour-id={tourId}
       className={`inline-flex items-center gap-2 rounded-[8px] px-3 py-2 text-sm ring-1 transition ${
         active
           ? "bg-[var(--color-primary-soft)] text-[var(--color-ink)] ring-[var(--color-border-soft)]"
@@ -340,12 +360,25 @@ function NavItem({ href, icon, label, active }: { href: string; icon: ReactNode;
   );
 }
 
-function IconLink({ href, icon, label, active }: { href: string; icon: ReactNode; label: string; active: boolean }) {
+function IconLink({
+  href,
+  icon,
+  label,
+  active,
+  tourId,
+}: {
+  href: string;
+  icon: ReactNode;
+  label: string;
+  active: boolean;
+  tourId?: string;
+}) {
   return (
     <Link
       href={href}
       aria-label={label}
       title={label}
+      data-tour-id={tourId}
       className={`inline-flex h-10 w-10 items-center justify-center rounded-[8px] ring-1 transition ${
         active
           ? "bg-[var(--color-primary-soft)] text-[var(--color-ink)] ring-[var(--color-border-soft)]"
@@ -501,18 +534,21 @@ type NotificationsListPayload = {
 };
 
 const NOTIFICATIONS_POLL_INTERVAL_MS = 15_000;
+const NOTIFICATIONS_HOVER_CLOSE_DELAY_MS = 2_000;
 
 function NotificationsIconLink({
   href,
   locale,
   icon,
   label,
+  tourId,
   active,
 }: {
   href: string;
   locale: Locale;
   icon: ReactNode;
   label: string;
+  tourId?: string;
   active: boolean;
 }) {
   const router = useRouter();
@@ -520,9 +556,6 @@ function NotificationsIconLink({
   const [isPinnedOpen, setIsPinnedOpen] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [contextFilter, setContextFilter] = useState<"all" | "chat" | "community" | "opportunity" | "other">("all");
-  const [typeFilter, setTypeFilter] = useState("all");
   const [unreadCount, setUnreadCount] = useState(0);
   const [allNotifications, setAllNotifications] = useState<NotificationItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -530,6 +563,16 @@ function NotificationsIconLink({
   const lastUnreadCount = useRef(0);
   const lastToastNotificationId = useRef<string | number | null>(null);
   const isPolling = useRef(false);
+  const hoverCloseTimeoutRef = useRef<number | null>(null);
+
+  const clearHoverCloseTimeout = useCallback(() => {
+    if (hoverCloseTimeoutRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(hoverCloseTimeoutRef.current);
+    hoverCloseTimeoutRef.current = null;
+  }, []);
 
   const pollNotifications = useCallback(async () => {
     if (isPolling.current) {
@@ -577,23 +620,7 @@ function NotificationsIconLink({
     }
   }, [active, locale]);
 
-  const typeOptions = useMemo(() => {
-    return Array.from(
-      new Set(
-        allNotifications
-          .map((notification) => resolveNotificationType(notification))
-          .filter((item) => item.trim().length > 0)
-      )
-    ).sort((left, right) => left.localeCompare(right));
-  }, [allNotifications]);
-
-  const filteredNotifications = useMemo(() => {
-    return filterNotifications(allNotifications, {
-      query: searchQuery,
-      context: contextFilter,
-      type: typeFilter,
-    }).slice(0, 9);
-  }, [allNotifications, contextFilter, searchQuery, typeFilter]);
+  const visibleNotifications = allNotifications.slice(0, 9);
 
   const isOpen = isPinnedOpen || isHovering;
 
@@ -621,17 +648,20 @@ function NotificationsIconLink({
       window.clearTimeout(bootstrapId);
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearHoverCloseTimeout();
     };
-  }, [pollNotifications]);
+  }, [clearHoverCloseTimeout, pollNotifications]);
 
   useEffect(() => {
-    if (!isPinnedOpen) {
+    if (!isOpen) {
       return;
     }
 
     const handleOutside = (event: globalThis.MouseEvent) => {
       const target = event.target as Node | null;
       if (!target || !rootRef.current?.contains(target)) {
+        clearHoverCloseTimeout();
+        setIsHovering(false);
         setIsPinnedOpen(false);
         setIsActionsOpen(false);
       }
@@ -639,6 +669,8 @@ function NotificationsIconLink({
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        clearHoverCloseTimeout();
+        setIsHovering(false);
         setIsPinnedOpen(false);
         setIsActionsOpen(false);
       }
@@ -651,7 +683,7 @@ function NotificationsIconLink({
       document.removeEventListener("mousedown", handleOutside);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [isPinnedOpen]);
+  }, [clearHoverCloseTimeout, isOpen]);
 
   useEffect(() => {
     if (!toastMessage) {
@@ -746,18 +778,26 @@ function NotificationsIconLink({
         ref={rootRef}
         className="relative"
         onMouseEnter={() => {
+          clearHoverCloseTimeout();
           setIsHovering(true);
           void pollNotifications();
         }}
         onMouseLeave={() => {
-          setIsHovering(false);
-          if (!isPinnedOpen) {
-            setIsActionsOpen(false);
+          clearHoverCloseTimeout();
+          if (isPinnedOpen) {
+            return;
           }
+
+          hoverCloseTimeoutRef.current = window.setTimeout(() => {
+            setIsHovering(false);
+            setIsActionsOpen(false);
+            hoverCloseTimeoutRef.current = null;
+          }, NOTIFICATIONS_HOVER_CLOSE_DELAY_MS);
         }}
       >
         <button
           type="button"
+          data-tour-id={tourId}
           aria-label={label}
           title={label}
           aria-expanded={isOpen}
@@ -785,82 +825,61 @@ function NotificationsIconLink({
             <div className="flex items-center justify-between border-b border-[var(--color-border-soft)] px-3 py-2">
               <p className="text-sm font-semibold text-[var(--color-ink)]">Notificações</p>
               <div className="flex items-center gap-2">
-                <Link href={href} className="text-xs font-semibold text-[var(--color-primary)] underline">
-                  Ver mais
-                </Link>
-                <div className="relative">
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-[8px] border border-[var(--color-border-soft)] bg-white text-black/70 hover:bg-black/5"
-                    onClick={() => setIsActionsOpen((current) => !current)}
-                    aria-label="Ações de notificações"
-                  >
-                    <MoreHorizontal size={14} />
-                  </button>
-                  {isActionsOpen ? (
-                    <div className="absolute right-0 top-9 z-10 w-36 rounded-[8px] border border-[var(--color-border-soft)] bg-white p-1 shadow-lg">
-                      <button
-                        type="button"
-                        className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-2 text-left text-xs font-semibold text-black/75 hover:bg-black/5"
-                        onClick={() => void handleReadAll()}
-                      >
-                        <CheckCircle2 size={12} />
-                        Ler todas
-                      </button>
-                      <button
-                        type="button"
-                        className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-50"
-                        onClick={() => void handleClearAll()}
-                      >
-                        <Trash2 size={12} />
-                        Limpar
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2 border-b border-[var(--color-border-soft)] p-3">
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Buscar notificação..."
-                className="h-9 w-full rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 text-xs text-[var(--color-ink)] outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <select
-                  value={contextFilter}
-                  onChange={(event) => setContextFilter(event.target.value as "all" | "chat" | "community" | "opportunity" | "other")}
-                  className="h-8 rounded-[8px] border border-[var(--color-border-soft)] bg-white px-2 text-xs text-[var(--color-ink)] outline-none"
-                >
-                  <option value="all">Todos contextos</option>
-                  <option value="chat">Chat</option>
-                  <option value="community">Comunidade</option>
-                  <option value="opportunity">Oportunidade</option>
-                  <option value="other">Outros</option>
-                </select>
-                <select
-                  value={typeFilter}
-                  onChange={(event) => setTypeFilter(event.target.value)}
-                  className="h-8 rounded-[8px] border border-[var(--color-border-soft)] bg-white px-2 text-xs text-[var(--color-ink)] outline-none"
-                >
-                  <option value="all">Todos tipos</option>
-                  {typeOptions.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
+                {allNotifications.length > 0 ? (
+                  <Link href={href} className="text-xs font-semibold text-[var(--color-primary)] underline">
+                    Ver mais
+                  </Link>
+                ) : null}
+                {allNotifications.length > 0 ? (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-[8px] border border-[var(--color-border-soft)] bg-white text-black/70 hover:bg-black/5"
+                      onClick={() => setIsActionsOpen((current) => !current)}
+                      aria-label="Ações de notificações"
+                    >
+                      <MoreHorizontal size={14} />
+                    </button>
+                    {isActionsOpen ? (
+                      <div className="absolute right-0 top-9 z-10 w-36 rounded-[8px] border border-[var(--color-border-soft)] bg-white p-1 shadow-lg">
+                        <button
+                          type="button"
+                          className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-2 text-left text-xs font-semibold text-black/75 hover:bg-black/5"
+                          onClick={() => void handleReadAll()}
+                        >
+                          <CheckCircle2 size={12} />
+                          Ler todas
+                        </button>
+                        <button
+                          type="button"
+                          className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-50"
+                          onClick={() => void handleClearAll()}
+                        >
+                          <Trash2 size={12} />
+                          Limpar
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
 
             <div className="max-h-[320px] overflow-y-auto p-2">
-              {filteredNotifications.length === 0 ? (
-                <p className="px-2 py-6 text-center text-xs text-black/60">Nenhuma notificação encontrada.</p>
+              {visibleNotifications.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 px-2 py-5 text-center">
+                  <Image
+                    src="/empty-states/notifications-empty.gif"
+                    alt="Sem notificações"
+                    width={96}
+                    height={96}
+                    unoptimized
+                    className="h-auto w-20 brightness-125 contrast-75 saturate-90"
+                  />
+                  <p className="text-xs font-semibold text-black/60">Não há nada aqui.</p>
+                </div>
               ) : (
-                filteredNotifications.map((notification, index) => {
+                visibleNotifications.map((notification, index) => {
                   const action = resolveNotificationAction(locale, notification);
                   const isUnread = !notification.read_at;
                   const context = resolveNotificationContext(notification);
@@ -900,7 +919,7 @@ function NotificationsIconLink({
                           <Trash2 size={13} />
                         </button>
                       </div>
-                      {index < filteredNotifications.length - 1 ? <hr className="border-black/10" /> : null}
+                      {index < visibleNotifications.length - 1 ? <hr className="border-black/10" /> : null}
                     </div>
                   );
                 })
@@ -1137,10 +1156,12 @@ function ProfileDropdown({
 function PublishDropdown({
   locale,
   label,
+  tourId,
   active,
 }: {
   locale: Locale;
   label: string;
+  tourId?: string;
   active: boolean;
 }) {
   type OrganizationOption = {
@@ -1195,6 +1216,27 @@ function PublishDropdown({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [closeDropdown]);
+
+  useEffect(() => {
+    function handleTourPublish(event: Event) {
+      const customEvent = event as CustomEvent<{ open?: boolean }>;
+      if (customEvent.detail?.open) {
+        setIsClosing(false);
+        setIsOpen(true);
+        return;
+      }
+
+      setShowOrganizations(false);
+      setOrganizationsError(null);
+      setIsOpen(false);
+      setIsClosing(false);
+    }
+
+    window.addEventListener("dubflow:tour:publish", handleTourPublish as EventListener);
+    return () => {
+      window.removeEventListener("dubflow:tour:publish", handleTourPublish as EventListener);
+    };
+  }, []);
 
   function openDropdown() {
     setIsClosing(false);
@@ -1296,7 +1338,7 @@ function PublishDropdown({
   const isVisible = isOpen && !isClosing;
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative" data-tour-id={tourId}>
       <button
         type="button"
         onClick={handleToggle}
@@ -1314,6 +1356,7 @@ function PublishDropdown({
 
       {shouldRenderMenu ? (
         <div
+          data-tour-id="home-nav-publish-menu"
           className={`absolute left-0 mt-2 w-56 origin-top-left rounded-[8px] border border-[var(--color-border-soft)] bg-white p-2 shadow-[0_20px_44px_-26px_rgba(76,16,140,0.5)] transition-all duration-150 ease-out ${
             isVisible ? "translate-y-0 scale-100 opacity-100" : "-translate-y-1 scale-95 opacity-0"
           }`}
