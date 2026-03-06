@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   Clapperboard,
   ChevronDown,
-  KeyRound,
   LayoutDashboard,
   ListVideo,
   Loader2,
@@ -33,7 +32,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNo
 
 import { Avatar } from "@/components/ui/avatar";
 import { resolveMediaUrl } from "@/lib/api";
-import { LOCALE_META, SUPPORTED_LOCALES, type Locale, getDictionary } from "@/lib/i18n";
+import { type Locale, getDictionary } from "@/lib/i18n";
 import { resolveNotificationAction, resolveNotificationContext, resolveNotificationIconKey } from "@/lib/notifications";
 import type { NotificationItem, UserPreview } from "@/types/api";
 
@@ -198,10 +197,6 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
             />
 
             <div className="flex items-center gap-2">
-              <div className="hidden sm:block">
-                <LocaleDropdown locale={locale} />
-              </div>
-
               {hasSessionUser ? (
                 <>
                   <div className="hidden items-center gap-2 lg:flex" data-tour-id="home-nav-actions">
@@ -1328,15 +1323,6 @@ function ProfileDropdown({
             Minhas comunidades
           </Link>
 
-          <Link
-            href={`/${locale}/alterar-senha`}
-            onClick={(event) => handleNavigate(event, `/${locale}/alterar-senha`)}
-            className={`flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm ${compactMode ? "text-white/85 hover:bg-white/10" : "text-black/75 hover:bg-black/5"}`}
-          >
-            <KeyRound size={14} />
-            Alterar senha
-          </Link>
-
           <form action="/api/auth/logout" method="post">
             <input type="hidden" name="locale" value={locale} />
             <button
@@ -1382,6 +1368,8 @@ function PublishDropdown({
   const [hoverTick, setHoverTick] = useState(0);
   const [submenuEpisodeHoverTick, setSubmenuEpisodeHoverTick] = useState(0);
   const [submenuOpportunityHoverTick, setSubmenuOpportunityHoverTick] = useState(0);
+  const [submenuCommunityHoverTick, setSubmenuCommunityHoverTick] = useState(0);
+  const [submenuCommunityHoverId, setSubmenuCommunityHoverId] = useState<number | null>(null);
 
   const closeDropdown = useCallback(() => {
     if (!isOpen || isClosing) {
@@ -1610,9 +1598,24 @@ function PublishDropdown({
                     onClick={(event) =>
                       handleNavigate(event, `/${locale}/organizations/${organization.slug}/oportunidades/novo`)
                     }
+                    onMouseEnter={() => {
+                      setSubmenuCommunityHoverId(organization.id);
+                      setSubmenuCommunityHoverTick((current) => current + 1);
+                    }}
+                    onFocus={() => {
+                      setSubmenuCommunityHoverId(organization.id);
+                      setSubmenuCommunityHoverTick((current) => current + 1);
+                    }}
                     className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm text-black/80 hover:bg-black/5"
                   >
-                    <Building2 size={14} className="shrink-0 text-black/55" />
+                    <AnimatedMenuIcon
+                      staticIcon={<Building2 size={14} className="text-[#0ea5e9]" />}
+                      gifSrc="/nav-gifs/communities.gif"
+                      gifAlt="Comunidades"
+                      size={14}
+                      playDurationMs={1600}
+                      triggerKey={submenuCommunityHoverId === organization.id ? submenuCommunityHoverTick : 0}
+                    />
                     <span className="line-clamp-1">{organization.name}</span>
                   </Link>
                 ))
@@ -1660,41 +1663,6 @@ function PublishDropdown({
         </div>
       ) : null}
     </div>
-  );
-}
-
-function LocaleDropdown({ locale }: { locale: Locale }) {
-  const current = LOCALE_META[locale];
-
-  return (
-    <details className="relative">
-      <summary className="inline-flex h-10 cursor-pointer list-none items-center gap-1 rounded-[8px] bg-white px-3 text-sm font-medium text-black/75 ring-1 ring-[var(--color-border-soft)] hover:bg-[var(--color-primary-soft)] [&::-webkit-details-marker]:hidden">
-        <span className="text-base leading-none">{current.flag}</span>
-        <span className="text-xs text-black/45">▾</span>
-      </summary>
-
-      <div className="absolute right-0 mt-2 w-52 rounded-[8px] border border-[var(--color-border-soft)] bg-white p-1 shadow-[0_20px_44px_-26px_rgba(76,16,140,0.5)]">
-        {SUPPORTED_LOCALES.map((item) => {
-          const meta = LOCALE_META[item];
-
-          return (
-            <Link
-              key={item}
-              href={`/${item}`}
-              className={`flex items-center justify-between rounded-[6px] px-3 py-2 text-sm transition ${
-                item === locale ? "bg-[var(--color-primary)] text-white" : "text-black/80 hover:bg-black/5"
-              }`}
-            >
-              <span className="inline-flex items-center gap-2">
-                <span>{meta.flag}</span>
-                <span>{meta.label}</span>
-              </span>
-              <span className="text-xs opacity-75">{item}</span>
-            </Link>
-          );
-        })}
-      </div>
-    </details>
   );
 }
 

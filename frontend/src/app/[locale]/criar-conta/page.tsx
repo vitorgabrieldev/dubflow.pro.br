@@ -139,6 +139,7 @@ export default async function SignupPage({
                 label="Criar conta"
                 loadingLabel="Criando conta..."
                 icon={<WandSparkles size={15} />}
+                showPendingOnClick
               />
             </div>
           </form>

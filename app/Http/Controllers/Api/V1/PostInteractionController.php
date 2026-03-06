@@ -164,7 +164,11 @@ class PostInteractionController extends Controller
         $user = auth('api')->user();
 
         if ($comment->user_id !== $user->id) {
-            $canModerate = OrganizationAccess::canManageOrganization($user, $comment->post->organization);
+            $isProfilePost = $this->isProfilePost($comment->post);
+            $isPostAuthor = (int) $comment->post->author_user_id === (int) $user->id;
+            $canModerate = $isProfilePost && $isPostAuthor
+                ? true
+                : OrganizationAccess::canManageOrganization($user, $comment->post->organization);
             if (! $canModerate) {
                 abort(403, 'Sem permissao para remover este comentario.');
             }
@@ -287,7 +291,9 @@ class PostInteractionController extends Controller
                     'published_at' => now(),
                 ]);
 
-                $this->notifyOrganizationMembersAboutPublication($post);
+                if (! $this->isProfilePost($post)) {
+                    $this->notifyOrganizationMembersAboutPublication($post);
+                }
                 app(AchievementEngine::class)->onEpisodePublished($post->fresh());
             }
         }
@@ -329,6 +335,10 @@ class PostInteractionController extends Controller
 
     private function notifyOrganizationMembersAboutPublication(DubbingPost $post): void
     {
+        if ($this->isProfilePost($post)) {
+            return;
+        }
+
         $post->loadMissing('organization');
 
         $members = $post->organization->users()
@@ -354,6 +364,10 @@ class PostInteractionController extends Controller
 
     private function notifyOrganizationMembersAboutComment(DubbingPost $post, Comment $comment, string $authorName): void
     {
+        if ($this->isProfilePost($post)) {
+            return;
+        }
+
         $post->loadMissing('organization');
 
         $members = $post->organization->users()
@@ -397,5 +411,12 @@ class PostInteractionController extends Controller
         }
 
         $recipient->notify(new CommentReplyReceived($post, $parentComment, $replyComment, $authorName));
+    }
+
+    private function isProfilePost(DubbingPost $post): bool
+    {
+        $metadata = is_array($post->metadata) ? $post->metadata : [];
+
+        return ($metadata['publish_target'] ?? null) === 'profile';
     }
 }

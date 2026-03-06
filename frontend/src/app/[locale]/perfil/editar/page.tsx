@@ -12,6 +12,7 @@ type AuthMeResponse = {
     pronouns?: string | null;
     username?: string | null;
     email?: string | null;
+    locale?: string | null;
     created_at?: string | null;
     bio?: string | null;
     skills?: string[];

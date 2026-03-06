@@ -1,19 +1,14 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import {
   Building2,
   CalendarDays,
-  Edit3,
-  Eye,
-  KeyRound,
   Languages,
   MapPin,
-  MessageCircle,
   MessageSquareMore,
   Mic,
-  MoreHorizontal,
-  Plus,
+  Settings2,
   Trophy,
   UserPlus,
   Users,
@@ -25,7 +20,6 @@ import { MessageUserButton } from "@/components/profile/message-user-button";
 import { renderAchievementIcon } from "@/components/profile/profile-achievements";
 import { Avatar } from "@/components/ui/avatar";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
-import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ImageFancybox } from "@/components/ui/image-fancybox";
@@ -170,13 +164,10 @@ function resolveProposalContactHref(type: string, value: string): string | null 
 
 export default async function PublicProfilePage({
   params,
-  searchParams,
 }: {
   params: Promise<{ locale: string; userId: string }>;
-  searchParams: Promise<{ external_preview?: string; owner_view?: string }>;
 }) {
   const { locale, userId } = await params;
-  const query = await searchParams;
 
   if (!isLocale(locale)) {
     notFound();
@@ -184,20 +175,10 @@ export default async function PublicProfilePage({
 
   const cookieStore = await cookies();
   const token = cookieStore.get("ed_token")?.value;
-  const requestedExternalPreview = query.external_preview === "1";
-  const requestedOwnerView = query.owner_view === "1";
-  const hasPreviewFlags = requestedExternalPreview || requestedOwnerView;
   const parsedUserId = Number.parseInt(userId, 10);
   const currentUser = token ? await fetchCurrentUser(token) : null;
   const isProfileOwner = Boolean(currentUser && Number.isFinite(parsedUserId) && currentUser.id === parsedUserId);
-
-  if (hasPreviewFlags && !isProfileOwner) {
-    redirect(`/${locale}/perfil/${userId}`);
-  }
-
-  const isExternalPreview = requestedExternalPreview && isProfileOwner;
-  const isOwnerView = requestedOwnerView && isProfileOwner;
-  const requestToken = isExternalPreview ? undefined : token;
+  const requestToken = token;
   const apiBase = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api/v1";
 
   const response = await fetch(`${apiBase}/users/${userId}?per_page=20`, {
@@ -217,33 +198,15 @@ export default async function PublicProfilePage({
   }
 
   const payload = (await response.json()) as PublicProfileResponse;
-  const isOwnProfileView = Boolean(token) && !isExternalPreview && Boolean(isOwnerView) && payload.viewer?.can_follow === false;
+  const isOwnProfileView = isProfileOwner;
   const name = payload.user.stage_name ?? payload.user.name;
   const posts = payload.posts.data ?? [];
   const communities = payload.communities ?? [];
   const achievements = payload.achievements ?? [];
   const visibleCommunities = communities.slice(0, 3);
   const visibleAchievements = achievements.slice(0, 4);
-  const communityRouteParams = new URLSearchParams();
-  if (isExternalPreview) {
-    communityRouteParams.set("external_preview", "1");
-  }
-  if (isOwnProfileView || isOwnerView) {
-    communityRouteParams.set("owner_view", "1");
-  }
-  const showMoreCommunitiesHref = communityRouteParams.toString()
-    ? `/${locale}/perfil/${payload.user.id}/comunidades?${communityRouteParams.toString()}`
-    : `/${locale}/perfil/${payload.user.id}/comunidades`;
-  const achievementRouteParams = new URLSearchParams();
-  if (isExternalPreview) {
-    achievementRouteParams.set("external_preview", "1");
-  }
-  if (isOwnProfileView || isOwnerView) {
-    achievementRouteParams.set("owner_view", "1");
-  }
-  const showMoreAchievementsHref = achievementRouteParams.toString()
-    ? `/${locale}/perfil/${payload.user.id}/conquistas?${achievementRouteParams.toString()}`
-    : `/${locale}/perfil/${payload.user.id}/conquistas`;
+  const showMoreCommunitiesHref = `/${locale}/perfil/${payload.user.id}/comunidades`;
+  const showMoreAchievementsHref = `/${locale}/perfil/${payload.user.id}/conquistas`;
   const avatarSrc = resolveMediaUrl(payload.user.avatar_path);
   const profileUrl = `${getSiteUrl()}/${locale}/perfil/${payload.user.id}`;
   const profileSchema = {
@@ -289,7 +252,7 @@ export default async function PublicProfilePage({
     equipment.push(payload.user.recording_equipment_other.trim());
   }
 
-  const isOwnProfile = isProfileOwner && !isExternalPreview;
+  const isOwnProfile = isProfileOwner;
   const hasInformationContent = Boolean(
     payload.user.pronouns ||
     locationText ||
@@ -335,11 +298,6 @@ export default async function PublicProfilePage({
           <UserPlus size={14} />
           {payload.summary.following ?? 0} seguindo
         </span>
-        {isExternalPreview ? (
-          <span className="inline-flex h-9 items-center rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary-soft)] px-3 text-xs font-semibold text-[var(--color-ink)]">
-            Visualização externa ativa
-          </span>
-        ) : null}
       </div>
 
       <Card className="overflow-hidden">
@@ -395,78 +353,33 @@ export default async function PublicProfilePage({
 
         <CardBody className="space-y-4 p-4">
           <div className="flex flex-wrap items-center gap-2">
-            {isExternalPreview ? (
-              <>
-                <Button
-                  type="button"
-                  variant="neutral"
-                  disabled
-                  title="Visualização externa: botão desativado neste modo."
-                >
-                  <MessageCircle size={14} />
-                  Mensagem
-                </Button>
-                <Button
-                  type="button"
-                  variant="neutral"
-                  disabled
-                  title="Visualização externa: botão desativado neste modo."
-                >
-                  <Plus size={14} />
-                  Seguir
-                </Button>
-              </>
-            ) : (
-              <>
-                {Boolean(payload.viewer?.can_follow) ? (
-                  <MessageUserButton
-                    locale={locale}
-                    userId={payload.user.id}
-                    isAuthenticated={Boolean(token)}
-                    canMessage={Boolean(payload.viewer?.can_message)}
-                    reason={payload.viewer?.message_reason}
-                  />
-                ) : null}
-                <FollowUserButton
+            <>
+              {Boolean(payload.viewer?.can_follow) ? (
+                <MessageUserButton
+                  locale={locale}
                   userId={payload.user.id}
                   isAuthenticated={Boolean(token)}
-                  canFollow={Boolean(payload.viewer?.can_follow)}
-                  initialFollowing={Boolean(payload.viewer?.is_following)}
+                  canMessage={Boolean(payload.viewer?.can_message)}
+                  reason={payload.viewer?.message_reason}
                 />
-              </>
-            )}
+              ) : null}
+              <FollowUserButton
+                userId={payload.user.id}
+                isAuthenticated={Boolean(token)}
+                canFollow={Boolean(payload.viewer?.can_follow)}
+                initialFollowing={Boolean(payload.viewer?.is_following)}
+              />
+            </>
 
             {isOwnProfileView ? (
-              <div className="relative ml-auto">
-                <details className="group relative">
-                  <summary className="inline-flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-[8px] border border-black/10 bg-white text-[var(--color-ink)] transition hover:bg-black/[0.03]">
-                    <MoreHorizontal size={16} />
-                  </summary>
-                  <div className="absolute right-0 z-40 mt-2 w-56 rounded-[8px] border border-black/10 bg-white p-1 shadow-xl">
-                    <Link
-                      href={`/${locale}/perfil/editar`}
-                      className="flex h-9 items-center gap-2 rounded-[6px] px-3 text-sm font-semibold text-[var(--color-ink)] hover:bg-black/[0.04]"
-                    >
-                      <Edit3 size={14} />
-                      Editar perfil
-                    </Link>
-                    <Link
-                      href={`/${locale}/perfil/${payload.user.id}?external_preview=1`}
-                      className="flex h-9 items-center gap-2 rounded-[6px] px-3 text-sm font-semibold text-[var(--color-ink)] hover:bg-black/[0.04]"
-                    >
-                      <Eye size={14} />
-                      Visualizar perfil externo
-                    </Link>
-                    <Link
-                      href={`/${locale}/alterar-senha`}
-                      className="flex h-9 items-center gap-2 rounded-[6px] px-3 text-sm font-semibold text-[var(--color-ink)] hover:bg-black/[0.04]"
-                    >
-                      <KeyRound size={14} />
-                      Alterar senha
-                    </Link>
-                  </div>
-                </details>
-              </div>
+              <Link
+                href={`/${locale}/perfil/editar`}
+                className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-[8px] border border-black/10 bg-white text-[var(--color-ink)] transition hover:bg-black/[0.03]"
+                aria-label="Editar perfil"
+                title="Editar perfil"
+              >
+                <Settings2 size={16} />
+              </Link>
             ) : null}
           </div>
 

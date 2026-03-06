@@ -141,10 +141,32 @@ class PostController extends Controller
     {
         $user = auth('api')->user();
 
+        if (! $user) {
+            abort(401, 'Não autenticado.');
+        }
+
         if (! OrganizationAccess::canPublish($user, $organization)) {
             abort(403, 'Sem permissao para publicar nesta organizacao.');
         }
 
+        return $this->storeForContext($request, $organization, $user, false);
+    }
+
+    public function storeProfile(Request $request): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (! $user) {
+            abort(401, 'Não autenticado.');
+        }
+
+        $organization = $this->resolveProfileOrganization($user);
+
+        return $this->storeForContext($request, $organization, $user, true);
+    }
+
+    private function storeForContext(Request $request, Organization $organization, User $user, bool $isProfilePublish): JsonResponse
+    {
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:5000'],
@@ -182,6 +204,17 @@ class PostController extends Controller
             'credits.*.dubber_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'credits.*.dubber_name' => ['nullable', 'string', 'max:255'],
         ]);
+
+        if (
+            $isProfilePublish
+            && (
+                ! empty($validated['playlist_id'])
+                || ! empty($validated['season_id'])
+                || ! empty($validated['season_number'])
+            )
+        ) {
+            abort(422, 'Publicações de perfil não aceitam comunidade, playlist ou temporada.');
+        }
 
         $playlist = null;
         if (! empty($validated['playlist_id'])) {
@@ -248,7 +281,7 @@ class PostController extends Controller
             ?? ($storedAssets->firstWhere('type', 'image')['path'] ?? null);
         $durationSeconds = max(1, min(3600, (int) ($validated['duration_seconds'] ?? 0)));
 
-        $post = DB::transaction(function () use ($validated, $organization, $user, $seasonId, $primaryAsset, $thumbnailPath, $collaboratorIds, $storedAssets, $durationSeconds) {
+        $post = DB::transaction(function () use ($validated, $organization, $user, $seasonId, $primaryAsset, $thumbnailPath, $collaboratorIds, $storedAssets, $durationSeconds, $isProfilePublish) {
             $post = DubbingPost::create([
                 'organization_id' => $organization->id,
                 'playlist_id' => $validated['playlist_id'] ?? null,
@@ -268,6 +301,7 @@ class PostController extends Controller
                 'published_at' => $collaboratorIds->isEmpty() ? now() : null,
                 'metadata' => [
                     'work_title' => $validated['work_title'],
+                    'publish_target' => $isProfilePublish ? 'profile' : 'community',
                     'requires_collaborator_approval' => ! $collaboratorIds->isEmpty(),
                     'display_metrics' => [
                         'show_likes' => $validated['show_likes_count'] ?? true,
@@ -298,11 +332,15 @@ class PostController extends Controller
                 $collaborator->user?->notify(new PostCollaborationRequested($post, $post->author));
             }
         } elseif ($post->published_at !== null) {
-            $this->notifyOrganizationMembersAboutPublication($post);
+            if (! $isProfilePublish) {
+                $this->notifyOrganizationMembersAboutPublication($post);
+            }
             app(AchievementEngine::class)->onEpisodePublished($post);
         }
 
-        $organization->recalculateVerification();
+        if (! $isProfilePublish) {
+            $organization->recalculateVerification();
+        }
 
         Log::channel('audit')->info('post_created', [
             'post_id' => $post->id,
@@ -310,6 +348,7 @@ class PostController extends Controller
             'author_user_id' => $user->id,
             'playlist_id' => $post->playlist_id,
             'season_id' => $post->season_id,
+            'publish_target' => $isProfilePublish ? 'profile' : 'community',
             'published_at' => optional($post->published_at)->toIso8601String(),
         ]);
 
@@ -323,6 +362,10 @@ class PostController extends Controller
 
     private function notifyOrganizationMembersAboutPublication(DubbingPost $post): void
     {
+        if ($this->isProfilePost($post)) {
+            return;
+        }
+
         $post->loadMissing('organization');
 
         $members = $post->organization->users()
@@ -707,15 +750,19 @@ class PostController extends Controller
             abort(403, 'Sem permissao para remover este post.');
         }
 
+        $isProfilePost = $this->isProfilePost($post);
         $organization = $post->organization;
         $postId = $post->id;
         $post->delete();
-        $organization->recalculateVerification();
+        if (! $isProfilePost) {
+            $organization->recalculateVerification();
+        }
 
         Log::channel('audit')->info('post_deleted', [
             'post_id' => $postId,
             'organization_id' => $organization->id,
             'deleted_by_user_id' => $user->id,
+            'publish_target' => $isProfilePost ? 'profile' : 'community',
         ]);
 
         return response()->json([
@@ -735,6 +782,13 @@ class PostController extends Controller
 
         if ($post->author_user_id === $viewerId) {
             return true;
+        }
+
+        if ($this->isProfilePost($post)) {
+            return $post->collaborators()
+                ->where('user_id', $viewerId)
+                ->where('status', 'accepted')
+                ->exists();
         }
 
         $isOrgMember = $post->organization->members()
@@ -914,5 +968,52 @@ class PostController extends Controller
                 'display_order' => $index,
             ]);
         }
+    }
+
+    private function isProfilePost(DubbingPost $post): bool
+    {
+        $metadata = is_array($post->metadata) ? $post->metadata : [];
+
+        return ($metadata['publish_target'] ?? null) === 'profile';
+    }
+
+    private function resolveProfileOrganization(User $user): Organization
+    {
+        $ownedOrganizations = Organization::query()
+            ->where('owner_user_id', $user->id)
+            ->get(['id', 'owner_user_id', 'name', 'slug', 'settings']);
+
+        foreach ($ownedOrganizations as $organization) {
+            $settings = is_array($organization->settings) ? $organization->settings : [];
+            if (($settings['is_profile_space'] ?? false) === true) {
+                return $organization;
+            }
+        }
+
+        $baseSlug = 'perfil-pessoal-u'.$user->id;
+        $candidate = $baseSlug;
+        $suffix = 2;
+
+        while (Organization::query()->where('slug', $candidate)->exists()) {
+            $candidate = $baseSlug.'-'.$suffix;
+            $suffix++;
+        }
+
+        $displayName = trim((string) ($user->stage_name ?: $user->name));
+        if ($displayName === '') {
+            $displayName = 'Perfil';
+        }
+
+        return Organization::query()->create([
+            'owner_user_id' => $user->id,
+            'name' => 'Perfil de '.$displayName,
+            'slug' => $candidate,
+            'description' => 'Espaço de publicações avulsas do perfil.',
+            'is_public' => false,
+            'is_verified' => false,
+            'settings' => [
+                'is_profile_space' => true,
+            ],
+        ]);
     }
 }

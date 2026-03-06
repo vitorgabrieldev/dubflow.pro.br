@@ -27,6 +27,7 @@ import type { PublishOrganizationOption, UserPreview } from "@/types/api";
 type PublishEpisodeFormProps = {
   locale: string;
   options: PublishOrganizationOption[];
+  allowProfilePublish?: boolean;
   mode?: "create" | "edit";
   postId?: number;
   initialValues?: {
@@ -42,10 +43,12 @@ type PublishEpisodeFormProps = {
     show_views_count?: boolean;
     duration_seconds?: number | null;
     collaborator_groups?: CollaboratorGroupInput[];
+    publish_target?: "community" | "profile" | null;
   };
 };
 
 type SeasonMode = "none" | "existing" | "new";
+type PublishTarget = "community" | "profile";
 type CollaboratorTag = {
   key: string;
   label: string;
@@ -73,11 +76,30 @@ const LANGUAGE_OPTIONS = [
 ] as const;
 const DEFAULT_COLLABORATOR_ROLE = "Direção";
 
-export function PublishEpisodeForm({ locale, options, mode = "create", postId, initialValues }: PublishEpisodeFormProps) {
+export function PublishEpisodeForm({
+  locale,
+  options,
+  allowProfilePublish = true,
+  mode = "create",
+  postId,
+  initialValues,
+}: PublishEpisodeFormProps) {
   const isEditMode = mode === "edit";
+  const canPublishOnProfile = allowProfilePublish;
   const MAX_MEDIA_FILES = 40;
   const [organizationOpen, setOrganizationOpen] = useState(false);
   const [playlistOpen, setPlaylistOpen] = useState(false);
+  const [publishTarget, setPublishTarget] = useState<PublishTarget>(() => {
+    if (isEditMode) {
+      return initialValues?.publish_target === "profile" ? "profile" : "community";
+    }
+
+    if (options.length === 0 && canPublishOnProfile) {
+      return "profile";
+    }
+
+    return "community";
+  });
   const [organizationSlug, setOrganizationSlug] = useState(initialValues?.organization_slug ?? options[0]?.slug ?? "");
   const selectedOrganization = useMemo(
     () => options.find((item) => item.slug === organizationSlug) ?? null,
@@ -118,6 +140,7 @@ export function PublishEpisodeForm({ locale, options, mode = "create", postId, i
     () => (initialValues?.collaborator_groups?.length ?? 0) > 0
   );
   const requestCounterRef = useRef<Record<string, number>>({});
+  const isPublishingOnProfile = publishTarget === "profile";
 
   const selectedOrganizationName = selectedOrganization?.name ?? "Selecione uma comunidade";
   const selectedPlaylistName = playlistId
@@ -199,6 +222,26 @@ export function PublishEpisodeForm({ locale, options, mode = "create", postId, i
     };
   }, [files]);
 
+  useEffect(() => {
+    if (isEditMode) {
+      return;
+    }
+
+    if (publishTarget === "community" && options.length === 0 && canPublishOnProfile) {
+      setPublishTarget("profile");
+    }
+  }, [canPublishOnProfile, isEditMode, options.length, publishTarget]);
+
+  useEffect(() => {
+    if (publishTarget !== "community") {
+      return;
+    }
+
+    if (!organizationSlug && options[0]?.slug) {
+      setOrganizationSlug(options[0].slug);
+    }
+  }, [organizationSlug, options, publishTarget]);
+
   function handleAddFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) {
       return;
@@ -275,6 +318,32 @@ export function PublishEpisodeForm({ locale, options, mode = "create", postId, i
     setExistingSeasonId(nextSeasons[0] ? String(nextSeasons[0].id) : "");
     setSeasonMode(nextSeasons.length > 0 ? "existing" : "none");
     setPlaylistOpen(false);
+  }
+
+  function changePublishTarget(nextTarget: PublishTarget) {
+    if (isEditMode) {
+      return;
+    }
+
+    setPublishTarget(nextTarget);
+    setOrganizationOpen(false);
+    setPlaylistOpen(false);
+
+    if (nextTarget === "community") {
+      if (!organizationSlug && options[0]?.slug) {
+        const defaultOrganization = options[0];
+        setOrganizationSlug(defaultOrganization.slug);
+        const defaultPlaylist = defaultOrganization.playlists?.[0];
+        const defaultSeasons = defaultPlaylist?.seasons ?? [];
+        setPlaylistId(defaultPlaylist ? String(defaultPlaylist.id) : "");
+        setExistingSeasonId(defaultSeasons[0] ? String(defaultSeasons[0].id) : "");
+        setSeasonMode(defaultSeasons.length > 0 ? "existing" : "none");
+      }
+
+      return;
+    }
+
+    setSeasonMode("none");
   }
 
   function addCollaboratorGroup() {
@@ -480,193 +549,247 @@ export function PublishEpisodeForm({ locale, options, mode = "create", postId, i
   return (
     <form action={formAction} method="post" encType="multipart/form-data" className="space-y-5">
       <input type="hidden" name="locale" value={locale} />
-      <input type="hidden" name="organization_slug" value={organizationSlug} />
-      <input type="hidden" name="playlist_id" value={playlistId} />
+      <input type="hidden" name="publish_target" value={publishTarget} />
+      <input type="hidden" name="organization_slug" value={isPublishingOnProfile ? "" : organizationSlug} />
+      <input type="hidden" name="playlist_id" value={isPublishingOnProfile ? "" : playlistId} />
       <input type="hidden" name="duration_seconds" value={String(isEditMode ? initialValues?.duration_seconds ?? 0 : computedDuration)} />
       <input type="hidden" name="collaborators_payload" value={collaboratorsPayload} />
 
-      <div className="space-y-4 rounded-[8px] border border-black/10 bg-black/[0.025] p-4">
-        <div className="space-y-1">
+      {!isEditMode ? (
+        <div className="space-y-3 rounded-[8px] border border-black/10 bg-black/[0.025] p-4">
           <p className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--color-ink)]">
             <Clapperboard size={14} />
-            Comunidade
+            Onde publicar
           </p>
 
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setOrganizationOpen((current) => !current)}
-              className="flex h-10 w-full cursor-pointer items-center justify-between rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 text-sm text-[var(--color-ink)] shadow-sm"
-            >
-              <span className="line-clamp-1 text-left">{selectedOrganizationName}</span>
-              <ChevronDown size={14} />
-            </button>
+          <label className="flex items-center gap-2 text-sm text-black/75">
+            <input
+              type="radio"
+              name="publish_target_selector"
+              value="profile"
+              checked={publishTarget === "profile"}
+              onChange={() => changePublishTarget("profile")}
+              disabled={!canPublishOnProfile}
+              className="accent-[var(--color-primary)]"
+            />
+            No meu perfil (avulso)
+          </label>
 
-            {organizationOpen ? (
-              <div className="absolute z-20 mt-1 w-full rounded-[8px] border border-[var(--color-border-soft)] bg-white p-1 shadow-xl">
-                <a
-                  href={`/${locale}/nova-organizacao`}
-                  className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
-                >
-                  <PlusCircle size={14} />
-                  Criar nova comunidade
-                </a>
+          <label className="flex items-center gap-2 text-sm text-black/75">
+            <input
+              type="radio"
+              name="publish_target_selector"
+              value="community"
+              checked={publishTarget === "community"}
+              onChange={() => changePublishTarget("community")}
+              disabled={options.length === 0}
+              className="accent-[var(--color-primary)]"
+            />
+            Em comunidade e playlist
+          </label>
 
-                <div className="my-1 border-t border-black/10" />
-
-                {options.map((organization) => (
-                  <button
-                    key={organization.id}
-                    type="button"
-                    onClick={() => selectOrganization(organization.slug)}
-                    className="flex w-full cursor-pointer items-center justify-between rounded-[6px] px-3 py-2 text-left text-sm text-[var(--color-ink)] hover:bg-black/5"
-                  >
-                    <span className="line-clamp-1">{organization.name}</span>
-                    {organization.slug === organizationSlug ? <Check size={14} className="text-[var(--color-primary)]" /> : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <p className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--color-ink)]">
-            <ListVideo size={14} />
-            Playlist
-          </p>
-
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setPlaylistOpen((current) => !current)}
-              className="flex h-10 w-full cursor-pointer items-center justify-between rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 text-sm text-[var(--color-ink)] shadow-sm"
-            >
-              <span className="line-clamp-1 text-left">
-                {playlists.length > 0 ? selectedPlaylistName : "Episódio avulso (sem playlist)"}
-              </span>
-              <ChevronDown size={14} />
-            </button>
-
-            {playlistOpen ? (
-              <div className="absolute z-20 mt-1 w-full rounded-[8px] border border-[var(--color-border-soft)] bg-white p-1 shadow-xl">
-                <button
-                  type="button"
-                  onClick={() => selectPlaylist("")}
-                  className="flex w-full cursor-pointer items-center justify-between rounded-[6px] px-3 py-2 text-left text-sm text-[var(--color-ink)] hover:bg-black/5"
-                >
-                  <span className="line-clamp-1">Episódio avulso (sem playlist)</span>
-                  {!playlistId ? <Check size={14} className="text-[var(--color-primary)]" /> : null}
-                </button>
-
-                <div className="my-1 border-t border-black/10" />
-
-                <a
-                  href={`/${locale}/nova-playlist?organization=${encodeURIComponent(organizationSlug)}`}
-                  className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
-                >
-                  <PlusCircle size={14} />
-                  Criar nova playlist
-                </a>
-
-                {playlists.length > 0 ? <div className="my-1 border-t border-black/10" /> : null}
-
-                {playlists.map((playlist) => (
-                  <button
-                    key={playlist.id}
-                    type="button"
-                    onClick={() => selectPlaylist(String(playlist.id))}
-                    className="flex w-full cursor-pointer items-center justify-between rounded-[6px] px-3 py-2 text-left text-sm text-[var(--color-ink)] hover:bg-black/5"
-                  >
-                    <span className="line-clamp-1">{playlist.title}</span>
-                    {String(playlist.id) === playlistId ? <Check size={14} className="text-[var(--color-primary)]" /> : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {playlistId ? (
-        <div className="space-y-3 rounded-[8px] border border-black/10 bg-black/[0.03] p-4">
-          <p className="flex items-center gap-1 text-sm font-semibold text-[var(--color-ink)]">
-            <Layers3 size={14} />
-            Temporada do episódio
-          </p>
-
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm text-black/75">
-              <input
-                type="radio"
-                name="season_mode"
-                value="none"
-                checked={seasonMode === "none"}
-                onChange={() => setSeasonMode("none")}
-                className="accent-[var(--color-primary)]"
-              />
-              Episódio avulso (sem temporada)
-            </label>
-
-            {seasons.length > 0 ? (
-              <label className="flex items-center gap-2 text-sm text-black/75">
-                <input
-                  type="radio"
-                  name="season_mode"
-                  value="existing"
-                  checked={seasonMode === "existing"}
-                  onChange={() => setSeasonMode("existing")}
-                  className="accent-[var(--color-primary)]"
-                />
-                Selecionar temporada existente
-              </label>
-            ) : null}
-
-            <label className="flex items-center gap-2 text-sm text-black/75">
-              <input
-                type="radio"
-                name="season_mode"
-                value="new"
-                checked={seasonMode === "new"}
-                onChange={() => setSeasonMode("new")}
-                className="accent-[var(--color-primary)]"
-              />
-              Criar nova temporada
-            </label>
-          </div>
-
-          {seasonMode === "existing" && seasons.length > 0 ? (
-            <select
-              name="season_id"
-              value={existingSeasonId}
-              onChange={(event) => setExistingSeasonId(event.target.value)}
-              className="h-10 w-full rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 text-sm text-[var(--color-ink)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
-              required
-            >
-              {seasons.map((season) => (
-                <option key={season.id} value={season.id}>
-                  T{season.season_number} • {season.episodes_count ?? 0} episódios
-                </option>
-              ))}
-            </select>
-          ) : null}
-
-          {seasonMode === "new" ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-sm text-black/75">
-                <span>Número da temporada</span>
-                <Input name="season_number" type="number" min={1} placeholder="1" required />
-              </label>
-              <label className="space-y-1 text-sm text-black/75">
-                <span>Título da temporada (opcional)</span>
-                <Input name="season_title" placeholder="Temporada 1" />
-              </label>
-            </div>
+          {options.length === 0 ? (
+            <p className="text-xs text-black/55">Você não tem comunidade com permissão de publicação no momento.</p>
           ) : null}
         </div>
       ) : (
         <div className="rounded-[8px] border border-black/10 bg-black/[0.03] p-4 text-sm text-black/65">
-          Este episódio será publicado sem playlist e sem temporada.
+          {isPublishingOnProfile
+            ? "Este episódio está publicado no seu perfil pessoal."
+            : "Este episódio está vinculado a uma comunidade."}
+        </div>
+      )}
+
+      {!isPublishingOnProfile ? (
+        <>
+          <div className="space-y-4 rounded-[8px] border border-black/10 bg-black/[0.025] p-4">
+            <div className="space-y-1">
+              <p className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--color-ink)]">
+                <Clapperboard size={14} />
+                Comunidade
+              </p>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setOrganizationOpen((current) => !current)}
+                  className="flex h-10 w-full cursor-pointer items-center justify-between rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 text-sm text-[var(--color-ink)] shadow-sm"
+                >
+                  <span className="line-clamp-1 text-left">{selectedOrganizationName}</span>
+                  <ChevronDown size={14} />
+                </button>
+
+                {organizationOpen ? (
+                  <div className="absolute z-20 mt-1 w-full rounded-[8px] border border-[var(--color-border-soft)] bg-white p-1 shadow-xl">
+                    <a
+                      href={`/${locale}/nova-organizacao`}
+                      className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
+                    >
+                      <PlusCircle size={14} />
+                      Criar nova comunidade
+                    </a>
+
+                    <div className="my-1 border-t border-black/10" />
+
+                    {options.map((organization) => (
+                      <button
+                        key={organization.id}
+                        type="button"
+                        onClick={() => selectOrganization(organization.slug)}
+                        className="flex w-full cursor-pointer items-center justify-between rounded-[6px] px-3 py-2 text-left text-sm text-[var(--color-ink)] hover:bg-black/5"
+                      >
+                        <span className="line-clamp-1">{organization.name}</span>
+                        {organization.slug === organizationSlug ? <Check size={14} className="text-[var(--color-primary)]" /> : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <p className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--color-ink)]">
+                <ListVideo size={14} />
+                Playlist
+              </p>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setPlaylistOpen((current) => !current)}
+                  className="flex h-10 w-full cursor-pointer items-center justify-between rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 text-sm text-[var(--color-ink)] shadow-sm"
+                >
+                  <span className="line-clamp-1 text-left">
+                    {playlists.length > 0 ? selectedPlaylistName : "Episódio avulso (sem playlist)"}
+                  </span>
+                  <ChevronDown size={14} />
+                </button>
+
+                {playlistOpen ? (
+                  <div className="absolute z-20 mt-1 w-full rounded-[8px] border border-[var(--color-border-soft)] bg-white p-1 shadow-xl">
+                    <button
+                      type="button"
+                      onClick={() => selectPlaylist("")}
+                      className="flex w-full cursor-pointer items-center justify-between rounded-[6px] px-3 py-2 text-left text-sm text-[var(--color-ink)] hover:bg-black/5"
+                    >
+                      <span className="line-clamp-1">Episódio avulso (sem playlist)</span>
+                      {!playlistId ? <Check size={14} className="text-[var(--color-primary)]" /> : null}
+                    </button>
+
+                    <div className="my-1 border-t border-black/10" />
+
+                    <a
+                      href={`/${locale}/nova-playlist?organization=${encodeURIComponent(organizationSlug)}`}
+                      className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-sm font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
+                    >
+                      <PlusCircle size={14} />
+                      Criar nova playlist
+                    </a>
+
+                    {playlists.length > 0 ? <div className="my-1 border-t border-black/10" /> : null}
+
+                    {playlists.map((playlist) => (
+                      <button
+                        key={playlist.id}
+                        type="button"
+                        onClick={() => selectPlaylist(String(playlist.id))}
+                        className="flex w-full cursor-pointer items-center justify-between rounded-[6px] px-3 py-2 text-left text-sm text-[var(--color-ink)] hover:bg-black/5"
+                      >
+                        <span className="line-clamp-1">{playlist.title}</span>
+                        {String(playlist.id) === playlistId ? <Check size={14} className="text-[var(--color-primary)]" /> : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          {playlistId ? (
+            <div className="space-y-3 rounded-[8px] border border-black/10 bg-black/[0.03] p-4">
+              <p className="flex items-center gap-1 text-sm font-semibold text-[var(--color-ink)]">
+                <Layers3 size={14} />
+                Temporada do episódio
+              </p>
+
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm text-black/75">
+                  <input
+                    type="radio"
+                    name="season_mode"
+                    value="none"
+                    checked={seasonMode === "none"}
+                    onChange={() => setSeasonMode("none")}
+                    className="accent-[var(--color-primary)]"
+                  />
+                  Episódio avulso (sem temporada)
+                </label>
+
+                {seasons.length > 0 ? (
+                  <label className="flex items-center gap-2 text-sm text-black/75">
+                    <input
+                      type="radio"
+                      name="season_mode"
+                      value="existing"
+                      checked={seasonMode === "existing"}
+                      onChange={() => setSeasonMode("existing")}
+                      className="accent-[var(--color-primary)]"
+                    />
+                    Selecionar temporada existente
+                  </label>
+                ) : null}
+
+                <label className="flex items-center gap-2 text-sm text-black/75">
+                  <input
+                    type="radio"
+                    name="season_mode"
+                    value="new"
+                    checked={seasonMode === "new"}
+                    onChange={() => setSeasonMode("new")}
+                    className="accent-[var(--color-primary)]"
+                  />
+                  Criar nova temporada
+                </label>
+              </div>
+
+              {seasonMode === "existing" && seasons.length > 0 ? (
+                <select
+                  name="season_id"
+                  value={existingSeasonId}
+                  onChange={(event) => setExistingSeasonId(event.target.value)}
+                  className="h-10 w-full rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 text-sm text-[var(--color-ink)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+                  required
+                >
+                  {seasons.map((season) => (
+                    <option key={season.id} value={season.id}>
+                      T{season.season_number} • {season.episodes_count ?? 0} episódios
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+
+              {seasonMode === "new" ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1 text-sm text-black/75">
+                    <span>Número da temporada</span>
+                    <Input name="season_number" type="number" min={1} placeholder="1" required />
+                  </label>
+                  <label className="space-y-1 text-sm text-black/75">
+                    <span>Título da temporada (opcional)</span>
+                    <Input name="season_title" placeholder="Temporada 1" />
+                  </label>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="rounded-[8px] border border-black/10 bg-black/[0.03] p-4 text-sm text-black/65">
+              Este episódio será publicado sem playlist e sem temporada.
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="rounded-[8px] border border-black/10 bg-black/[0.03] p-4 text-sm text-black/65">
+          Este episódio será publicado no seu perfil, sem comunidade, playlist ou temporada.
         </div>
       )}
 
@@ -980,7 +1103,10 @@ export function PublishEpisodeForm({ locale, options, mode = "create", postId, i
         loadingLabel={isEditMode ? "Salvando alterações..." : "Publicando episódio..."}
         icon={<ArrowRight size={15} />}
         showPendingOnClick
-        disabled={options.length === 0 || !organizationSlug || (!isEditMode && files.length === 0)}
+        disabled={
+          (!isEditMode && files.length === 0) ||
+          (isPublishingOnProfile ? !canPublishOnProfile : options.length === 0 || !organizationSlug)
+        }
       />
     </form>
   );

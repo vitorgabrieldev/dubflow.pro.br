@@ -32,7 +32,6 @@ const NOINDEX_EXACT_PATHS = new Set([
   "/perfil/editar",
   "/perfil/conquistas",
   "/minhas-organizacoes",
-  "/alterar-senha",
 ]);
 
 function resolveSeoByPath(pathWithoutLocale: string): {

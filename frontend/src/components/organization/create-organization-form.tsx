@@ -207,7 +207,7 @@ export function CreateOrganizationForm({ locale }: CreateOrganizationFormProps) 
         </span>
       </label>
 
-      <Button type="submit" className="w-full" disabled={!canSubmit}>
+      <Button type="submit" className="w-full" disabled={!canSubmit} aria-busy={pending}>
         {pending ? <Loader2 size={14} className="animate-spin" /> : <PlusCircle size={14} />}
         {pending ? "Criando comunidade..." : "Criar comunidade"}
       </Button>

@@ -27,5 +27,5 @@ export default async function ProfilePage({
     redirect(`/${locale}/entrar`);
   }
 
-  redirect(`/${locale}/perfil/${me.id}?owner_view=1`);
+  redirect(`/${locale}/perfil/${me.id}`);
 }

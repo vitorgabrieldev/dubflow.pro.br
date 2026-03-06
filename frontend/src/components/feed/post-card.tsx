@@ -114,6 +114,8 @@ export function PostCard({ post, locale, isAuthenticated }: PostCardProps) {
   const canShowMediaCarousel = assets.length > 1;
   const canShowComments = post.allow_comments !== false;
   const showViewsCount = post.metadata?.display_metrics?.show_views ?? true;
+  const isProfilePost = post.metadata?.publish_target === "profile";
+  const sourceLabel = isProfilePost ? "Perfil" : (post.organization?.name ?? "-");
 
   const [liked, setLiked] = useState(Boolean(post.viewer_has_liked));
   const [viewsCount, setViewsCount] = useState(post.views_count ?? 0);
@@ -893,7 +895,7 @@ export function PostCard({ post, locale, isAuthenticated }: PostCardProps) {
           <div className="min-w-0 flex-1">
             <p className="line-clamp-1 text-base font-semibold text-[var(--color-ink)]">{post.title}</p>
             <p className="line-clamp-1 text-xs text-black/65">
-              {post.organization?.name ?? "-"} • {post.author?.stage_name ?? post.author?.name ?? "-"}
+              {sourceLabel} • {post.author?.stage_name ?? post.author?.name ?? "-"}
             </p>
           </div>
 

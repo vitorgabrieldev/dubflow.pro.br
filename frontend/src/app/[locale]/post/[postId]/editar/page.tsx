@@ -162,6 +162,7 @@ export default async function EditPostPage({
               show_views_count: post.metadata?.display_metrics?.show_views ?? true,
               duration_seconds: post.duration_seconds,
               collaborator_groups: collaboratorGroups,
+              publish_target: post.metadata?.publish_target === "profile" ? "profile" : "community",
             }}
           />
         </CardBody>
