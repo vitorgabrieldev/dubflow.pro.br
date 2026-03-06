@@ -37,6 +37,7 @@ class OrganizationController extends Controller
                 'is_public',
                 'created_at',
             ])
+            ->withoutProfileSpace()
             ->with('owner:id,name,username,avatar_path')
             ->withCount(['followers', 'posts', 'playlists'])
             ->latest();
@@ -291,6 +292,7 @@ class OrganizationController extends Controller
                 'is_public',
                 'created_at',
             ])
+            ->withoutProfileSpace()
             ->with('owner:id,name,username,avatar_path')
             ->withCount(['followers', 'posts', 'playlists'])
             ->whereHas('members', fn ($builder) => $builder

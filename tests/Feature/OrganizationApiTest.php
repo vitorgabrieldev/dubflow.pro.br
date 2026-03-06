@@ -276,6 +276,63 @@ class OrganizationApiTest extends TestCase
             ->assertJsonCount(50, 'data');
     }
 
+    public function test_profile_space_is_hidden_from_community_indexes(): void
+    {
+        $owner = User::factory()->create();
+        $ownerToken = auth('api')->login($owner);
+
+        $visibleOrganization = Organization::query()->create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Studio Visivel',
+            'slug' => 'studio-visivel',
+            'is_public' => true,
+        ]);
+
+        $profileSpace = Organization::query()->create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Perfil de Teste',
+            'slug' => 'perfil-pessoal-u'.$owner->id,
+            'description' => 'Espaco tecnico do perfil.',
+            'is_public' => false,
+            'settings' => [
+                'is_profile_space' => true,
+            ],
+        ]);
+
+        foreach ([$visibleOrganization, $profileSpace] as $organization) {
+            OrganizationMember::query()->create([
+                'organization_id' => $organization->id,
+                'user_id' => $owner->id,
+                'role' => 'owner',
+                'status' => 'active',
+                'joined_at' => now(),
+            ]);
+        }
+
+        $headers = [
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ];
+
+        $this->withHeaders($headers)
+            ->getJson('/api/v1/my-organizations?per_page=50')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.slug', 'studio-visivel');
+
+        $this->withHeaders($headers)
+            ->getJson('/api/v1/organizations?discover_private=1&only_joined=1&per_page=50')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.slug', 'studio-visivel');
+
+        $this->withHeaders($headers)
+            ->getJson('/api/v1/publish/options')
+            ->assertOk()
+            ->assertJsonCount(1, 'organizations')
+            ->assertJsonPath('organizations.0.slug', 'studio-visivel');
+    }
+
     public function test_private_community_playlists_are_viewable_for_non_members(): void
     {
         $owner = User::factory()->create();

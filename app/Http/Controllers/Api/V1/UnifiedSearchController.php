@@ -148,6 +148,8 @@ class UnifiedSearchController extends Controller
 
     private function applyOrganizationVisibility(Builder $builder, ?User $user): void
     {
+        $builder->withoutProfileSpace();
+
         if (! $user) {
             $builder->where('is_public', true);
 

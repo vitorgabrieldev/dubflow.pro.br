@@ -228,6 +228,50 @@ class UserProfileApiTest extends TestCase
             ->assertJsonPath('achievements.0.definition.title', 'Estrela da Voz');
     }
 
+    public function test_public_profile_hides_hidden_profile_space_from_summary_and_communities(): void
+    {
+        $owner = User::factory()->create([
+            'is_private' => false,
+        ]);
+
+        $visibleOrganization = Organization::query()->create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Studio Aurora',
+            'slug' => 'studio-aurora',
+            'is_public' => true,
+        ]);
+
+        $profileSpace = Organization::query()->create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Perfil de Voz',
+            'slug' => 'perfil-pessoal-u'.$owner->id,
+            'is_public' => false,
+            'settings' => [
+                'is_profile_space' => true,
+            ],
+        ]);
+
+        foreach ([$visibleOrganization, $profileSpace] as $organization) {
+            OrganizationMember::query()->create([
+                'organization_id' => $organization->id,
+                'user_id' => $owner->id,
+                'role' => 'owner',
+                'status' => 'active',
+                'source' => 'owner_created',
+                'requested_by_user_id' => $owner->id,
+                'approved_by_user_id' => $owner->id,
+                'joined_at' => now(),
+                'approved_at' => now(),
+            ]);
+        }
+
+        $this->getJson("/api/v1/users/{$owner->id}")
+            ->assertOk()
+            ->assertJsonPath('summary.organizations', 1)
+            ->assertJsonCount(1, 'communities')
+            ->assertJsonPath('communities.0.slug', 'studio-aurora');
+    }
+
     public function test_public_profile_exposes_only_contact_links_selected_in_preferences(): void
     {
         $owner = User::factory()->create([
