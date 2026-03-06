@@ -113,6 +113,7 @@ export type Post = {
   season?: Pick<PlaylistSeason, "id" | "season_number" | "title"> | null;
   metadata?: {
     work_title?: string;
+    publish_target?: "community" | "profile";
     requires_collaborator_approval?: boolean;
     assets?: {
       path: string;

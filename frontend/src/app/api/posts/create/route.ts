@@ -12,10 +12,12 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const formData = await request.formData();
   const locale = String(formData.get("locale") ?? "pt-BR");
+  const publishTargetRaw = String(formData.get("publish_target") ?? "community").trim().toLowerCase();
+  const publishTarget = publishTargetRaw === "profile" ? "profile" : "community";
   const organizationSlug = String(formData.get("organization_slug") ?? "").trim();
   const wantsJson = request.headers.get("accept")?.includes("application/json") ?? false;
 
-  if (!organizationSlug) {
+  if (publishTarget !== "profile" && !organizationSlug) {
     const message = "Selecione uma comunidade para publicar.";
     if (wantsJson) {
       return NextResponse.json({ message }, { status: 422 });
@@ -111,7 +113,11 @@ export async function POST(request: Request) {
 
   let refreshedToken: string | null = null;
   const publish = async (authToken: string) =>
-    fetch(`${API_BASE_URL}/organizations/${organizationSlug}/posts`, {
+    fetch(
+      publishTarget === "profile"
+        ? `${API_BASE_URL}/posts/profile`
+        : `${API_BASE_URL}/organizations/${organizationSlug}/posts`,
+      {
       method: "POST",
       headers: {
         Accept: "application/json",

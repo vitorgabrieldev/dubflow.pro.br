@@ -48,10 +48,18 @@ export default async function DashboardPage({
 
       <Card>
         <CardBody className="space-y-3 p-4">
-          <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
-            <Building2 size={15} />
-            Minhas comunidades
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+              <Building2 size={15} />
+              Minhas comunidades
+            </p>
+            <Link
+              href={`/${locale}/minhas-organizacoes`}
+              className="text-sm font-semibold text-[var(--color-primary)] hover:underline"
+            >
+              Ver mais
+            </Link>
+          </div>
 
           {overview.organizations.length === 0 ? (
             <p className="text-sm text-black/65">Você ainda não participa de comunidades.</p>
@@ -71,22 +79,13 @@ export default async function DashboardPage({
               ))}
             </div>
           )}
-
-          <Link
-            href={`/${locale}/minhas-organizacoes`}
-            className="inline-flex h-9 items-center rounded-[8px] border border-black/10 bg-white px-3 text-sm font-semibold text-[var(--color-ink)]"
-          >
-            Abrir tela de comunidades
-          </Link>
         </CardBody>
       </Card>
 
-      <Card>
-        <CardBody className="space-y-3 p-4">
-          <p className="text-sm font-semibold text-[var(--color-ink)]">Top posts</p>
-          {overview.top_posts.length === 0 ? (
-            <p className="text-sm text-black/65">Sem dados de performance ainda.</p>
-          ) : (
+      {overview.top_posts.length > 0 ? (
+        <Card>
+          <CardBody className="space-y-3 p-4">
+            <p className="text-sm font-semibold text-[var(--color-ink)]">Top posts</p>
             <div className="space-y-2">
               {overview.top_posts.map((post) => (
                 <div key={post.id} className="rounded-[8px] border border-black/10 bg-white px-3 py-2">
@@ -97,9 +96,9 @@ export default async function DashboardPage({
                 </div>
               ))}
             </div>
-          )}
-        </CardBody>
-      </Card>
+          </CardBody>
+        </Card>
+      ) : null}
     </section>
   );
 }

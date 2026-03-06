@@ -5,14 +5,15 @@ const API_BASE_URL = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API
 
 export async function POST(request: Request) {
   const formData = await request.formData();
-  const locale = String(formData.get("locale") ?? "pt-BR");
-  const redirectTo = `/${locale}/perfil/editar`;
+  const redirectLocaleRaw = String(formData.get("redirect_locale") ?? formData.get("locale") ?? "pt-BR").trim();
+  const redirectLocale = redirectLocaleRaw || "pt-BR";
+  const redirectTo = `/${redirectLocale}/perfil/editar`;
 
   const cookieStore = await cookies();
   let token = cookieStore.get("ed_token")?.value;
 
   if (!token) {
-    return NextResponse.redirect(new URL(`/${locale}/entrar`, request.url), { status: 303 });
+    return NextResponse.redirect(new URL(`/${redirectLocale}/entrar`, request.url), { status: 303 });
   }
 
   const payload = new FormData();

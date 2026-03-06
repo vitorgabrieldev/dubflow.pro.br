@@ -355,7 +355,12 @@ class AuthController extends Controller
         $ownedOrganizations = Organization::query()
             ->where('owner_user_id', $user->id)
             ->orderBy('name')
-            ->get(['id', 'name', 'slug'])
+            ->get(['id', 'name', 'slug', 'settings'])
+            ->reject(static function (Organization $organization): bool {
+                $settings = is_array($organization->settings) ? $organization->settings : [];
+
+                return ($settings['is_profile_space'] ?? false) === true;
+            })
             ->map(static fn (Organization $organization): array => [
                 'id' => (int) $organization->id,
                 'name' => (string) $organization->name,

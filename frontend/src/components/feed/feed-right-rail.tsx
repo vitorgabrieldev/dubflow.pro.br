@@ -28,6 +28,8 @@ type RisingDubber = {
 
 export function FeedRightRail({ locale, posts, risingDubbers = [] }: FeedRightRailProps) {
   const topWeeklyPost = resolveTopWeeklyPost(posts);
+  const topWeeklySourceIsProfile = topWeeklyPost?.metadata?.publish_target === "profile";
+  const topWeeklySourceLabel = topWeeklySourceIsProfile ? "Perfil" : (topWeeklyPost?.organization?.name ?? "-");
   const risingDubbersForCard = risingDubbers.length > 0
     ? mapInsightToRisingDubbers(risingDubbers).slice(0, 5)
     : resolveRisingDubbers(posts).slice(0, 5);
@@ -118,12 +120,12 @@ export function FeedRightRail({ locale, posts, risingDubbers = [] }: FeedRightRa
                 {topWeeklyPost.title}
               </Link>
               <p className="mt-1 line-clamp-1 text-xs text-black/60">
-                {topWeeklyPost.organization?.slug ? (
+                {!topWeeklySourceIsProfile && topWeeklyPost.organization?.slug ? (
                   <Link href={`/${locale}/organizations/${topWeeklyPost.organization.slug}`} className="hover:text-[var(--color-primary)]">
-                    {topWeeklyPost.organization?.name ?? "-"}
+                    {topWeeklySourceLabel}
                   </Link>
                 ) : (
-                  <span>{topWeeklyPost.organization?.name ?? "-"}</span>
+                  <span>{topWeeklySourceLabel}</span>
                 )}{" "}
                 •{" "}
                 {topWeeklyPost.author?.id ? (

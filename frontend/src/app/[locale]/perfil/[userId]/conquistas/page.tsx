@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { ArrowLeft, Trophy } from "lucide-react";
 
 import { renderAchievementIcon } from "@/components/profile/profile-achievements";
 import { Card, CardBody } from "@/components/ui/card";
-import { fetchCurrentUser } from "@/lib/api";
 import { isLocale } from "@/lib/i18n";
 
 type PublicAchievementsResponse = {
@@ -55,7 +54,7 @@ export default async function UserAchievementsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string; userId: string }>;
-  searchParams: Promise<{ page?: string; external_preview?: string; owner_view?: string }>;
+  searchParams: Promise<{ page?: string }>;
 }) {
   const { locale, userId } = await params;
   const query = await searchParams;
@@ -71,26 +70,7 @@ export default async function UserAchievementsPage({
 
   const cookieStore = await cookies();
   const token = cookieStore.get("ed_token")?.value;
-  const requestedExternalPreview = query.external_preview === "1";
-  const requestedOwnerView = query.owner_view === "1";
-  const hasPreviewFlags = requestedExternalPreview || requestedOwnerView;
-  const currentUser = token ? await fetchCurrentUser(token) : null;
-  const isProfileOwner = Boolean(currentUser && currentUser.id === parsedUserId);
-
-  if (hasPreviewFlags && !isProfileOwner) {
-    const cleanParams = new URLSearchParams();
-    if (query.page) {
-      cleanParams.set("page", query.page);
-    }
-    const cleanHref = cleanParams.toString()
-      ? `/${locale}/perfil/${userId}/conquistas?${cleanParams.toString()}`
-      : `/${locale}/perfil/${userId}/conquistas`;
-    redirect(cleanHref);
-  }
-
-  const isExternalPreview = requestedExternalPreview && isProfileOwner;
-  const isOwnerView = requestedOwnerView && isProfileOwner;
-  const requestToken = isExternalPreview ? undefined : token;
+  const requestToken = token;
 
   const apiBase = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api/v1";
   const response = await fetch(
@@ -129,26 +109,11 @@ export default async function UserAchievementsPage({
   const pageItems = normalizedItems.slice(startIndex, startIndex + perPage);
 
   const profileName = user.stage_name?.trim() || user.name;
-  const backParams = new URLSearchParams();
-  if (isExternalPreview) {
-    backParams.set("external_preview", "1");
-  }
-  if (isOwnerView) {
-    backParams.set("owner_view", "1");
-  }
-  const backToProfileHref = backParams.toString()
-    ? `/${locale}/perfil/${user.id}?${backParams.toString()}`
-    : `/${locale}/perfil/${user.id}`;
+  const backToProfileHref = `/${locale}/perfil/${user.id}`;
 
   const pageHref = (targetPage: number) => {
     const params = new URLSearchParams();
     params.set("page", String(targetPage));
-    if (isExternalPreview) {
-      params.set("external_preview", "1");
-    }
-    if (isOwnerView) {
-      params.set("owner_view", "1");
-    }
     return `/${locale}/perfil/${user.id}/conquistas?${params.toString()}`;
   };
 

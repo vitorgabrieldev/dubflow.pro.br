@@ -9,6 +9,13 @@ use App\Models\User;
 
 class OrganizationAccess
 {
+    private static function isProfilePost(DubbingPost $post): bool
+    {
+        $metadata = is_array($post->metadata) ? $post->metadata : [];
+
+        return ($metadata['publish_target'] ?? null) === 'profile';
+    }
+
     /**
      * @param array<int, string> $roles
      */
@@ -58,6 +65,10 @@ class OrganizationAccess
 
     public static function canEditPost(User $user, DubbingPost $post): bool
     {
+        if (self::isProfilePost($post)) {
+            return (int) $post->author_user_id === (int) $user->id;
+        }
+
         if (self::hasRole($user, $post->organization, ['owner', 'admin'])) {
             return true;
         }
@@ -67,6 +78,10 @@ class OrganizationAccess
 
     public static function canDeletePost(User $user, DubbingPost $post): bool
     {
+        if (self::isProfilePost($post)) {
+            return (int) $post->author_user_id === (int) $user->id;
+        }
+
         return self::hasRole($user, $post->organization, ['owner', 'admin']);
     }
 }

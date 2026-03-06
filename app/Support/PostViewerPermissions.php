@@ -44,10 +44,22 @@ class PostViewerPermissions
             ->pluck('role', 'organization_id');
 
         $posts->each(function (DubbingPost $post) use ($viewer, $rolesByOrganizationId): void {
+            $metadata = is_array($post->metadata) ? $post->metadata : [];
+            $isProfilePost = ($metadata['publish_target'] ?? null) === 'profile';
+            $isAuthor = (int) $post->author_user_id === (int) $viewer->id;
+
+            if ($isProfilePost) {
+                $post->setAttribute('viewer_permissions', [
+                    'can_edit' => $isAuthor,
+                    'can_delete' => $isAuthor,
+                ]);
+
+                return;
+            }
+
             $role = (string) ($rolesByOrganizationId[(int) $post->organization_id] ?? '');
             $isOwnerOrAdmin = in_array($role, ['owner', 'admin'], true);
             $isEditor = $role === 'editor';
-            $isAuthor = (int) $post->author_user_id === (int) $viewer->id;
 
             $canEdit = $isOwnerOrAdmin || ($isEditor && $isAuthor);
             $canDelete = $isOwnerOrAdmin;
@@ -59,4 +71,3 @@ class PostViewerPermissions
         });
     }
 }
-

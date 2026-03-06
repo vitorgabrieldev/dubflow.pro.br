@@ -69,7 +69,7 @@ export default async function PublishPage({
             </div>
 
             <p className="text-sm text-black/70">
-              A publicação acontece dentro das suas comunidades e playlists, com temporadas por episódio.
+              Você pode publicar em comunidade/playlists ou publicar episódio avulso direto no seu perfil.
             </p>
 
             <Link
@@ -103,11 +103,11 @@ export default async function PublishPage({
 
             {publishOptions.length === 0 ? (
               <p className="text-sm text-black/55">
-                Você precisa participar de ao menos uma comunidade para publicar episódios.
+                Você ainda não participa de comunidades com permissão de publicação, mas pode publicar no seu perfil.
               </p>
-            ) : (
-              <PublishEpisodeForm locale={locale} options={publishOptions} />
-            )}
+            ) : null}
+
+            <PublishEpisodeForm locale={locale} options={publishOptions} allowProfilePublish />
           </CardBody>
         </Card>
 

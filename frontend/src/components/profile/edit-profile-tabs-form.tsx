@@ -9,6 +9,7 @@ import { TagInput } from "@/components/profile/tag-input";
 import { Card, CardBody } from "@/components/ui/card";
 import { FormSubmitButton } from "@/components/ui/form-submit-button";
 import { Input } from "@/components/ui/input";
+import { LOCALE_META, SUPPORTED_LOCALES } from "@/lib/i18n";
 
 type EditableUser = {
   name?: string;
@@ -16,6 +17,7 @@ type EditableUser = {
   pronouns?: string | null;
   username?: string | null;
   email?: string | null;
+  locale?: string | null;
   created_at?: string | null;
   bio?: string | null;
   skills?: string[];
@@ -412,7 +414,7 @@ export function EditProfileTabsForm({
                     setHasUnsavedChanges(true);
                   }}
                 >
-                  <input type="hidden" name="locale" value={locale} />
+                  <input type="hidden" name="redirect_locale" value={locale} />
                   <input type="hidden" name="weekly_availability_values" value={JSON.stringify(weeklyAvailability)} />
                   <input
                     type="hidden"
@@ -485,6 +487,24 @@ export function EditProfileTabsForm({
                           defaultValue={user.city ?? ""}
                           placeholder="Preencha com sua cidade"
                         />
+                      </label>
+
+                      <label className="space-y-1 text-sm text-black/75">
+                        <span>Idioma da interface</span>
+                        <select
+                          name="locale"
+                          defaultValue={user.locale ?? locale}
+                          className="h-10 w-full rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 text-sm text-[var(--color-ink)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+                        >
+                          {SUPPORTED_LOCALES.map((item) => {
+                            const meta = LOCALE_META[item];
+                            return (
+                              <option key={item} value={item}>
+                                {meta.flag} {meta.label}
+                              </option>
+                            );
+                          })}
+                        </select>
                       </label>
 
                       <div className="space-y-1 text-sm text-black/75 sm:col-span-2">

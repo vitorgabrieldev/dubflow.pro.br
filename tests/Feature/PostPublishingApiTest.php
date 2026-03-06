@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\Organization;
 use App\Models\OrganizationMember;
 use App\Models\Playlist;
+use App\Models\PlaylistSeason;
+use App\Models\DubbingPost;
 use App\Models\User;
 use App\Notifications\CommentReplyReceived;
 use App\Notifications\OrganizationPostCommented;
@@ -563,5 +565,465 @@ class PostPublishingApiTest extends TestCase
         $this->assertDatabaseMissing('dubbing_posts', [
             'id' => $postId,
         ]);
+    }
+
+    public function test_editor_can_publish_community_episode_with_full_payload_and_relationships(): void
+    {
+        $this->fakeMediaDisks();
+
+        $owner = User::factory()->create();
+        $editor = User::factory()->create();
+        $collaborator = User::factory()->create();
+        $creditUser = User::factory()->create([
+            'name' => 'Maria dubladora',
+            'stage_name' => 'Mary Voz',
+        ]);
+
+        $organization = $this->createOrganizationWithPublisher($owner, $editor, 'full-community-org');
+
+        $playlist = Playlist::create([
+            'organization_id' => $organization->id,
+            'title' => 'Saga principal',
+            'slug' => 'saga-principal',
+            'visibility' => 'public',
+        ]);
+
+        $editorToken = auth('api')->login($editor);
+
+        $response = $this->withHeaders($this->authHeaders($editorToken))
+            ->post('/api/v1/organizations/'.$organization->slug.'/posts', [
+                'title' => 'Episódio completo',
+                'description' => 'Payload com todos os campos relevantes.',
+                'playlist_id' => $playlist->id,
+                'season_number' => 3,
+                'season_title' => 'Terceira Temporada',
+                'duration_seconds' => 280,
+                'visibility' => 'private',
+                'allow_comments' => true,
+                'show_likes_count' => false,
+                'show_views_count' => false,
+                'language_code' => 'pt-BR',
+                'work_title' => 'Projeto Completo',
+                'content_license' => 'allow_remix_with_credit',
+                'tags' => ['Ação', 'Drama', 'Ação'],
+                'collaborator_ids' => [$editor->id, $collaborator->id, $collaborator->id],
+                'credits' => [
+                    [
+                        'character_name' => 'Narradora',
+                        'dubber_user_id' => $creditUser->id,
+                    ],
+                    [
+                        'character_name' => 'Vilã',
+                        'dubber_name' => 'Maria dubladora',
+                    ],
+                ],
+                'thumbnail' => UploadedFile::fake()->image('thumb.jpg'),
+                'media_assets' => [
+                    UploadedFile::fake()->create('main-audio.mp3', 128, 'audio/mpeg'),
+                    UploadedFile::fake()->image('capa.jpg'),
+                ],
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('message', 'Post criado. Publicacao pendente de aprovacao dos colaboradores.');
+
+        $postId = (int) $response->json('post.id');
+        $post = DubbingPost::query()->with(['season', 'tags', 'credits'])->findOrFail($postId);
+
+        $metadata = is_array($post->metadata) ? $post->metadata : [];
+
+        $this->assertSame($organization->id, $post->organization_id);
+        $this->assertSame($playlist->id, $post->playlist_id);
+        $this->assertSame('private', $post->visibility);
+        $this->assertSame('allow_remix_with_credit', $post->content_license);
+        $this->assertSame(280, $post->duration_seconds);
+        $this->assertSame('audio', $post->media_type);
+        $this->assertStringStartsWith('dubbing-thumbnails/', (string) $post->thumbnail_path);
+        $this->assertNull($post->published_at);
+
+        $this->assertSame('community', $metadata['publish_target'] ?? null);
+        $this->assertTrue((bool) ($metadata['requires_collaborator_approval'] ?? false));
+        $this->assertFalse((bool) ($metadata['display_metrics']['show_likes'] ?? true));
+        $this->assertFalse((bool) ($metadata['display_metrics']['show_views'] ?? true));
+
+        $this->assertNotNull($post->season);
+        $this->assertSame(3, $post->season?->season_number);
+        $this->assertSame('Terceira Temporada', $post->season?->title);
+        $this->assertCount(2, $post->tags);
+        $this->assertCount(2, $post->credits);
+
+        $this->assertDatabaseHas('post_collaborators', [
+            'post_id' => $postId,
+            'user_id' => $collaborator->id,
+            'status' => 'pending',
+        ]);
+        $this->assertDatabaseMissing('post_collaborators', [
+            'post_id' => $postId,
+            'user_id' => $editor->id,
+        ]);
+    }
+
+    public function test_owner_can_publish_profile_episode_and_reuse_same_hidden_profile_space(): void
+    {
+        $this->fakeMediaDisks();
+
+        $owner = User::factory()->create([
+            'name' => 'Perfil User',
+            'stage_name' => 'Voz Perfil',
+        ]);
+
+        $ownerToken = auth('api')->login($owner);
+
+        $first = $this->withHeaders($this->authHeaders($ownerToken))
+            ->post('/api/v1/posts/profile', [
+                'title' => 'Ep perfil 01',
+                'description' => 'Primeiro episódio de perfil.',
+                'work_title' => 'Perfil Work',
+                'language_code' => 'pt-BR',
+                'media_assets' => [
+                    UploadedFile::fake()->create('perfil-1.mp3', 128, 'audio/mpeg'),
+                ],
+            ]);
+
+        $first->assertCreated()->assertJsonPath('post.metadata.publish_target', 'profile');
+
+        $second = $this->withHeaders($this->authHeaders($ownerToken))
+            ->post('/api/v1/posts/profile', [
+                'title' => 'Ep perfil 02',
+                'description' => 'Segundo episódio de perfil.',
+                'work_title' => 'Perfil Work',
+                'language_code' => 'pt-BR',
+                'media_assets' => [
+                    UploadedFile::fake()->create('perfil-2.mp3', 128, 'audio/mpeg'),
+                ],
+            ]);
+
+        $second->assertCreated()->assertJsonPath('post.metadata.publish_target', 'profile');
+
+        $firstPost = DubbingPost::query()->findOrFail((int) $first->json('post.id'));
+        $secondPost = DubbingPost::query()->findOrFail((int) $second->json('post.id'));
+
+        $profileOrganizations = Organization::query()
+            ->where('owner_user_id', $owner->id)
+            ->get()
+            ->filter(static function (Organization $organization): bool {
+                $settings = is_array($organization->settings) ? $organization->settings : [];
+
+                return ($settings['is_profile_space'] ?? false) === true;
+            })
+            ->values();
+
+        $this->assertCount(1, $profileOrganizations);
+        $this->assertSame($firstPost->organization_id, $secondPost->organization_id);
+        $this->assertSame($profileOrganizations->first()?->id, $firstPost->organization_id);
+        $this->assertFalse((bool) $profileOrganizations->first()?->is_public);
+    }
+
+    public function test_profile_publish_rejects_playlist_and_season_fields(): void
+    {
+        $this->fakeMediaDisks();
+
+        $profileOwner = User::factory()->create();
+        $communityOwner = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $communityOwner->id,
+            'name' => 'Org externa',
+            'slug' => 'org-externa',
+            'is_public' => true,
+        ]);
+
+        $playlist = Playlist::create([
+            'organization_id' => $organization->id,
+            'title' => 'Playlist externa',
+            'slug' => 'playlist-externa',
+            'visibility' => 'public',
+        ]);
+
+        $season = PlaylistSeason::create([
+            'playlist_id' => $playlist->id,
+            'season_number' => 1,
+            'title' => 'Temporada externa',
+            'created_by_user_id' => $communityOwner->id,
+        ]);
+
+        $token = auth('api')->login($profileOwner);
+
+        $this->withHeaders($this->authHeaders($token))
+            ->post('/api/v1/posts/profile', [
+                'title' => 'Post perfil inválido',
+                'work_title' => 'Perfil',
+                'language_code' => 'pt-BR',
+                'playlist_id' => $playlist->id,
+                'season_id' => $season->id,
+                'season_number' => 1,
+                'media_assets' => [
+                    UploadedFile::fake()->create('perfil-invalid.mp3', 128, 'audio/mpeg'),
+                ],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Publicações de perfil não aceitam comunidade, playlist ou temporada.');
+    }
+
+    public function test_publish_validation_covers_required_fields_and_invalid_values_on_create(): void
+    {
+        $this->fakeMediaDisks();
+
+        $owner = User::factory()->create();
+        $editor = User::factory()->create();
+        $organization = $this->createOrganizationWithPublisher($owner, $editor, 'validation-org');
+        $token = auth('api')->login($editor);
+
+        $cases = [
+            [
+                'payload' => ['title' => null],
+                'error' => 'title',
+            ],
+            [
+                'payload' => ['language_code' => null],
+                'error' => 'language_code',
+            ],
+            [
+                'payload' => ['work_title' => null],
+                'error' => 'work_title',
+            ],
+            [
+                'payload' => ['visibility' => 'friends-only'],
+                'error' => 'visibility',
+            ],
+            [
+                'payload' => ['content_license' => 'forbidden'],
+                'error' => 'content_license',
+            ],
+            [
+                'payload' => ['duration_seconds' => 3601],
+                'error' => 'duration_seconds',
+            ],
+            [
+                'payload' => ['tags' => ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k']],
+                'error' => 'tags',
+            ],
+            [
+                'payload' => [
+                    'media_assets' => [
+                        UploadedFile::fake()->create('not-supported.txt', 32, 'text/plain'),
+                    ],
+                ],
+                'error' => 'media_assets.0',
+            ],
+        ];
+
+        foreach ($cases as $case) {
+            $response = $this->withHeaders($this->authHeaders($token))
+                ->post('/api/v1/organizations/'.$organization->slug.'/posts', $this->baseCreatePayload($case['payload']));
+
+            $response->assertStatus(422)->assertJsonValidationErrors([$case['error']]);
+        }
+    }
+
+    public function test_create_requires_media_assets_but_accepts_legacy_media_field(): void
+    {
+        $this->fakeMediaDisks();
+
+        $owner = User::factory()->create();
+        $editor = User::factory()->create();
+        $organization = $this->createOrganizationWithPublisher($owner, $editor, 'legacy-media-org');
+        $token = auth('api')->login($editor);
+
+        $this->withHeaders($this->authHeaders($token))
+            ->post('/api/v1/organizations/'.$organization->slug.'/posts', [
+                'title' => 'Sem mídia',
+                'work_title' => 'Obra sem mídia',
+                'language_code' => 'pt-BR',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Envie ao menos um arquivo de mídia.');
+
+        $this->withHeaders($this->authHeaders($token))
+            ->post('/api/v1/organizations/'.$organization->slug.'/posts', [
+                'title' => 'Com mídia legada',
+                'work_title' => 'Obra com campo legado',
+                'language_code' => 'pt-BR',
+                'media' => UploadedFile::fake()->create('legacy.mp3', 128, 'audio/mpeg'),
+            ])
+            ->assertCreated();
+
+        $this->assertDatabaseHas('dubbing_posts', [
+            'organization_id' => $organization->id,
+            'title' => 'Com mídia legada',
+        ]);
+    }
+
+    public function test_publish_rejects_playlist_from_another_organization(): void
+    {
+        $this->fakeMediaDisks();
+
+        $ownerA = User::factory()->create();
+        $ownerB = User::factory()->create();
+        $editor = User::factory()->create();
+
+        $organizationA = $this->createOrganizationWithPublisher($ownerA, $editor, 'org-a-playlist-check');
+        $organizationB = Organization::create([
+            'owner_user_id' => $ownerB->id,
+            'name' => 'Org B',
+            'slug' => 'org-b-playlist-check',
+            'is_public' => true,
+        ]);
+        OrganizationMember::create([
+            'organization_id' => $organizationB->id,
+            'user_id' => $ownerB->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $foreignPlaylist = Playlist::create([
+            'organization_id' => $organizationB->id,
+            'title' => 'Playlist B',
+            'slug' => 'playlist-b',
+            'visibility' => 'public',
+        ]);
+
+        $token = auth('api')->login($editor);
+
+        $this->withHeaders($this->authHeaders($token))
+            ->post('/api/v1/organizations/'.$organizationA->slug.'/posts', $this->baseCreatePayload([
+                'playlist_id' => $foreignPlaylist->id,
+            ]))
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Playlist nao pertence a organizacao.');
+    }
+
+    public function test_publish_rejects_season_that_does_not_belong_to_selected_playlist(): void
+    {
+        $this->fakeMediaDisks();
+
+        $owner = User::factory()->create();
+        $editor = User::factory()->create();
+        $organization = $this->createOrganizationWithPublisher($owner, $editor, 'season-mismatch-org');
+
+        $playlistA = Playlist::create([
+            'organization_id' => $organization->id,
+            'title' => 'Playlist A',
+            'slug' => 'playlist-a',
+            'visibility' => 'public',
+        ]);
+
+        $playlistB = Playlist::create([
+            'organization_id' => $organization->id,
+            'title' => 'Playlist B',
+            'slug' => 'playlist-b',
+            'visibility' => 'public',
+        ]);
+
+        $seasonFromB = PlaylistSeason::create([
+            'playlist_id' => $playlistB->id,
+            'season_number' => 9,
+            'title' => 'Temporada B',
+            'created_by_user_id' => $owner->id,
+        ]);
+
+        $token = auth('api')->login($editor);
+
+        $this->withHeaders($this->authHeaders($token))
+            ->post('/api/v1/organizations/'.$organization->slug.'/posts', $this->baseCreatePayload([
+                'playlist_id' => $playlistA->id,
+                'season_id' => $seasonFromB->id,
+            ]))
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'A temporada selecionada não pertence à playlist.');
+    }
+
+    public function test_profile_create_also_validates_required_fields_and_requires_media(): void
+    {
+        $this->fakeMediaDisks();
+
+        $user = User::factory()->create();
+        $token = auth('api')->login($user);
+
+        $this->withHeaders($this->authHeaders($token))
+            ->post('/api/v1/posts/profile', [
+                'title' => null,
+                'work_title' => 'Perfil',
+                'language_code' => 'pt-BR',
+                'media_assets' => [
+                    UploadedFile::fake()->create('perfil-audio.mp3', 128, 'audio/mpeg'),
+                ],
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['title']);
+
+        $this->withHeaders($this->authHeaders($token))
+            ->post('/api/v1/posts/profile', [
+                'title' => 'Sem mídia no perfil',
+                'work_title' => 'Perfil',
+                'language_code' => 'pt-BR',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Envie ao menos um arquivo de mídia.');
+    }
+
+    private function createOrganizationWithPublisher(User $owner, User $publisher, string $slug): Organization
+    {
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Org '.$slug,
+            'slug' => $slug,
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        if ($owner->id !== $publisher->id) {
+            OrganizationMember::create([
+                'organization_id' => $organization->id,
+                'user_id' => $publisher->id,
+                'role' => 'editor',
+                'status' => 'active',
+                'joined_at' => now(),
+            ]);
+        }
+
+        return $organization;
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private function baseCreatePayload(array $overrides = []): array
+    {
+        return array_merge([
+            'title' => 'Payload base',
+            'description' => 'Descrição base',
+            'work_title' => 'Obra base',
+            'language_code' => 'pt-BR',
+            'media_assets' => [
+                UploadedFile::fake()->create('base-audio.mp3', 128, 'audio/mpeg'),
+            ],
+        ], $overrides);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function authHeaders(string $token): array
+    {
+        return [
+            'Authorization' => 'Bearer '.$token,
+            'Accept' => 'application/json',
+        ];
+    }
+
+    private function fakeMediaDisks(): void
+    {
+        Storage::fake('public');
+        Storage::fake('local');
     }
 }

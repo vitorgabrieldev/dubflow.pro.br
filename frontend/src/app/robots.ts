@@ -25,7 +25,6 @@ export default function robots(): MetadataRoute.Robots {
           "/*/perfil/editar",
           "/*/perfil/conquistas",
           "/*/minhas-organizacoes",
-          "/*/alterar-senha",
           "/*/playlists/*/*/watch",
           "/*/post/*/editar",
           "/*/organizations/*/editar",

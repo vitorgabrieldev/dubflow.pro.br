@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const locale = String(formData.get("locale") ?? "pt-BR");
   const rawRedirectTo = String(formData.get("redirect_to") ?? "").trim();
-  const fallbackRedirectTo = `/${locale}/alterar-senha`;
+  const fallbackRedirectTo = `/${locale}/perfil/editar`;
   const redirectTo =
     rawRedirectTo.startsWith(`/${locale}/`) && !rawRedirectTo.includes("://")
       ? rawRedirectTo

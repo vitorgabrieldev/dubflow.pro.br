@@ -225,6 +225,7 @@ Route::prefix('v1')->group(function () {
         Route::patch('/organizations/{organization}/playlists/{playlist}', [PlaylistController::class, 'update']);
         Route::delete('/organizations/{organization}/playlists/{playlist}', [PlaylistController::class, 'destroy']);
 
+        Route::post('/posts/profile', [PostController::class, 'storeProfile']);
         Route::post('/organizations/{organization}/posts', [PostController::class, 'store']);
         Route::post('/organizations/{organization}/dubbing-tests', [DubbingTestController::class, 'store']);
         Route::patch('/organizations/{organization}/dubbing-tests/{dubbingTest}', [DubbingTestController::class, 'update']);

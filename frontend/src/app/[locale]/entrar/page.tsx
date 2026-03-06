@@ -110,6 +110,7 @@ export default async function LoginPage({
                 label={t.auth.login}
                 loadingLabel="Entrando..."
                 trailingIcon={<ArrowRight size={15} />}
+                showPendingOnClick
               />
 
               <div className="text-center">
