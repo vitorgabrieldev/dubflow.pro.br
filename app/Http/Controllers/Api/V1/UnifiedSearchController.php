@@ -156,10 +156,12 @@ class UnifiedSearchController extends Controller
             return;
         }
 
-        $builder->where('is_public', true)
-            ->orWhereHas('members', fn (Builder $memberBuilder) => $memberBuilder
-                ->where('user_id', $user->id)
-                ->where('status', 'active'));
+        $builder->where(function (Builder $visibilityBuilder) use ($user): void {
+            $visibilityBuilder->where('is_public', true)
+                ->orWhereHas('members', fn (Builder $memberBuilder) => $memberBuilder
+                    ->where('user_id', $user->id)
+                    ->where('status', 'active'));
+        });
     }
 
     private function applyPlaylistVisibility(Builder $builder, ?User $user): void
