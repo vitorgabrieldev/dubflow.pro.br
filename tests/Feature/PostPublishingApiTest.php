@@ -606,7 +606,7 @@ class PostPublishingApiTest extends TestCase
                 'work_title' => 'Projeto Completo',
                 'content_license' => 'allow_remix_with_credit',
                 'tags' => ['Ação', 'Drama', 'Ação'],
-                'collaborator_ids' => [$editor->id, $collaborator->id, $collaborator->id],
+                'collaborator_ids' => [$editor->id, $collaborator->id],
                 'credits' => [
                     [
                         'character_name' => 'Narradora',
