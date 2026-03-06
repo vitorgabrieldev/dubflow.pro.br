@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const query = new URLSearchParams();
 
-  const passthroughKeys = ["page", "per_page", "q", "sort", "visibility", "discover_private"];
+  const passthroughKeys = ["page", "per_page", "q", "sort", "visibility", "discover_private", "exclude_joined"];
 
   for (const key of passthroughKeys) {
     const value = url.searchParams.get(key);

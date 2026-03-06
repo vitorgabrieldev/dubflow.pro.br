@@ -201,6 +201,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/organizations/{organization}/follow', [OrganizationController::class, 'follow']);
         Route::delete('/organizations/{organization}/follow', [OrganizationController::class, 'unfollow']);
         Route::post('/organizations/{organization}/join-request', [OrganizationController::class, 'requestJoin']);
+        Route::delete('/organizations/{organization}/leave', [OrganizationController::class, 'leave']);
         Route::get('/organizations/{organization}/invites', [OrganizationInviteController::class, 'index']);
         Route::post('/organizations/{organization}/invites', [OrganizationInviteController::class, 'store']);
         Route::delete('/organizations/{organization}/invites/{invite}', [OrganizationInviteController::class, 'revoke']);

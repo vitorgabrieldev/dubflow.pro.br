@@ -218,6 +218,15 @@ class OrganizationApiTest extends TestCase
         $this->assertContains('gamma-privada', $joinedSlugs);
         $this->assertNotContains('alpha-central', $joinedSlugs);
 
+        $discoveryResponse = $this->withHeaders($headers)
+            ->getJson('/api/v1/organizations?discover_private=1&exclude_joined=1&per_page=50')
+            ->assertOk();
+
+        $discoverySlugs = collect($discoveryResponse->json('data'))->pluck('slug')->all();
+        $this->assertContains('alpha-central', $discoverySlugs);
+        $this->assertNotContains('beta-hall', $discoverySlugs);
+        $this->assertNotContains('gamma-privada', $discoverySlugs);
+
         $sortedResponse = $this->withHeaders($headers)
             ->getJson('/api/v1/organizations?discover_private=1&sort=followers&per_page=50')
             ->assertOk();
@@ -548,6 +557,86 @@ class OrganizationApiTest extends TestCase
             'user_id' => $requester->id,
             'status' => 'pending',
             'source' => 'join_request',
+        ]);
+    }
+
+    public function test_member_can_leave_community(): void
+    {
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Leave Community Org',
+            'slug' => 'leave-community-org',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $member->id,
+            'role' => 'member',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $memberToken = auth('api')->login($member);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$memberToken,
+            'Accept' => 'application/json',
+        ])->deleteJson("/api/v1/organizations/{$organization->slug}/leave")
+            ->assertOk()
+            ->assertJsonPath('message', 'Você saiu da comunidade.');
+
+        $this->assertDatabaseMissing('organization_members', [
+            'organization_id' => $organization->id,
+            'user_id' => $member->id,
+            'status' => 'active',
+        ]);
+    }
+
+    public function test_owner_cannot_leave_community_without_transferring_ownership(): void
+    {
+        $owner = User::factory()->create();
+
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Owner Locked Org',
+            'slug' => 'owner-locked-org',
+            'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $ownerToken = auth('api')->login($owner);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$ownerToken,
+            'Accept' => 'application/json',
+        ])->deleteJson("/api/v1/organizations/{$organization->slug}/leave")
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Transfira a posse da comunidade antes de sair.');
+
+        $this->assertDatabaseHas('organization_members', [
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
         ]);
     }
 

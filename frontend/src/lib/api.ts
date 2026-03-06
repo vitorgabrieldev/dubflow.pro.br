@@ -106,6 +106,7 @@ export async function fetchOrganizationsPage({
   visibility,
   onlyJoined,
   discoverPrivate,
+  excludeJoined,
 }: {
   token?: string;
   page?: number;
@@ -115,6 +116,7 @@ export async function fetchOrganizationsPage({
   visibility?: "public" | "private";
   onlyJoined?: boolean;
   discoverPrivate?: boolean;
+  excludeJoined?: boolean;
 } = {}): Promise<ApiList<Organization>> {
   const normalizedSort = sort && sort !== "recent" ? sort : undefined;
 
@@ -127,6 +129,7 @@ export async function fetchOrganizationsPage({
       sort: normalizedSort,
       only_joined: onlyJoined ? 1 : undefined,
       discover_private: discoverPrivate ? 1 : undefined,
+      exclude_joined: excludeJoined ? 1 : undefined,
     })}`,
     token
   );

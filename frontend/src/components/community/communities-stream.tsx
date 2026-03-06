@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PencilLine, ShieldCheck, UserPlus, Users2 } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 import { CommunityCardSkeleton } from "@/components/community/community-card-skeleton";
 import { FollowOrganizationButton } from "@/components/community/follow-organization-button";
@@ -11,6 +11,11 @@ import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { resolveMediaUrl } from "@/lib/api";
 import type { Organization } from "@/types/api";
+
+const compactNumberFormatter = new Intl.NumberFormat("pt-BR", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
 
 type CommunitiesStreamProps = {
   locale: string;
@@ -21,6 +26,7 @@ type CommunitiesStreamProps = {
   query: {
     q?: string;
     sort?: string;
+    excludeJoined?: boolean;
   };
 };
 
@@ -37,6 +43,7 @@ export function CommunitiesStream({
   const [lastPage, setLastPage] = useState(initialLastPage);
   const [loadingMore, setLoadingMore] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const router = useRouter();
 
   const hasMore = useMemo(() => page < lastPage, [page, lastPage]);
 
@@ -69,6 +76,10 @@ export function CommunitiesStream({
 
         if (query.sort && query.sort !== "recent") {
           params.set("sort", query.sort);
+        }
+
+        if (query.excludeJoined) {
+          params.set("exclude_joined", "1");
         }
 
         setLoadingMore(true);
@@ -109,7 +120,7 @@ export function CommunitiesStream({
     return () => {
       observer.disconnect();
     };
-  }, [hasMore, lastPage, loadingMore, page, query.q, query.sort]);
+  }, [hasMore, lastPage, loadingMore, page, query.excludeJoined, query.q, query.sort, router]);
 
   if (items.length === 0) {
     return <EmptyState />;
@@ -118,92 +129,67 @@ export function CommunitiesStream({
   return (
     <div className="space-y-3">
       {items.map((organization) => {
+        const href = `/${locale}/organizations/${organization.slug}`;
+        const followersLabel = compactNumberFormatter.format(organization.followers_count ?? 0);
 
         return (
-          <Card key={organization.id}>
-            <CardBody className="space-y-3 p-4">
-              <div className="flex items-start gap-3">
-                <Avatar
-                  src={resolveMediaUrl(organization.avatar_path) ?? "/default-org-avatar.svg"}
-                  name={organization.name}
-                  size="lg"
-                />
+          <Card
+            key={organization.id}
+            role="link"
+            tabIndex={0}
+            onClick={() => router.push(href)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") {
+                return;
+              }
 
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="line-clamp-1 text-base font-semibold text-[var(--color-ink)]">{organization.name}</p>
-                      <p className="line-clamp-1 text-xs text-black/55">@{organization.slug}</p>
-                    </div>
+              event.preventDefault();
+              router.push(href);
+            }}
+            className="cursor-pointer overflow-hidden transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-34px_rgba(76,16,140,0.38)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+          >
+            <CardBody className="p-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
+                <div className="flex min-w-0 items-center gap-4 sm:flex-1 sm:gap-5">
+                  <Avatar
+                    src={resolveMediaUrl(organization.avatar_path) ?? "/default-org-avatar.svg"}
+                    name={organization.name}
+                    size="lg"
+                    className="h-[76px] w-[76px] shrink-0 rounded-full border-2 border-black/10 bg-white sm:h-[104px] sm:w-[104px]"
+                  />
 
-                    <div className="flex flex-wrap items-center gap-1 text-[11px] text-black/65">
-                      <span className="rounded-[6px] bg-black/5 px-2 py-1">
-                        <strong className="text-[var(--color-ink)]">{organization.followers_count ?? 0}</strong> seguidores
-                      </span>
-                      <span className="rounded-[6px] bg-black/5 px-2 py-1">
-                        <strong className="text-[var(--color-ink)]">{organization.playlists_count ?? 0}</strong> playlists
-                      </span>
-                      <span className="rounded-[6px] bg-black/5 px-2 py-1">
-                        <strong className="text-[var(--color-ink)]">{organization.posts_count ?? 0}</strong> episódios
-                      </span>
-                    </div>
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <p className="flex flex-wrap items-center gap-1.5 text-base font-semibold text-[var(--color-ink)] sm:text-xl">
+                      <span className="line-clamp-1">{organization.name}</span>
+                      {organization.is_verified ? <ShieldCheck size={15} className="shrink-0 text-black/45" /> : null}
+                    </p>
+
+                    <p className="line-clamp-1 text-xs text-black/60 sm:text-sm">
+                      @{organization.slug} • {followersLabel} seguidores
+                    </p>
+
+                    <p className="line-clamp-2 text-sm text-black/72">
+                      {organization.description ?? "Sem descrição."}
+                    </p>
                   </div>
+                </div>
 
-                  {organization.is_verified ? (
-                    <span className="mt-1 inline-flex items-center gap-1 rounded-[6px] bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                      <ShieldCheck size={12} />
-                      Verificada
-                    </span>
+                <div
+                  className="w-full sm:w-auto"
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
+                  {!organization.viewer?.role ? (
+                    <FollowOrganizationButton
+                      slug={organization.slug}
+                      isAuthenticated={isAuthenticated}
+                      initialFollowing={organization.viewer?.is_following ?? false}
+                      initialFollowersCount={organization.followers_count ?? 0}
+                      containerClassName="flex w-full sm:inline-flex sm:w-auto"
+                      className="h-10 w-full justify-center rounded-full px-5 sm:w-auto"
+                    />
                   ) : null}
                 </div>
-              </div>
-
-              <p className="line-clamp-2 text-sm text-black/65">{organization.description ?? "Sem descrição."}</p>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  href={`/${locale}/organizations/${organization.slug}`}
-                  className="inline-flex h-11 items-center gap-2 rounded-[6px] border border-black/10 bg-white px-5 text-sm font-semibold text-[var(--color-ink)]"
-                >
-                  <Users2 size={15} />
-                  Ver comunidade
-                </Link>
-
-                {organization.viewer?.role === "owner" ? (
-                  <>
-                    <Link
-                      href={`/${locale}/organizations/${organization.slug}/editar`}
-                      className="inline-flex h-11 items-center gap-2 rounded-[6px] border border-black/10 bg-white px-5 text-sm font-semibold text-[var(--color-ink)]"
-                    >
-                      <PencilLine size={15} />
-                      Editar comunidade
-                    </Link>
-                    <Link
-                      href={`/${locale}/organizations/${organization.slug}/convidar`}
-                      className="inline-flex h-11 items-center gap-2 rounded-[6px] border border-black/10 bg-white px-5 text-sm font-semibold text-[var(--color-ink)]"
-                    >
-                      <UserPlus size={15} />
-                      Convidar
-                    </Link>
-                  </>
-                ) : organization.viewer?.role === "admin" ? (
-                  <>
-                    <Link
-                      href={`/${locale}/organizations/${organization.slug}/convidar`}
-                      className="inline-flex h-11 items-center gap-2 rounded-[6px] border border-black/10 bg-white px-5 text-sm font-semibold text-[var(--color-ink)]"
-                    >
-                      <UserPlus size={15} />
-                      Convidar
-                    </Link>
-                  </>
-                ) : (
-                  <FollowOrganizationButton
-                    slug={organization.slug}
-                    isAuthenticated={isAuthenticated}
-                    initialFollowing={organization.viewer?.is_following ?? false}
-                    initialFollowersCount={organization.followers_count ?? 0}
-                  />
-                )}
               </div>
             </CardBody>
           </Card>

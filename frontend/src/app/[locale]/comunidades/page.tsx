@@ -38,6 +38,7 @@ export default async function CommunitiesPage({
     q,
     sort,
     discoverPrivate: true,
+    excludeJoined: true,
   }).catch(() => ({
     data: [],
     current_page: 1,
@@ -55,7 +56,7 @@ export default async function CommunitiesPage({
         initialItems={payload.data ?? []}
         initialPage={payload.current_page ?? 1}
         initialLastPage={payload.last_page ?? 1}
-        query={{ q, sort }}
+        query={{ q, sort, excludeJoined: true }}
       />
     </section>
   );

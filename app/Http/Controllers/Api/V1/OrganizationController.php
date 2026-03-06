@@ -93,6 +93,12 @@ class OrganizationController extends Controller
                 ->where('status', 'active'));
         }
 
+        if ($user && $request->boolean('exclude_joined')) {
+            $query->whereDoesntHave('members', fn ($builder) => $builder
+                ->where('user_id', $user->id)
+                ->where('status', 'active'));
+        }
+
         $sort = $request->string('sort')->toString();
         if ($sort === 'followers') {
             $query->orderByDesc('followers_count')->orderByDesc('created_at');
@@ -436,6 +442,34 @@ class OrganizationController extends Controller
         ]);
 
         return response()->json(['message' => 'Voce entrou na organizacao com sucesso.']);
+    }
+
+    public function leave(Organization $organization): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        $member = OrganizationMember::query()
+            ->where('organization_id', $organization->id)
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->first();
+
+        if (! $member) {
+            abort(422, 'Você não faz parte desta comunidade.');
+        }
+
+        if ($member->role === 'owner' || (int) $organization->owner_user_id === (int) $user->id) {
+            abort(422, 'Transfira a posse da comunidade antes de sair.');
+        }
+
+        $member->delete();
+
+        Log::channel('audit')->info('organization_left', [
+            'organization_id' => $organization->id,
+            'user_id' => $user->id,
+        ]);
+
+        return response()->json(['message' => 'Você saiu da comunidade.']);
     }
 
     private function attachViewerState(Collection $organizations, ?int $userId): void
