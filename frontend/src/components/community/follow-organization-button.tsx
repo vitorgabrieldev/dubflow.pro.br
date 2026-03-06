@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, Plus, UsersRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type FollowOrganizationButtonProps = {
   slug: string;
@@ -11,6 +12,8 @@ type FollowOrganizationButtonProps = {
   initialFollowing: boolean;
   initialFollowersCount: number;
   className?: string;
+  containerClassName?: string;
+  onFollowersCountChange?: (nextCount: number) => void;
   showFollowersCount?: boolean;
 };
 
@@ -20,6 +23,8 @@ export function FollowOrganizationButton({
   initialFollowing,
   initialFollowersCount,
   className,
+  containerClassName,
+  onFollowersCountChange,
   showFollowersCount = false,
 }: FollowOrganizationButtonProps) {
   const [isFollowing, setIsFollowing] = useState(initialFollowing);
@@ -49,7 +54,11 @@ export function FollowOrganizationButton({
 
       setIsFollowing((current) => {
         const next = !current;
-        setFollowersCount((value) => Math.max(0, value + (next ? 1 : -1)));
+        setFollowersCount((value) => {
+          const nextCount = Math.max(0, value + (next ? 1 : -1));
+          onFollowersCountChange?.(nextCount);
+          return nextCount;
+        });
         return next;
       });
     } finally {
@@ -58,7 +67,7 @@ export function FollowOrganizationButton({
   }
 
   return (
-    <div className="inline-flex items-center gap-2">
+    <div className={cn("inline-flex items-center gap-2", containerClassName)}>
       <Button
         type="button"
         onClick={toggleFollow}

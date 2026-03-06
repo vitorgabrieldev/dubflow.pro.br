@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { Film, Layers3, Mic2, PencilLine, UserPlus } from "lucide-react";
 
-import { FollowOrganizationButton } from "@/components/community/follow-organization-button";
+import { OrganizationEngagementActions } from "@/components/community/organization-engagement-actions";
 import { PostCard } from "@/components/feed/post-card";
 import { OrganizationDubbingTestsList } from "@/components/opportunity/organization-dubbing-tests-list";
 import { Avatar } from "@/components/ui/avatar";
@@ -86,6 +86,7 @@ export default async function OrganizationPage({
   const canInviteMembers = viewerRole === "owner" || viewerRole === "admin";
   const posts = organization.posts ?? [];
   const playlists = organization.playlists ?? [];
+  const visiblePlaylists = playlists.slice(0, 3);
   const coverImage = resolveMediaUrl(organization.cover_path) ?? "/default-org-banner.svg";
   const avatarImage = resolveMediaUrl(organization.avatar_path) ?? "/default-org-avatar.svg";
   const dubbingTestsResponse = await fetch(`${apiBase}/organizations/${slug}/dubbing-tests?per_page=3`, {
@@ -98,6 +99,7 @@ export default async function OrganizationPage({
   const dubbingTestsPayload = dubbingTestsResponse.ok
     ? ((await dubbingTestsResponse.json()) as DubbingTestsPayload)
     : ({ data: [], current_page: 1, last_page: 1 } as DubbingTestsPayload);
+  const dubbingTests = dubbingTestsPayload.data ?? [];
   const canManageTests = viewerRole === "owner" || viewerRole === "admin";
   const organizationUrl = `${getSiteUrl()}/${locale}/organizations/${organization.slug}`;
   const organizationSchema = {
@@ -172,9 +174,6 @@ export default async function OrganizationPage({
 
             <div className="flex w-full flex-wrap items-center gap-1.5 text-xs text-black/70 sm:w-auto">
               <span className="rounded-[8px] bg-black/5 px-3 py-2">
-                <strong className="text-[var(--color-ink)]">{organization.followers_count}</strong> seguidores
-              </span>
-              <span className="rounded-[8px] bg-black/5 px-3 py-2">
                 <strong className="text-[var(--color-ink)]">{organization.posts_count}</strong> episódios
               </span>
               <span className="rounded-[8px] bg-black/5 px-3 py-2">
@@ -185,9 +184,20 @@ export default async function OrganizationPage({
 
           <p className="text-sm text-black/65">{organization.description ?? "Sem descrição."}</p>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {isOwner ? (
-              <>
+          <OrganizationEngagementActions
+            locale={locale}
+            slug={organization.slug}
+            isAuthenticated={Boolean(token)}
+            initialFollowing={viewer?.is_following ?? false}
+            initialFollowersCount={organization.followers_count}
+            initialMembershipStatus={viewer?.membership_status ?? null}
+            initialRole={viewerRole}
+            canJoinPublic={canJoinPublic}
+          />
+
+          {(isOwner || canInviteMembers) ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {isOwner ? (
                 <Link
                   href={`/${locale}/organizations/${organization.slug}/editar`}
                   className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-black/15 bg-white px-4 text-sm font-semibold text-[var(--color-ink)] hover:bg-[var(--color-primary-soft)]"
@@ -195,6 +205,9 @@ export default async function OrganizationPage({
                   <PencilLine size={14} />
                   Editar comunidade
                 </Link>
+              ) : null}
+
+              {canInviteMembers ? (
                 <Link
                   href={`/${locale}/organizations/${organization.slug}/convidar`}
                   className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-black/15 bg-white px-4 text-sm font-semibold text-[var(--color-ink)] hover:bg-[var(--color-primary-soft)]"
@@ -202,75 +215,43 @@ export default async function OrganizationPage({
                   <UserPlus size={14} />
                   Convidar
                 </Link>
-                <Link
-                  href={`/${locale}/organizations/${organization.slug}/oportunidades/novo`}
-                  className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-black/15 bg-white px-4 text-sm font-semibold text-[var(--color-ink)] hover:bg-[var(--color-primary-soft)]"
-                >
-                  <Mic2 size={14} />
-                  Novo teste
-                </Link>
-              </>
-            ) : canInviteMembers ? (
-              <>
-                <Link
-                  href={`/${locale}/organizations/${organization.slug}/convidar`}
-                  className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-black/15 bg-white px-4 text-sm font-semibold text-[var(--color-ink)] hover:bg-[var(--color-primary-soft)]"
-                >
-                  <UserPlus size={14} />
-                  Convidar
-                </Link>
-                <Link
-                  href={`/${locale}/organizations/${organization.slug}/oportunidades/novo`}
-                  className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-black/15 bg-white px-4 text-sm font-semibold text-[var(--color-ink)] hover:bg-[var(--color-primary-soft)]"
-                >
-                  <Mic2 size={14} />
-                  Novo teste
-                </Link>
-              </>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <FollowOrganizationButton
-                  slug={organization.slug}
-                  isAuthenticated={Boolean(token)}
-                  initialFollowing={viewer?.is_following ?? false}
-                  initialFollowersCount={organization.followers_count}
-                  showFollowersCount
-                />
-                {isViewerMember ? (
-                  <span className="inline-flex h-10 items-center rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700">
-                    Você faz parte da comunidade
-                  </span>
-                ) : null}
-                {canJoinPublic ? (
-                  <form action={`/api/organizations/${organization.slug}/join-request`} method="post">
-                    <input type="hidden" name="locale" value={locale} />
-                    <input type="hidden" name="redirect_to" value={`/${locale}/organizations/${organization.slug}`} />
-                    <button
-                      type="submit"
-                      className="inline-flex h-10 items-center rounded-[8px] border border-black/15 bg-white px-4 text-sm font-semibold text-[var(--color-ink)] hover:bg-[var(--color-primary-soft)]"
-                    >
-                      Entrar na comunidade
-                    </button>
-                  </form>
-                ) : null}
-              </div>
-            )}
-          </div>
+              ) : null}
+
+              <Link
+                href={`/${locale}/organizations/${organization.slug}/oportunidades/novo`}
+                className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-black/15 bg-white px-4 text-sm font-semibold text-[var(--color-ink)] hover:bg-[var(--color-primary-soft)]"
+              >
+                <Mic2 size={14} />
+                Novo teste
+              </Link>
+            </div>
+          ) : null}
         </CardBody>
       </Card>
 
       <Card>
         <CardBody className="space-y-3 p-4">
-          <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
-            <Layers3 size={14} />
-            Playlists da comunidade
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+              <Layers3 size={14} />
+              Playlists da comunidade
+            </p>
+
+            {playlists.length > 3 ? (
+              <Link
+                href={`/${locale}/organizations/${organization.slug}/playlists`}
+                className="text-xs font-semibold text-[var(--color-primary)] hover:underline"
+              >
+                Ver mais
+              </Link>
+            ) : null}
+          </div>
 
           {playlists.length === 0 ? (
             <EmptyState inline />
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {playlists.map((playlist) => (
+              {visiblePlaylists.map((playlist) => (
                 <Link
                   key={playlist.id}
                   href={`/${locale}/playlists/${organization.slug}/${playlist.id}`}
@@ -287,23 +268,25 @@ export default async function OrganizationPage({
         </CardBody>
       </Card>
 
-      <Card>
-        <CardBody className="space-y-3 p-4">
-          <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
-            <Mic2 size={14} />
-            Testes de dublagem
-          </p>
+      {dubbingTests.length > 0 ? (
+        <Card>
+          <CardBody className="space-y-3 p-4">
+            <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+              <Mic2 size={14} />
+              Testes de dublagem
+            </p>
 
-          <OrganizationDubbingTestsList
-            locale={locale}
-            organizationSlug={organization.slug}
-            canManage={canManageTests}
-            initialItems={dubbingTestsPayload.data ?? []}
-            initialPage={dubbingTestsPayload.current_page ?? 1}
-            initialLastPage={dubbingTestsPayload.last_page ?? 1}
-          />
-        </CardBody>
-      </Card>
+            <OrganizationDubbingTestsList
+              locale={locale}
+              organizationSlug={organization.slug}
+              canManage={canManageTests}
+              initialItems={dubbingTests}
+              initialPage={dubbingTestsPayload.current_page ?? 1}
+              initialLastPage={dubbingTestsPayload.last_page ?? 1}
+            />
+          </CardBody>
+        </Card>
+      ) : null}
 
       <Card>
         <CardBody className="space-y-3 p-4">
