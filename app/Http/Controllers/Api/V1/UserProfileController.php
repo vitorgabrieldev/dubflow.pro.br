@@ -81,7 +81,10 @@ class UserProfileController extends Controller
         $summaryLikes = DB::table('post_likes')->whereIn('post_id', clone $summaryPostIdsQuery)->count();
         $summaryViews = DB::table('post_views')->whereIn('post_id', clone $summaryPostIdsQuery)->count();
 
-        $organizationsCount = $user->organizationMemberships()->where('status', 'active')->count();
+        $organizationsCount = $user->organizationMemberships()
+            ->where('status', 'active')
+            ->whereHas('organization', fn ($builder) => $builder->withoutProfileSpace())
+            ->count();
         $followersCount = $user->followerUsers()->count();
         $followingCount = $user->followingUsers()->count();
         $viewerCanFollow = (bool) $viewer && $viewer->id !== $user->id;
@@ -110,6 +113,7 @@ class UserProfileController extends Controller
                 'is_public',
                 'created_at',
             ])
+            ->withoutProfileSpace()
             ->withCount(['followers', 'posts', 'playlists'])
             ->whereHas('members', fn ($builder) => $builder
                 ->where('user_id', $user->id)

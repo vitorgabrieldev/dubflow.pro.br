@@ -160,4 +160,50 @@ class UnifiedSearchApiTest extends TestCase
         $memberResponse->assertJsonPath('counts.seasons', 1);
         $memberResponse->assertJsonPath('organizations.0.slug', 'omega-house');
     }
+
+    public function test_unified_search_hides_hidden_profile_spaces(): void
+    {
+        $owner = User::factory()->create([
+            'name' => 'Perfil Alpha',
+        ]);
+
+        $visibleOrganization = Organization::query()->create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Alpha Studio',
+            'slug' => 'alpha-studio',
+            'description' => 'Comunidade Alpha',
+            'is_public' => true,
+        ]);
+
+        $profileSpace = Organization::query()->create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Perfil de Alpha',
+            'slug' => 'perfil-pessoal-u'.$owner->id,
+            'description' => 'Espaco tecnico Alpha',
+            'is_public' => false,
+            'settings' => [
+                'is_profile_space' => true,
+            ],
+        ]);
+
+        foreach ([$visibleOrganization, $profileSpace] as $organization) {
+            OrganizationMember::query()->create([
+                'organization_id' => $organization->id,
+                'user_id' => $owner->id,
+                'role' => 'owner',
+                'status' => 'active',
+                'joined_at' => now(),
+            ]);
+        }
+
+        $token = auth('api')->login($owner);
+
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer '.$token,
+        ])->getJson('/api/v1/search/unified?q=alpha');
+
+        $response->assertOk();
+        $response->assertJsonPath('counts.organizations', 1);
+        $response->assertJsonPath('organizations.0.slug', 'alpha-studio');
+    }
 }

@@ -33,6 +33,7 @@ class DashboardController extends Controller
             ->count();
 
         $organizations = Organization::query()
+            ->withoutProfileSpace()
             ->whereHas('members', fn ($query) => $query->where('user_id', $user->id)->where('status', 'active'))
             ->withCount(['followers', 'playlists', 'posts'])
             ->orderByDesc('followers_count')

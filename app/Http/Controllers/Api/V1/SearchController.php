@@ -29,6 +29,7 @@ class SearchController extends Controller
         $user = auth('api')->user();
 
         $organizations = Organization::query()
+            ->withoutProfileSpace()
             ->where(function ($builder) use ($term) {
                 $builder->where('name', 'like', '%'.$term.'%')
                     ->orWhere('slug', 'like', '%'.$term.'%')

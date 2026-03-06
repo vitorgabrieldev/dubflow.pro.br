@@ -22,6 +22,7 @@ class DashboardApiTest extends TestCase
     {
         $user = User::factory()->create();
         $organization = $this->createOrganizationWithOwner($user, 'dashboard-overview-org');
+        $this->createProfileSpaceWithOwner($user);
         $post = $this->createPublishedPost($organization->id, $user->id, now()->subHour());
 
         $token = auth('api')->login($user);
@@ -33,6 +34,7 @@ class DashboardApiTest extends TestCase
 
         $response->assertOk()
             ->assertJsonPath('summary.total_posts', 1)
+            ->assertJsonCount(1, 'organizations')
             ->assertJsonPath('organizations.0.id', $organization->id)
             ->assertJsonPath('top_posts.0.id', $post->id);
     }
@@ -163,6 +165,29 @@ class DashboardApiTest extends TestCase
             'name' => 'Org '.$slug,
             'slug' => $slug,
             'is_public' => true,
+        ]);
+
+        OrganizationMember::create([
+            'organization_id' => $organization->id,
+            'user_id' => $owner->id,
+            'role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        return $organization;
+    }
+
+    private function createProfileSpaceWithOwner(User $owner): Organization
+    {
+        $organization = Organization::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Perfil de '.$owner->name,
+            'slug' => 'perfil-pessoal-u'.$owner->id,
+            'is_public' => false,
+            'settings' => [
+                'is_profile_space' => true,
+            ],
         ]);
 
         OrganizationMember::create([

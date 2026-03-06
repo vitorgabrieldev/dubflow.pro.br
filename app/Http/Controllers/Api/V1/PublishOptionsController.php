@@ -13,6 +13,7 @@ class PublishOptionsController extends Controller
         $user = auth('api')->user();
 
         $organizations = Organization::query()
+            ->withoutProfileSpace()
             ->whereHas('members', fn ($builder) => $builder
                 ->where('user_id', $user->id)
                 ->where('status', 'active')
