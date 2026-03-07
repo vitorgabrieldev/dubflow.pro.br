@@ -3,18 +3,36 @@
 import { useState } from "react";
 import { Shield, X } from "lucide-react";
 
-export function LegalInline() {
+type LegalInlineProps = {
+  mode?: "both" | "terms" | "privacy";
+};
+
+export function LegalInline({ mode = "both" }: LegalInlineProps) {
   const [open, setOpen] = useState<"privacy" | "terms" | null>(null);
 
   return (
     <>
-      <button type="button" onClick={() => setOpen("terms")} className="cursor-pointer font-semibold text-[var(--color-primary)]">
-        Termos de Uso
-      </button>{" "}
-      e{" "}
-      <button type="button" onClick={() => setOpen("privacy")} className="cursor-pointer font-semibold text-[var(--color-primary)]">
-        Política de Privacidade
-      </button>
+      {mode === "terms" ? (
+        <button type="button" onClick={() => setOpen("terms")} className="cursor-pointer font-semibold text-[var(--color-primary)]">
+          Termos de Uso
+        </button>
+      ) : null}
+      {mode === "privacy" ? (
+        <button type="button" onClick={() => setOpen("privacy")} className="cursor-pointer font-semibold text-[var(--color-primary)]">
+          Política de Privacidade
+        </button>
+      ) : null}
+      {mode === "both" ? (
+        <>
+          <button type="button" onClick={() => setOpen("terms")} className="cursor-pointer font-semibold text-[var(--color-primary)]">
+            Termos de Uso
+          </button>{" "}
+          e a{" "}
+          <button type="button" onClick={() => setOpen("privacy")} className="cursor-pointer font-semibold text-[var(--color-primary)]">
+            Política de Privacidade
+          </button>
+        </>
+      ) : null}
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">

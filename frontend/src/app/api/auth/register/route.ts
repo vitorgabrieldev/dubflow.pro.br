@@ -7,12 +7,14 @@ export async function POST(request: Request) {
 
   const locale = String(formData.get("locale") ?? "pt-BR");
   const name = String(formData.get("name") ?? "").trim();
+  const stageName = String(formData.get("stage_name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const passwordConfirmation = String(formData.get("password_confirmation") ?? "");
   const termsAccepted = String(formData.get("terms_accepted") ?? "") === "1";
+  const privacyAccepted = String(formData.get("privacy_accepted") ?? "") === "1";
 
-  if (!name || !email || !password || !passwordConfirmation || password !== passwordConfirmation || !termsAccepted) {
+  if (!name || !stageName || !email || !password || !passwordConfirmation || password !== passwordConfirmation || !termsAccepted || !privacyAccepted) {
     return NextResponse.redirect(new URL(`/${locale}/criar-conta?error=1`, request.url), { status: 303 });
   }
 
@@ -24,6 +26,7 @@ export async function POST(request: Request) {
     },
     body: JSON.stringify({
       name,
+      stage_name: stageName,
       email,
       password,
       password_confirmation: passwordConfirmation,
