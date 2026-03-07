@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  ArrowRight,
   ArrowLeft,
   Bell,
   Building2,
@@ -57,7 +58,9 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
   const pathname = usePathname() ?? "";
   const router = useRouter();
   const basePath = `/${locale}`;
+  const startCreatingLabel = "Começar a criar";
   const hideOnMobile = pathname === `${basePath}/entrar` || pathname === `${basePath}/criar-conta`;
+  const shouldHideNav = hideOnMobile;
   const [resolvedUser, setResolvedUser] = useState<UserPreview | null>(currentUser ?? null);
   const [isResolvingUser, setIsResolvingUser] = useState(isAuthenticated && !currentUser);
 
@@ -134,6 +137,11 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
       void router.prefetch(route);
     });
   }, [basePath, hasSessionUser, router]);
+
+  if (shouldHideNav) {
+    return null;
+  }
+
   if (compactMode) {
     return (
       <header data-top-nav="1" className="sticky top-0 z-30 border-b border-white/10 bg-[#0a0c10]/95 backdrop-blur-xl">
@@ -160,8 +168,8 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
               ) : (
                 <Link
                   href={`${basePath}/entrar`}
-                  aria-label={t.auth.login}
-                  title={t.auth.login}
+                  aria-label={startCreatingLabel}
+                  title={startCreatingLabel}
                   className="inline-flex h-10 w-10 items-center justify-center rounded-[8px] border border-white/15 bg-white/10 text-white"
                 >
                   <UserRound size={16} />
@@ -237,30 +245,17 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
                   <div className="hidden items-center gap-2 lg:flex" data-tour-id="home-auth-actions">
                     <Link
                       href={`${basePath}/entrar`}
-                      className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-[var(--color-ink)] ring-1 ring-[var(--color-border-soft)] transition hover:bg-[var(--color-primary-soft)]"
+                      className="inline-flex h-11 items-center gap-2 rounded-[10px] border-b-[4px] border-[var(--color-primary-strong)] bg-[var(--color-primary)] px-4 text-[15px] font-extrabold text-white shadow-[0_10px_22px_-14px_rgba(126,34,206,0.95)] transition-[transform,filter,box-shadow] duration-150 hover:brightness-105 active:translate-y-[2px] active:border-b-[2px] active:shadow-[0_6px_14px_-12px_rgba(126,34,206,0.95)]"
                     >
-                      <LogIn size={15} />
-                      {t.auth.login}
-                    </Link>
-                    <Link
-                      href={`${basePath}/criar-conta`}
-                      className="group inline-flex h-10 items-center gap-2 rounded-[8px] bg-[linear-gradient(135deg,var(--color-primary)_0%,var(--color-primary-strong)_100%)] px-3 text-[15px] font-semibold text-white shadow-[0_10px_24px_-14px_rgba(147,51,234,0.8)] transition hover:opacity-95"
-                    >
-                      <AnimatedMenuIcon
-                        staticIcon={<UserPlus size={16} className="text-white" />}
-                        gifSrc="/nav-gifs/create.gif"
-                        gifAlt="Criar conta"
-                        size={16}
-                        playDurationMs={1700}
-                      />
-                      {t.auth.signup}
+                      {startCreatingLabel}
+                      <ArrowRight size={16} />
                     </Link>
                   </div>
 
                   <Link
                     href={`${basePath}/entrar`}
-                    aria-label={t.auth.login}
-                    title={t.auth.login}
+                    aria-label={startCreatingLabel}
+                    title={startCreatingLabel}
                     className="inline-flex h-10 w-10 items-center justify-center rounded-[8px] bg-white text-[var(--color-ink)] ring-1 ring-[var(--color-border-soft)] lg:hidden"
                   >
                     <UserRound size={16} />
@@ -501,7 +496,7 @@ function SearchHeaderInput({
       </label>
       <div
         data-tour-id={tourId}
-        className="flex h-10 w-full items-center gap-2 rounded-[10px] border border-[var(--color-border-soft)] bg-white px-3 shadow-sm"
+        className="flex h-10 w-full items-center gap-2 rounded-[8px] border border-[var(--color-border-soft)] bg-white px-3 shadow-sm"
       >
         <Search size={16} className="text-black/45" />
         <input
@@ -510,7 +505,7 @@ function SearchHeaderInput({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Buscar no DubFlow..."
-          className="w-full bg-transparent text-sm text-[var(--color-ink)] outline-none placeholder:text-black/45"
+          className="w-full bg-transparent text-sm tracking-[0.012em] text-[var(--color-ink)] outline-none placeholder:tracking-[0.01em] placeholder:text-black/45"
         />
       </div>
     </form>

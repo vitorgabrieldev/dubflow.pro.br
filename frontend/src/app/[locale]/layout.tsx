@@ -264,10 +264,11 @@ export default async function LocaleLayout({
   const cookieStore = await cookies();
   const headerStore = await headers();
   const pathnameFromHeader = headerStore.get("x-dubflow-pathname") ?? toLocalePath(locale as Locale, "/");
-  parseLocalizedPathname(pathnameFromHeader, locale as Locale);
+  const { pathWithoutLocale } = parseLocalizedPathname(pathnameFromHeader, locale as Locale);
   const token = cookieStore.get("ed_token")?.value;
   const isAuthenticated = Boolean(token);
-  const currentUser = token ? await fetchCurrentUser(token) : null;
+  const shouldUseBareLayout = pathWithoutLocale === "/entrar" || pathWithoutLocale === "/criar-conta";
+  const currentUser = token && !shouldUseBareLayout ? await fetchCurrentUser(token) : null;
   const websiteSchema = {
     "@context": "https://schema.org",
     "@type": "WebSite",
@@ -284,13 +285,19 @@ export default async function LocaleLayout({
           __html: JSON.stringify(websiteSchema),
         }}
       />
-      <TopNav
-        locale={locale as Locale}
-        isAuthenticated={isAuthenticated}
-        currentUser={currentUser}
-      />
-      <MainShell>{children}</MainShell>
-      <HomeTour locale={locale as Locale} isAuthenticated={isAuthenticated} />
+      {shouldUseBareLayout ? (
+        children
+      ) : (
+        <>
+          <TopNav
+            locale={locale as Locale}
+            isAuthenticated={isAuthenticated}
+            currentUser={currentUser}
+          />
+          <MainShell>{children}</MainShell>
+          <HomeTour locale={locale as Locale} isAuthenticated={isAuthenticated} />
+        </>
+      )}
     </div>
   );
 }
