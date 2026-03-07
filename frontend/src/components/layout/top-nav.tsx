@@ -144,7 +144,7 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
 
   if (compactMode) {
     return (
-      <header data-top-nav="1" className="sticky top-0 z-30 border-b border-white/10 bg-[#0a0c10]/95 backdrop-blur-xl">
+      <header data-top-nav="1" className="sticky top-0 z-30 border-b border-[var(--color-border-soft)] bg-white">
         <div className="w-full px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-3">
             <Link href={basePath} className="inline-flex items-center">
@@ -184,10 +184,7 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
 
   return (
     <>
-      <header
-        data-top-nav="1"
-        className={`${hideOnMobile ? "hidden lg:block " : ""}sticky top-0 z-30 bg-white/80 backdrop-blur-xl`}
-      >
+      <header data-top-nav="1" className={`${hideOnMobile ? "hidden lg:block " : ""}sticky top-0 z-30 bg-white`}>
         <div className="mx-auto w-full max-w-7xl px-4 py-3 sm:px-6 lg:px-8 lg:py-4 lg:pb-0">
           <div className="flex items-center justify-between gap-3">
             <Link
@@ -265,7 +262,7 @@ export function TopNav({ locale, isAuthenticated, currentUser, compactMode = fal
             </div>
           </div>
 
-          <nav className="mt-3 hidden items-end gap-2 border-b border-[var(--color-border-soft)] lg:flex">
+          <nav className="mt-5 hidden items-end gap-2 border-b border-[var(--color-border-soft)] lg:flex">
             <NavItem
               href={basePath}
               animatedIcon={{
@@ -331,6 +328,7 @@ function AnimatedMenuIcon({
 }: AnimatedMenuIconProps) {
   const [posterSrc, setPosterSrc] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isGifReady, setIsGifReady] = useState(false);
   const [playCount, setPlayCount] = useState(0);
   const playTimeoutRef = useRef<number | null>(null);
   const isLockedRef = useRef(false);
@@ -397,6 +395,7 @@ function AnimatedMenuIcon({
     }
 
     isLockedRef.current = true;
+    setIsGifReady(false);
     setIsPlaying(true);
     setPlayCount((current) => current + 1);
 
@@ -429,7 +428,7 @@ function AnimatedMenuIcon({
     <span className="relative inline-flex shrink-0 items-center justify-center overflow-hidden" style={{ width: size, height: size }}>
       <span
         className={`absolute inset-0 inline-flex items-center justify-center transition-all duration-200 ease-out ${
-          isPlaying ? "scale-90 opacity-0" : "scale-100 opacity-100"
+          isPlaying && isGifReady ? "scale-90 opacity-0" : "scale-100 opacity-100"
         }`}
       >
         {posterSrc ? (
@@ -450,14 +449,24 @@ function AnimatedMenuIcon({
         )}
       </span>
       {isPlaying ? (
-        <span className="absolute inset-0 inline-flex items-center justify-center opacity-100">
+        <span
+          className={`absolute inset-0 inline-flex items-center justify-center transition-opacity duration-150 ${
+            isGifReady ? "opacity-100" : "opacity-0"
+          }`}
+        >
           <Image
             key={`${gifSrc}-${playCount}`}
-            src={`${gifSrc}?play=${playCount}`}
+            src={gifSrc}
             alt={gifAlt}
             width={size}
             height={size}
             unoptimized
+            onLoad={() => setIsGifReady(true)}
+            onError={() => {
+              setIsPlaying(false);
+              setIsGifReady(false);
+              isLockedRef.current = false;
+            }}
             className="h-full w-full object-contain mix-blend-multiply"
           />
         </span>
