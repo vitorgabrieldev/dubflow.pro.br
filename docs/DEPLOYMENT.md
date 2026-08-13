@@ -2,7 +2,7 @@
 
 ## Guia Completo de Produção (Servidor Zerado)
 
-- Sem Docker, com Apache + systemd + Next + Reverb:
+- Apache + systemd + Next + Reverb:
   - `docs/PRODUCTION_DIGITALOCEAN.md`
 
 ## Workflows

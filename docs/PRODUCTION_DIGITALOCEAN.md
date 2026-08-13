@@ -1,4 +1,4 @@
-# Produção na DigitalOcean (Servidor Zerado, Sem Docker)
+# Produção na DigitalOcean (Servidor Zerado)
 
 Este guia sobe o projeto completo em um Droplet Ubuntu, com:
 - API Laravel em Apache
